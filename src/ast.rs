@@ -193,6 +193,8 @@ pub enum Statement {
 
 use std::time::Duration;
 
+use proc_macro2::TokenStream;
+
 // リクエストオプション
 #[derive(Debug, Clone)]
 pub struct RequestOptions {
@@ -256,7 +258,7 @@ pub enum BinaryOperator {
 
 // コード生成用のトレイト
 pub trait CodeGen {
-    fn generate_rust(&self) -> String;
+    fn generate_rust(&self) -> TokenStream;
 }
 
 // パーサートレイト

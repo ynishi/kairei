@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod error;
+pub mod gen;
 pub mod parser;
 
 // Re-exports
