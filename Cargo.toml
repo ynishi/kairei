@@ -1,0 +1,13 @@
+[package]
+name = "kairei"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nom = "7.1.3"
+nom_locate = "4.2.0"
+thiserror = "2.0.9"
+tracing = "0.1.41"
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
