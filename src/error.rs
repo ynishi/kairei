@@ -98,6 +98,12 @@ pub enum EventError {
     #[error("Event Send failed: {message}")]
     SendFailed { message: String },
 
+    #[error("Event Recieve failed: {message}")]
+    RecieveFailed { message: String },
+
+    #[error("Event lagged: {count}")]
+    Lagged { count: u64 },
+
     #[error("Event already registered: {event_type}")]
     AlreadyRegistered { event_type: String },
 
