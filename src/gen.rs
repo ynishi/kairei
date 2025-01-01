@@ -354,7 +354,8 @@ mod tests {
                 on_init: Some(Block {
                     statements: vec![Statement::Assignment {
                         target: Expression::StateAccess(StateAccessPath(vec![
-                            "counter".to_string()
+                            "self".to_string(),
+                            "counter".to_string(),
                         ])),
                         value: Expression::Literal(Literal::Integer(0)),
                     }],
@@ -403,7 +404,10 @@ mod tests {
         let lifecycle = LifecycleDef {
             on_init: Some(Block {
                 statements: vec![Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec!["counter".to_string()])),
+                    target: Expression::StateAccess(StateAccessPath(vec![
+                        "self".to_string(),
+                        "counter".to_string(),
+                    ])),
                     value: Expression::Literal(Literal::Integer(0)),
                 }],
             }),
@@ -494,11 +498,13 @@ mod tests {
                 block: Block {
                     statements: vec![Statement::Assignment {
                         target: Expression::StateAccess(StateAccessPath(vec![
-                            "counter".to_string()
+                            "self".to_string(),
+                            "counter".to_string(),
                         ])),
                         value: Expression::BinaryOp {
                             op: BinaryOperator::Add,
                             left: Box::new(Expression::StateAccess(StateAccessPath(vec![
+                                "self".to_string(),
                                 "counter".to_string(),
                             ]))),
                             right: Box::new(Expression::Literal(Literal::Integer(1))),
@@ -537,7 +543,7 @@ mod tests {
                 constraints: None,
                 block: Block {
                     statements: vec![Statement::Return(Expression::StateAccess(StateAccessPath(
-                        vec!["counter".to_string()],
+                        vec!["self".to_string(), "counter".to_string()],
                     )))],
                 },
             }],
@@ -565,7 +571,8 @@ mod tests {
                     statements: vec![
                         Statement::Assignment {
                             target: Expression::StateAccess(StateAccessPath(vec![
-                                "counter".to_string()
+                                "self".to_string(),
+                                "counter".to_string(),
                             ])),
                             value: Expression::Literal(Literal::Integer(0)),
                         },
@@ -574,10 +581,9 @@ mod tests {
                                 agent_name: "self".to_string(),
                                 state_name: "counter".to_string(),
                             },
-                            parameters: vec![
-                                Expression::Literal(Literal::String("self".to_string())),
-                                Expression::Literal(Literal::String("counter".to_string())),
-                            ],
+                            parameters: vec![Expression::Literal(Literal::String(
+                                "counter".to_string(),
+                            ))],
                             target: Some("manager".to_string()),
                         },
                     ],
@@ -607,11 +613,15 @@ mod tests {
             parameters: vec![],
             block: Block {
                 statements: vec![Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec!["counter".to_string()])),
+                    target: Expression::StateAccess(StateAccessPath(vec![
+                        "self".to_string(),
+                        "counter".to_string(),
+                    ])),
                     value: Expression::BinaryOp {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::StateAccess(StateAccessPath(vec![
-                            "counter".to_string()
+                            "self".to_string(),
+                            "counter".to_string(),
                         ]))),
                         right: Box::new(Expression::Literal(Literal::Integer(1))),
                     },
@@ -645,7 +655,7 @@ mod tests {
             constraints: None,
             block: Block {
                 statements: vec![Statement::Return(Expression::StateAccess(StateAccessPath(
-                    vec!["counter".to_string()],
+                    vec!["self".to_string(), "counter".to_string()],
                 )))],
             },
         };
@@ -718,11 +728,15 @@ mod tests {
         let block = Block {
             statements: vec![
                 Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec!["counter".to_string()])),
+                    target: Expression::StateAccess(StateAccessPath(vec![
+                        "self".to_string(),
+                        "counter".to_string(),
+                    ])),
                     value: Expression::Literal(Literal::Integer(0)),
                 },
                 Statement::Return(Expression::StateAccess(StateAccessPath(vec![
-                    "counter".to_string()
+                    "self".to_string(),
+                    "counter".to_string(),
                 ]))),
             ],
         };
@@ -740,26 +754,36 @@ mod tests {
     fn test_statement() {
         // 各ステートメントタイプのテストデータを準備
         let assignment = Statement::Assignment {
-            target: Expression::StateAccess(StateAccessPath(vec!["counter".to_string()])),
+            target: Expression::StateAccess(StateAccessPath(vec![
+                "self".to_string(),
+                "counter".to_string(),
+            ])),
             value: Expression::Literal(Literal::Integer(10)),
         };
         let if_statement = Statement::If {
             condition: Expression::BinaryOp {
                 op: BinaryOperator::Equal,
                 left: Box::new(Expression::StateAccess(StateAccessPath(vec![
-                    "counter".to_string()
+                    "self".to_string(),
+                    "counter".to_string(),
                 ]))),
                 right: Box::new(Expression::Literal(Literal::Integer(0))),
             },
             then_block: Block {
                 statements: vec![Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec!["counter".to_string()])),
+                    target: Expression::StateAccess(StateAccessPath(vec![
+                        "self".to_string(),
+                        "counter".to_string(),
+                    ])),
                     value: Expression::Literal(Literal::Integer(1)),
                 }],
             },
             else_block: Some(Block {
                 statements: vec![Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec!["counter".to_string()])),
+                    target: Expression::StateAccess(StateAccessPath(vec![
+                        "self".to_string(),
+                        "counter".to_string(),
+                    ])),
                     value: Expression::Literal(Literal::Integer(2)),
                 }],
             }),
@@ -796,8 +820,10 @@ mod tests {
     fn test_expression() {
         let literal_expr = Expression::Literal(Literal::Integer(42));
         let variable_expr = Expression::Variable("x".to_string());
-        let state_access_expr =
-            Expression::StateAccess(StateAccessPath(vec!["counter".to_string()]));
+        let state_access_expr = Expression::StateAccess(StateAccessPath(vec![
+            "self".to_string(),
+            "counter".to_string(),
+        ]));
         let function_call_expr = Expression::FunctionCall {
             function: "foo".to_string(),
             arguments: vec![

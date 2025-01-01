@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 // MicroAgentのトップレベル構造
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MicroAgentDef {
     pub name: String,
     pub lifecycle: Option<LifecycleDef>,
