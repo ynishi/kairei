@@ -4,6 +4,7 @@ pub mod error;
 pub mod gen;
 pub mod parser;
 pub mod prelude;
+pub mod runtime;
 
 // Re-exports
 pub use ast::*;
