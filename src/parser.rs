@@ -91,6 +91,149 @@ fn parse_react(input: &str) -> IResult<&str, ReactDef> {
     })(input)
 }
 
+/// Worldの定義をパースする。
+pub fn parse_world(input: &str) -> IResult<&str, WorldDef> {
+    let (input, _) = ws(tag("world"))(input)?;
+    let (input, name) = ws(identifier)(input)?;
+    let (input, _) = ws(char('{'))(input)?;
+
+    let mut config = None;
+    let mut events = None;
+    let mut handlers = None;
+
+    let (input, _) = many0(alt((
+        map(parse_config, |c| config = Some(c)),
+        map(parse_events, |e| events = Some(e)),
+        map(parse_handlers, |h| handlers = Some(h)),
+    )))(input)?;
+
+    let (input, _) = ws(char('}'))(input)?;
+
+    Ok((
+        input,
+        WorldDef {
+            name: name.to_string(),
+            config,
+            events: events.unwrap_or_else(|| EventsDef { events: vec![] }),
+            handlers: handlers.unwrap_or_else(|| HandlersDef { handlers: vec![] }),
+        },
+    ))
+}
+
+/// configセクションのパース
+pub fn parse_config(input: &str) -> IResult<&str, ConfigDef> {
+    let (input, _) = ws(tag("config"))(input)?;
+    let (input, _) = ws(char('{'))(input)?;
+
+    let mut tick_interval = None;
+    let mut max_agents = None;
+    let mut event_buffer_size = None;
+
+    let (input, _) = many0(alt((
+        // Duration形式（例: 100ms, 1s)のパース
+        map(parse_duration_config("tick_interval"), |d| {
+            tick_interval = Some(d)
+        }),
+        // 整数値のパース
+        map(parse_int_config("max_agents"), |n| max_agents = Some(n)),
+        map(parse_int_config("event_buffer_size"), |n| {
+            event_buffer_size = Some(n)
+        }),
+    )))(input)?;
+
+    let (input, _) = ws(char('}'))(input)?;
+
+    let mut config_def = ConfigDef::default();
+    if let Some(tick_interval) = tick_interval {
+        config_def.tick_interval = tick_interval;
+    }
+    if let Some(max_agents) = max_agents {
+        config_def.max_agents = max_agents;
+    }
+    if let Some(event_buffer_size) = event_buffer_size {
+        config_def.event_buffer_size = event_buffer_size;
+    }
+
+    Ok((input, config_def))
+}
+
+/// eventsセクションのパース
+pub fn parse_events(input: &str) -> IResult<&str, EventsDef> {
+    let (input, _) = ws(tag("events"))(input)?;
+    let (input, _) = ws(char('{'))(input)?;
+
+    let (input, events) = many0(parse_event_def)(input)?;
+    let (input, _) = ws(char('}'))(input)?;
+
+    Ok((input, EventsDef { events }))
+}
+
+/// 個別のイベント定義のパース
+fn parse_event_def(input: &str) -> IResult<&str, CustomEventDef> {
+    let (input, name) = ws(identifier)(input)?;
+    let (input, parameters) = opt(delimited(
+        ws(char('(')),
+        separated_list0(ws(char(',')), parse_parameter),
+        ws(char(')')),
+    ))(input)?;
+
+    let var_name = CustomEventDef {
+        name: name.to_string(),
+        parameters: parameters.unwrap_or_default(),
+    };
+    Ok((input, var_name))
+}
+
+/// handlersセクションのパース
+pub fn parse_handlers(input: &str) -> IResult<&str, HandlersDef> {
+    let (input, _) = ws(tag("handlers"))(input)?;
+    let (input, _) = ws(char('{'))(input)?;
+
+    let (input, handlers) = many0(parse_handler)(input)?;
+    let (input, _) = ws(char('}'))(input)?;
+
+    Ok((input, HandlersDef { handlers }))
+}
+
+/// 個別のハンドラ定義のパース
+fn parse_handler(input: &str) -> IResult<&str, HandlerDef> {
+    map(
+        tuple((
+            preceded(ws(tag("on")), map(identifier, |id| id.to_string())),
+            opt(delimited(
+                ws(char('(')),
+                separated_list0(ws(char(',')), parse_parameter),
+                ws(char(')')),
+            )),
+            parse_block,
+        )),
+        |(event_name, parameters, block)| HandlerDef {
+            event_name,
+            parameters: parameters.unwrap_or_default(),
+            block,
+        },
+    )(input)
+}
+
+fn parse_duration_config(key: &'static str) -> impl Fn(&str) -> IResult<&str, Duration> {
+    move |input: &str| {
+        let (input, _) = ws(tag(key))(input)?;
+        let (input, _) = ws(char(':'))(input)?;
+        let (input, value) = ws(parse_duration)(input)?;
+        Ok((input, value))
+    }
+}
+
+/// 正の整数値設定のパース (例: max_agents: 1000)
+fn parse_int_config(key: &'static str) -> impl Fn(&str) -> IResult<&str, usize> {
+    move |input: &str| {
+        let (input, _) = ws(tag(key))(input)?;
+        let (input, _) = ws(char(':'))(input)?;
+        let (input, value) = ws(parse_usize)(input)?;
+        Ok((input, value))
+    }
+}
+
 // Block contents
 fn parse_init_handler(input: &str) -> IResult<&str, Block> {
     preceded(tag("onInit"), parse_block)(input)
@@ -631,7 +774,7 @@ fn parse_type_info(input: &str) -> IResult<&str, TypeInfo> {
 fn parse_literal(input: &str) -> IResult<&str, Literal> {
     alt((
         // 整数
-        map(parse_integer, Literal::Integer),
+        map(parse_i64, Literal::Integer),
         // 文字列
         map(
             delimited(char('"'), take_while(|c| c != '"'), char('"')),
@@ -691,7 +834,11 @@ fn parse_float(input: &str) -> IResult<&str, f64> {
     )(input)
 }
 
-fn parse_integer(input: &str) -> IResult<&str, i64> {
+fn parse_usize(input: &str) -> IResult<&str, usize> {
+    map_res(digit1, |s: &str| s.parse::<usize>())(input)
+}
+
+fn parse_i64(input: &str) -> IResult<&str, i64> {
     map_res(digit1, |s: &str| s.parse::<i64>())(input)
 }
 
@@ -1066,5 +1213,178 @@ mod tests {
             }
             Expression::Await(expr) => format!("await({})", format_expression(expr)),
         }
+    }
+    #[test]
+    fn test_parse_config() {
+        let input = r#"
+            config {
+                tick_interval: 100ms
+                max_agents: 1000
+                event_buffer_size: 500
+            }
+        "#;
+        let (_, config) = parse_config(input).unwrap();
+        assert_eq!(config.tick_interval, Duration::from_millis(100));
+        assert_eq!(config.max_agents, 1000);
+        assert_eq!(config.event_buffer_size, 500);
+
+        // デフォルト値のテスト
+        let input = r#"
+            config {
+                tick_interval: 1s
+            }
+        "#;
+        let (_, config) = parse_config(input).unwrap();
+        assert_eq!(config.tick_interval, Duration::from_secs(1));
+        assert_eq!(config.max_agents, 1000); // デフォルト値
+        assert_eq!(config.event_buffer_size, 1000); // デフォルト値
+    }
+
+    #[test]
+    fn test_parse_events() {
+        let input = r#"
+            events {
+                PlayerJoined(player_id: String)
+                GameStarted
+                PlayerMoved(player_id: String, x: Float, y: Float)
+                ScoreUpdated(player_id: String, score: Int)
+            }
+        "#;
+        let (_, events) = parse_events(input).unwrap();
+        assert_eq!(events.events.len(), 4);
+
+        // 詳細なイベント定義の検証
+        let player_joined = &events.events[0];
+        assert_eq!(player_joined.name, "PlayerJoined");
+        assert_eq!(player_joined.parameters.len(), 1);
+        assert_eq!(player_joined.parameters[0].name, "player_id");
+        assert_eq!(
+            player_joined.parameters[0].type_info,
+            TypeInfo::Custom {
+                name: "String".to_string(),
+                constraints: HashMap::new()
+            }
+        );
+
+        let game_started = &events.events[1];
+        assert_eq!(game_started.name, "GameStarted");
+        assert_eq!(game_started.parameters.len(), 0);
+
+        let player_moved = &events.events[2];
+        assert_eq!(player_moved.parameters.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_handlers() {
+        let input = r#"
+            handlers {
+                on Tick(delta_time: Float) {
+                }
+
+                on PlayerJoined(player_id: String) {
+                    emit GameStarted()
+                }
+            }
+        "#;
+        let (_, handlers) = parse_handlers(input).unwrap();
+        assert_eq!(handlers.handlers.len(), 2);
+
+        let tick_handler = &handlers.handlers[0];
+        assert_eq!(tick_handler.event_name, "Tick");
+        assert_eq!(tick_handler.parameters.len(), 1);
+        assert_eq!(tick_handler.parameters[0].name, "delta_time");
+        assert_eq!(
+            tick_handler.parameters[0].type_info,
+            TypeInfo::Custom {
+                name: "Float".to_string(),
+                constraints: Default::default(),
+            }
+        );
+
+        let join_handler = &handlers.handlers[1];
+        assert_eq!(join_handler.event_name, "PlayerJoined");
+        assert_eq!(join_handler.parameters.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_world() {
+        let input = r#"
+            world GameWorld {
+                config {
+                    tick_interval: 16ms
+                    max_agents: 100
+                    event_buffer_size: 1000
+                }
+
+                events {
+                    PlayerJoined(player_id: String)
+                    GameStarted
+                    PlayerMoved(player_id: String, x: Float, y: Float)
+                }
+
+                handlers {
+                    on Tick(delta_time: Float) {
+                        emit NextTick(delta_time)
+                    }
+
+                    on PlayerJoined(player_id: String) {
+                        emit GameStarted()
+                    }
+                }
+            }
+        "#;
+
+        let (_, world) = parse_world(input).unwrap();
+
+        // 基本構造の検証
+        assert_eq!(world.name, "GameWorld");
+
+        // Config検証
+        let config = world.config.unwrap();
+        assert_eq!(config.tick_interval, Duration::from_millis(16));
+        assert_eq!(config.max_agents, 100);
+        assert_eq!(config.event_buffer_size, 1000);
+
+        // Events検証
+        assert_eq!(world.events.events.len(), 3);
+        assert_eq!(world.events.events[0].name, "PlayerJoined");
+        assert_eq!(world.events.events[1].name, "GameStarted");
+        assert_eq!(world.events.events[2].name, "PlayerMoved");
+
+        // Handlers検証
+        assert_eq!(world.handlers.handlers.len(), 2);
+        assert_eq!(world.handlers.handlers[0].event_name, "Tick");
+        assert_eq!(world.handlers.handlers[1].event_name, "PlayerJoined");
+    }
+
+    #[test]
+    fn test_parse_world_minimal() {
+        let input = r#"
+            world MinimalWorld {
+                config {
+                    tick_interval: 100ms
+                }
+            }
+        "#;
+
+        let (_, world) = parse_world(input).unwrap();
+        let config = world.config.unwrap();
+        assert_eq!(world.name, "MinimalWorld");
+        assert_eq!(config.tick_interval, Duration::from_millis(100));
+        assert_eq!(world.events.events.len(), 0);
+        assert!(world.handlers.handlers.is_empty());
+    }
+
+    #[test]
+    fn test_parse_world_errors() {
+        // Invalid duration format
+        let input = r#"
+            world ErrorWorld {
+                config {
+                    tick_interval: invalid
+                }
+            }
+        "#;
+        assert!(parse_world(input).is_err());
     }
 }

@@ -12,19 +12,19 @@ pub struct MicroAgentDef {
 }
 
 // ライフサイクル定義
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LifecycleDef {
     pub on_init: Option<Block>,
     pub on_destroy: Option<Block>,
 }
 
 // 状態定義
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StateDef {
     pub variables: HashMap<String, StateVarDef>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StateVarDef {
     pub name: String,
     pub type_info: TypeInfo,
@@ -32,19 +32,19 @@ pub struct StateVarDef {
 }
 
 // イベント観察定義
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ObserveDef {
     pub handlers: Vec<EventHandler>,
 }
 
 // リクエスト応答定義
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AnswerDef {
     pub handlers: Vec<RequestHandler>,
 }
 
 // システムへの反応定義
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReactDef {
     pub handlers: Vec<EventHandler>,
 }
@@ -63,7 +63,7 @@ pub enum EventType {
 }
 
 // イベントハンドラ
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EventHandler {
     pub event_type: EventType,
     pub parameters: Vec<Parameter>, // イベントの型に応じたパラメータ定義
@@ -101,7 +101,7 @@ pub enum RequestType {
 }
 
 // リクエストハンドラ
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RequestHandler {
     pub request_type: RequestType,
     pub parameters: Vec<Parameter>, // リクエストの型に応じたパラメータ定義
@@ -129,14 +129,14 @@ impl RequestHandler {
 }
 
 // パラメータ定義
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     pub name: String,
     pub type_info: TypeInfo,
 }
 
 // 制約定義
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Constraints {
     pub strictness: Option<f64>,
     pub stability: Option<f64>,
@@ -144,7 +144,7 @@ pub struct Constraints {
 }
 
 // 型情報
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeInfo {
     Simple(String), // 基本型 (Int, String等)
     Result {
@@ -160,13 +160,13 @@ pub enum TypeInfo {
 }
 
 // コードブロック
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Block {
     pub statements: Vec<Statement>,
 }
 
 // 文
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Assignment {
         target: Expression,
@@ -196,13 +196,13 @@ use std::time::Duration;
 use proc_macro2::TokenStream;
 
 // リクエストオプション
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RequestOptions {
     pub timeout: Option<Duration>,
     pub retry: Option<u32>, // 回数
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StateAccessPath(pub Vec<String>); // user.profile.name -> vec!["user", "profile", "name"]
 
 impl StateAccessPath {
@@ -212,7 +212,7 @@ impl StateAccessPath {
 }
 
 // 式
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Literal(Literal),
     Variable(String),
@@ -230,7 +230,7 @@ pub enum Expression {
 }
 
 // リテラル
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Integer(i64),
     Float(f64),
@@ -240,7 +240,7 @@ pub enum Literal {
 }
 
 // 二項演算子
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -254,6 +254,102 @@ pub enum BinaryOperator {
     GreaterThanEqual,
     And,
     Or,
+}
+
+// Worldの定義
+// World全体の定義
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorldDef {
+    pub name: String,
+    pub config: Option<ConfigDef>,
+    pub events: EventsDef,
+    pub handlers: HandlersDef,
+}
+
+// 設定定義
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfigDef {
+    pub tick_interval: Duration,
+    pub max_agents: usize,
+    pub event_buffer_size: usize,
+}
+
+impl Default for ConfigDef {
+    fn default() -> Self {
+        Self {
+            tick_interval: Duration::from_secs(1),
+            max_agents: 1000,
+            event_buffer_size: 1000,
+        }
+    }
+}
+
+// イベント定義のコレクション
+#[derive(Debug, Clone, PartialEq)]
+pub struct EventsDef {
+    pub events: Vec<CustomEventDef>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CustomEventDef {
+    pub name: String,
+    pub parameters: Vec<Parameter>,
+}
+
+impl From<EventsDef> for Vec<EventType> {
+    fn from(events_def: EventsDef) -> Self {
+        events_def
+            .events
+            .into_iter()
+            .map(|event| EventType::Custom(event.name))
+            .collect()
+    }
+}
+
+// ハンドラー定義のコレクション
+#[derive(Debug, Clone, PartialEq)]
+pub struct HandlersDef {
+    pub handlers: Vec<HandlerDef>,
+}
+
+// 個別のハンドラー定義
+#[derive(Debug, Clone, PartialEq)]
+pub struct HandlerDef {
+    pub event_name: String,
+    pub parameters: Vec<Parameter>,
+    pub block: Block,
+}
+
+// 文（MicroAgentと共通だが、World用に制限される）
+#[derive(Debug, Clone, PartialEq)]
+pub enum WorldStatement {
+    Log(Expression),
+    EmitEvent {
+        event_name: String,
+        parameters: Vec<Expression>,
+    },
+    Expression(Expression),
+    If {
+        condition: Expression,
+        then_block: Block,
+        else_block: Option<Block>,
+    },
+}
+
+// 式（MicroAgentと共通だが、World用に制限される）
+#[derive(Debug, Clone, PartialEq)]
+pub enum WorldExpression {
+    Literal(Literal),
+    Variable(String),
+    BinaryOp {
+        op: BinaryOperator,
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    FunctionCall {
+        name: String,
+        arguments: Vec<Expression>,
+    },
 }
 
 // コード生成用のトレイト
