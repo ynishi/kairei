@@ -70,6 +70,16 @@ pub struct EventHandler {
     pub block: Block,
 }
 
+impl From<HandlerDef> for EventHandler {
+    fn from(handler: HandlerDef) -> Self {
+        Self {
+            event_type: EventType::Custom(handler.event_name),
+            parameters: handler.parameters,
+            block: handler.block,
+        }
+    }
+}
+
 impl EventHandler {
     /// イベントタイプに応じた適切なパラメータを持っているか検証
     pub fn validate_parameters(&self) -> Result<(), String> {
@@ -236,6 +246,7 @@ pub enum Literal {
     Float(f64),
     String(String),
     Boolean(bool),
+    Duration(Duration),
     Null,
 }
 
@@ -352,6 +363,70 @@ pub enum WorldExpression {
     },
 }
 
+impl From<WorldDef> for (MicroAgentDef, EventsDef) {
+    fn from(world: WorldDef) -> (MicroAgentDef, EventsDef) {
+        let mut variables = HashMap::new();
+        // world.config.tick_interval
+        let config = world.config.unwrap_or_default();
+        variables.insert(
+            "tick_interval".to_string(),
+            StateVarDef {
+                name: "tick_interval".to_string(),
+                type_info: TypeInfo::Simple("Duration".to_string()),
+                initial_value: Some(Expression::Literal(Literal::Duration(config.tick_interval))),
+            },
+        );
+        // world.config.max_agents
+        variables.insert(
+            "max_agents".to_string(),
+            StateVarDef {
+                name: "max_agents".to_string(),
+                type_info: TypeInfo::Simple("usize".to_string()),
+                initial_value: Some(Expression::Literal(Literal::Integer(
+                    config.max_agents as i64,
+                ))),
+            },
+        );
+        // world.config.event_buffer_size
+        variables.insert(
+            "event_buffer_size".to_string(),
+            StateVarDef {
+                name: "event_buffer_size".to_string(),
+                type_info: TypeInfo::Simple("usize".to_string()),
+                initial_value: Some(Expression::Literal(Literal::Integer(
+                    config.event_buffer_size as i64,
+                ))),
+            },
+        );
+        let agent = MicroAgentDef {
+            name: "world".to_string(),
+            state: Some(StateDef { variables }),
+            observe: Some(ObserveDef {
+                handlers: world
+                    .handlers
+                    .handlers
+                    .iter()
+                    .filter(|h| !h.event_name.starts_with("request"))
+                    .map(|h| h.clone().into())
+                    .collect(),
+            }),
+            answer: None,
+            react: Some(ReactDef {
+                handlers: world
+                    .handlers
+                    .handlers
+                    .iter()
+                    .filter(|h| h.event_name.starts_with("request"))
+                    .map(|h| h.clone().into())
+                    .collect(),
+            }),
+            lifecycle: None,
+        };
+
+        (agent, world.events)
+    }
+}
+
 // コード生成用のトレイト
 pub trait CodeGen {
     fn generate_rust(&self) -> TokenStream;
@@ -368,4 +443,47 @@ pub struct ParseError {
     pub message: String,
     pub line: usize,
     pub column: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_world_conversion() {
+        let world = WorldDef {
+            name: "TestWorld".to_string(),
+            config: Some(ConfigDef {
+                tick_interval: Duration::from_millis(100),
+                max_agents: 1000,
+                event_buffer_size: 500,
+            }),
+            events: EventsDef {
+                events: vec![CustomEventDef {
+                    name: "TestEvent".to_string(),
+                    parameters: vec![],
+                }],
+            },
+            handlers: HandlersDef {
+                handlers: vec![HandlerDef {
+                    event_name: "Tick".to_string(),
+                    parameters: vec![],
+                    block: Block { statements: vec![] },
+                }],
+            },
+        };
+
+        let (agent, events) = world.into();
+
+        // 変換結果の検証
+        assert_eq!(agent.name, "world");
+        let state = agent.state.unwrap();
+        assert_eq!(state.variables.len(), 3);
+        assert!(agent.observe.is_some());
+        assert!(agent.answer.is_none());
+
+        // イベント定義の検証
+        assert_eq!(events.events.len(), 1);
+        assert_eq!(events.events[0].name, "TestEvent");
+    }
 }

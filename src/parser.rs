@@ -1172,6 +1172,7 @@ mod tests {
                 Literal::Boolean(b) => b.to_string(),
                 Literal::Null => "null".to_string(),
                 Literal::Float(f) => f.to_string(),
+                Literal::Duration(d) => format!("{:?}", d),
             },
             Expression::Variable(name) => name.clone(),
             Expression::StateAccess(path) => path.0.join("."),

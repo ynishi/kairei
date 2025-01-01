@@ -129,6 +129,7 @@ fn eval_expression(expr: &Expression) -> RuntimeResult<Value> {
             Literal::Float(f) => Value::Float(*f),
             Literal::String(s) => Value::String(s.clone()),
             Literal::Boolean(b) => Value::Boolean(*b),
+            Literal::Duration(d) => Value::Float(d.as_secs_f64()),
             Literal::Null => Value::Null,
         }),
         // 他の式の評価は必要に応じて実装

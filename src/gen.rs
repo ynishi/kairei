@@ -315,6 +315,10 @@ impl CodeGen for Literal {
             Literal::Float(f) => quote! { #f },
             Literal::String(s) => quote! { #s },
             Literal::Boolean(b) => quote! { #b },
+            Literal::Duration(d) => {
+                let secs = d.as_secs();
+                quote! { Duration::from_secs(#secs) }
+            }
             Literal::Null => quote! { None },
         }
     }
