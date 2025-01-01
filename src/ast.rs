@@ -49,7 +49,7 @@ pub struct ReactDef {
     pub handlers: Vec<EventHandler>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, strum::Display)]
 pub enum EventType {
     Tick,
     StateUpdated {
