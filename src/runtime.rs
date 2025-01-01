@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use crate::event_resitory::EventType;
+use crate::event_registry::EventType;
 use crate::{
     EventError, ExecutionError, Expression, HandlerError, Literal, MicroAgentDef, RuntimeError,
     RuntimeResult,
@@ -19,9 +19,16 @@ pub struct RuntimeAgent {
     react_handlers: DashMap<String, ReactHandler>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Event {
     pub event_type: EventType,
     pub parameters: HashMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ErrorEvent {
+    pub error_type: String,
+    pub message: String,
 }
 
 // 値の型
@@ -236,7 +243,7 @@ impl Runtime {
 // テスト用のヘルパー関数
 #[cfg(test)]
 mod tests {
-    use crate::{event_resitory::EventType, MicroAgentDef, StateDef};
+    use crate::{event_registry::EventType, MicroAgentDef, StateDef};
 
     use super::*;
     use tokio::test;

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio;
 
 use kairei::{
-    event_resitory::EventType,
+    event_registry::EventType,
     runtime::{Event, Request, Runtime, RuntimeAgent, Value},
     Expression, Literal, MicroAgentDef, RuntimeError, RuntimeResult, StateDef, StateError,
     StateVarDef, TypeInfo,
