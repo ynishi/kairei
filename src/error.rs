@@ -81,8 +81,31 @@ pub enum EventError {
     #[error("Invalid event parameters: {message}")]
     InvalidParameters { message: String },
 
+    #[error("Event parameters length not matched: {event_type}, expected {expected}, got {got}")]
+    ParametersLengthNotMatched {
+        event_type: String,
+        expected: usize,
+        got: usize,
+    },
+
+    #[error("Event parameter type mismatch: {event_type}, expected {expected}, got {got}")]
+    TypeMismatch {
+        event_type: String,
+        expected: String,
+        got: String,
+    },
+
     #[error("Event Send failed: {message}")]
     SendFailed { message: String },
+
+    #[error("Event already registered: {event_type}")]
+    AlreadyRegistered { event_type: String },
+
+    #[error("Built-in event already registered")]
+    BuiltInAlreadyRegistered,
+
+    #[error("Event not found: {0}")]
+    NotFound(String),
 }
 
 #[derive(Error, Debug)]

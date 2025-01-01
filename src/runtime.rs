@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+use crate::event_resitory::EventType;
 use crate::{
     EventError, ExecutionError, Expression, HandlerError, Literal, MicroAgentDef, RuntimeError,
     RuntimeResult,
@@ -16,6 +17,11 @@ pub struct RuntimeAgent {
     observe_handlers: DashMap<String, ObserveHandler>,
     answer_handlers: DashMap<String, AnswerHandler>,
     react_handlers: DashMap<String, ReactHandler>,
+}
+
+pub struct Event {
+    pub event_type: EventType,
+    pub parameters: HashMap<String, Value>,
 }
 
 // 値の型
@@ -34,13 +40,6 @@ type ObserveHandler =
 type AnswerHandler =
     Box<dyn Fn(&Request) -> BoxFuture<'static, RuntimeResult<Value>> + Send + Sync>;
 type ReactHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, Option<Vec<Event>>> + Send + Sync>;
-
-// イベントとリクエストの型
-#[derive(Clone, Debug)]
-pub struct Event {
-    pub event_type: String,
-    pub parameters: HashMap<String, Value>,
-}
 
 #[derive(Clone, Debug)]
 pub struct Request {
@@ -90,7 +89,7 @@ impl RuntimeAgent {
         let mut new_events = Vec::new();
 
         // observe ハンドラの実行
-        if let Some(handler) = self.observe_handlers.get(&event.event_type) {
+        if let Some(handler) = self.observe_handlers.get(&event.event_type.to_string()) {
             if let Some(updates) = handler.value()(event).await {
                 for (key, value) in updates {
                     self.state.insert(key, value);
@@ -99,7 +98,7 @@ impl RuntimeAgent {
         }
 
         // react ハンドラの実行
-        if let Some(handler) = self.react_handlers.get(&event.event_type) {
+        if let Some(handler) = self.react_handlers.get(&event.event_type.to_string()) {
             if let Some(events) = handler(event).await {
                 new_events.extend(events);
             }
@@ -237,7 +236,7 @@ impl Runtime {
 // テスト用のヘルパー関数
 #[cfg(test)]
 mod tests {
-    use crate::{MicroAgentDef, StateDef};
+    use crate::{event_resitory::EventType, MicroAgentDef, StateDef};
 
     use super::*;
     use tokio::test;
@@ -273,7 +272,7 @@ mod tests {
         // テストイベントの送信
         runtime
             .send_event(Event {
-                event_type: "test".to_string(),
+                event_type: EventType::Custom("test".to_string()),
                 parameters: HashMap::new(),
             })
             .await

@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio;
 
 use kairei::{
+    event_resitory::EventType,
     runtime::{Event, Request, Runtime, RuntimeAgent, Value},
     Expression, Literal, MicroAgentDef, RuntimeError, RuntimeResult, StateDef, StateError,
     StateVarDef, TypeInfo,
@@ -108,7 +109,7 @@ async fn test_counter_agent() -> RuntimeResult<()> {
     // テストケース2: Tickイベント送信後の状態確認
     runtime_cloned
         .send_event(Event {
-            event_type: "Tick".to_string(),
+            event_type: EventType::Tick,
             parameters: HashMap::new(),
         })
         .await?;
@@ -128,7 +129,7 @@ async fn test_counter_agent() -> RuntimeResult<()> {
     for _ in 0..3 {
         runtime_cloned
             .send_event(Event {
-                event_type: "Tick".to_string(),
+                event_type: EventType::Tick,
                 parameters: HashMap::new(),
             })
             .await?;
