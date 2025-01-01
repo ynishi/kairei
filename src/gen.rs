@@ -84,7 +84,7 @@ impl CodeGen for ObserveDef {
         quote! {
             fn handle_event(&mut self, event: &Event) {
                 match event {
-                    #(#handlers)*
+                    #(#handlers),*
                     _ => {}
                 }
             }
@@ -205,9 +205,10 @@ impl CodeGen for TypeInfo {
                 let item_type_tokens = item_type.generate_rust();
                 quote! { Vec<#item_type_tokens> }
             }
-            TypeInfo::Custom { .. } => {
+            TypeInfo::Custom { name, .. } => {
+                let type_ident = format_ident!("{}", name);
                 // 今は利用しない
-                quote! {}
+                quote! { #type_ident }
             }
         }
     }
@@ -234,7 +235,7 @@ impl CodeGen for Statement {
                 let target_tokens = target.generate_rust();
                 let value_tokens = value.generate_rust();
                 quote! {
-                    #target_tokens = #value_tokens
+                     #target_tokens = #value_tokens
                 }
             }
             Statement::Emit { .. } => {
@@ -283,7 +284,7 @@ impl CodeGen for Expression {
             }
             Expression::StateAccess(path) => {
                 let path_segments = path.0.iter().map(|s| format_ident!("{}", s));
-                quote! { self.#(#path_segments).* }
+                quote! { #(#path_segments).* }
             }
             Expression::FunctionCall {
                 function,

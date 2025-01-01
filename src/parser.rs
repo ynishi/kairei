@@ -323,7 +323,7 @@ fn parse_statement(input: &str) -> IResult<&str, Statement> {
 fn parse_assignment(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((ws(parse_expression), char('='), parse_expression)),
-        |(value, _, target)| Statement::Assignment { target, value },
+        |(target, _, value)| Statement::Assignment { target, value },
     )(input)
 }
 
