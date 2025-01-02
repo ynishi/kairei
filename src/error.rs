@@ -134,6 +134,13 @@ pub enum HandlerError {
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
+    #[error("Agent already exists failed: {id}")]
+    AgentAlreadyExists { id: String },
+
+    // agnt not found
+    #[error("Agent not found: {id}")]
+    AgentNotFound { id: String },
+
     #[error("Receiver not found: {receiver}")]
     ReceiverNotFound { receiver: String },
 

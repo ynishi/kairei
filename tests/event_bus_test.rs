@@ -1,6 +1,5 @@
-use kairei::event_bus::EventBus;
+use kairei::event_bus::{Event, EventBus};
 use kairei::event_registry::EventType;
-use kairei::runtime::Event;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
@@ -35,7 +34,7 @@ async fn test_concurrent_subscribers() {
     for i in 0..event_count {
         let event = Event {
             event_type: EventType::Custom(format!("test_{}", i)),
-            parameters: Default::default(),
+            ..Default::default()
         };
         bus.publish(event).await.unwrap();
     }
@@ -82,7 +81,7 @@ async fn test_slow_subscriber_doesnt_block_others() {
     for i in 0..5 {
         let event = Event {
             event_type: EventType::Custom(format!("test_{}", i)),
-            parameters: Default::default(),
+            ..Default::default()
         };
         bus.publish(event).await.unwrap();
         sleep(Duration::from_millis(100)).await;
@@ -106,7 +105,7 @@ async fn test_broadcast_overflow_behavior() {
     for i in 0..20 {
         let event = Event {
             event_type: EventType::Custom(format!("test_{}", i)),
-            parameters: Default::default(),
+            ..Default::default()
         };
         bus.publish(event).await.unwrap();
     }
