@@ -1,3 +1,4 @@
+pub mod agent_registry;
 pub mod ast;
 pub mod core;
 pub mod error;
@@ -7,6 +8,7 @@ pub mod gen;
 pub mod parser;
 pub mod prelude;
 pub mod runtime;
+pub mod system;
 
 // Re-exports
 pub use ast::*;

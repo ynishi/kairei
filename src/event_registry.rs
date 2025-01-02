@@ -9,8 +9,9 @@ pub struct EventInfo {
     pub parameters: HashMap<String, ParameterType>, // (パラメータ名, 型)
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq, strum::Display)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, strum::Display, Default)]
 pub enum EventType {
+    #[default]
     Tick,
     StateUpdated {
         agent_name: String,
@@ -19,6 +20,10 @@ pub enum EventType {
     Message {
         content_type: String,
     },
+    AgentAdded,
+    AgentRemoved,
+    AgentStarted,
+    AgentStopped,
     Custom(String), // 拡張性のために残す
 }
 

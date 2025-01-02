@@ -1,22 +1,56 @@
+use std::collections::HashMap;
+
 use tokio::sync::broadcast;
 
-use crate::{
-    runtime::{ErrorEvent, Event},
-    EventError, RuntimeError, RuntimeResult,
-};
+use crate::{event_registry::EventType, EventError, RuntimeError, RuntimeResult};
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Event {
+    pub event_type: EventType,
+    pub parameters: HashMap<String, Value>,
+    pub is_request: bool,
+    pub request_id: Option<String>,
+    pub target: Option<String>,
+    pub sender: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ErrorEvent {
+    pub error_type: String,
+    pub message: String,
+    pub parameters: HashMap<String, Value>,
+}
+
+// 値の型
+#[derive(Clone, Debug, PartialEq)]
+pub enum Value {
+    Integer(i64),
+    Float(f64),
+    String(String),
+    Boolean(bool),
+    Null,
+}
 
 pub struct EventBus {
     event_sender: broadcast::Sender<Event>,
     error_sender: broadcast::Sender<ErrorEvent>,
+    _internal_receiver: broadcast::Receiver<Event>, // EventBusをアクティブに保つための内部Receiver
+    _internal_error_receiver: broadcast::Receiver<ErrorEvent>,
 }
 
 impl EventBus {
+    /// Create a new EventBus with the given capacity.
+    /// The capacity is the maximum number of events that can be buffered.
+    /// EventBus will initiate a broadcast channel with the given capacity.
+    /// The internal receiver is used to keep the EventBus active.
     pub fn new(capacity: usize) -> Self {
-        let (event_sender, _) = broadcast::channel(capacity);
-        let (error_sender, _) = broadcast::channel(capacity);
+        let (event_sender, event_receiver) = broadcast::channel(capacity);
+        let (error_sender, error_reciever) = broadcast::channel(capacity);
         Self {
             event_sender,
             error_sender,
+            _internal_receiver: event_receiver,
+            _internal_error_receiver: error_reciever,
         }
     }
 
@@ -97,13 +131,23 @@ mod tests {
     use tokio;
 
     #[tokio::test]
+    async fn test_initial_publish_success() {
+        let bus = EventBus::new(16);
+        let test_event = Event {
+            event_type: EventType::Custom("test".to_string()),
+            ..Default::default()
+        };
+        assert!(bus.publish(test_event.clone()).await.is_ok());
+    }
+
+    #[tokio::test]
     async fn test_basic_publish_subscribe() {
         let bus = EventBus::new(16);
         let (mut event_rx, _) = bus.subscribe();
 
         let test_event = Event {
             event_type: EventType::Custom("test".to_string()),
-            parameters: Default::default(),
+            ..Default::default()
         };
 
         bus.publish(test_event.clone()).await.unwrap();
@@ -120,7 +164,7 @@ mod tests {
 
         let test_event = Event {
             event_type: EventType::Custom("test".to_string()),
-            parameters: Default::default(),
+            ..Default::default()
         };
 
         bus.publish(test_event.clone()).await.unwrap();
@@ -140,6 +184,7 @@ mod tests {
         let test_error = ErrorEvent {
             error_type: "test_error".to_string(),
             message: "test message".to_string(),
+            ..Default::default()
         };
 
         bus.publish_error(test_error.clone()).await.unwrap();
