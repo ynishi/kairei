@@ -164,6 +164,19 @@ pub enum ExecutionError {
 
     #[error("Shutdown timeout: {agent_id}, {timeout_secs} secs,")]
     ShutdownTimeout { agent_id: String, timeout_secs: u64 },
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+    #[error("Scaling error: {0}")]
+    ScalingError(String),
+    #[error("Event error: {0}")]
+    EventError(String),
+    #[error("AST error: {0}")]
+    ASTError(String),
+    #[error("AST not found: {0}")]
+    ASTNotFound(String),
+    #[error("System error: {0}")]
+    SystemError(String),
 }
 
 // 便利な Result 型エイリアス

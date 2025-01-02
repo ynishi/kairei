@@ -1,5 +1,6 @@
 pub mod agent_registry;
 pub mod ast;
+pub mod ast_registry;
 pub mod core;
 pub mod error;
 pub mod event_bus;
