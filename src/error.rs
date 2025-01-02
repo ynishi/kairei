@@ -149,6 +149,21 @@ pub enum ExecutionError {
 
     #[error("Async operation failed: {0}")]
     AsyncFailed(String),
+
+    #[error("Request timeout: {request_id}")]
+    RequestTimeout { request_id: String },
+
+    #[error("Invalid Pending Request: {request_id}")]
+    InvalidPendingRequest { request_id: String },
+
+    #[error("Send Shutdown failed: {message}")]
+    SendShutdownFailed { agent_name: String, message: String },
+
+    #[error("Shutdown failed: {agent_name}, {message}")]
+    ShutdownFailed { agent_name: String, message: String },
+
+    #[error("Shutdown timeout: {agent_id}, {timeout_secs} secs,")]
+    ShutdownTimeout { agent_id: String, timeout_secs: u64 },
 }
 
 // 便利な Result 型エイリアス

@@ -1,19 +1,50 @@
 use async_trait::async_trait;
 use dashmap::DashMap;
 use futures::future::BoxFuture;
+use futures::{stream::SelectAll, Stream};
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::Arc;
+use tokio::sync::{broadcast, oneshot};
+use tokio_stream::{wrappers::BroadcastStream, StreamExt};
+use uuid::Uuid;
 
-use crate::event_bus::{Event, Value};
+use crate::event_bus::{ErrorEvent, Event, EventBus, Value};
+use crate::event_registry::{EventType, LifecycleEvent};
 use crate::{
     ExecutionError, Expression, HandlerError, Literal, MicroAgentDef, RuntimeError, RuntimeResult,
 };
 
+// ハンドラの型
+type ObserveHandler =
+    Box<dyn Fn(&Event) -> BoxFuture<'static, Option<HashMap<String, Value>>> + Send + Sync>;
+type AnswerHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, RuntimeResult<Value>> + Send + Sync>;
+type ReactHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, Option<Vec<Event>>> + Send + Sync>;
+type LifecycleHandler = Box<
+    dyn Fn() -> BoxFuture<'static, RuntimeResult<(Vec<Event>, HashMap<String, Value>)>>
+        + Send
+        + Sync,
+>;
+
 // 並行処理のためのTrait
 #[async_trait]
 pub trait RuntimeAgent: Send + Sync {
-    async fn run(&self) -> RuntimeResult<()>;
     fn name(&self) -> String;
+    async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()>;
+    async fn shutdown(&self) -> RuntimeResult<()> {
+        // simply cleanup
+        self.cleanup().await?;
+        Ok(())
+    }
+    async fn cleanup(&self) -> RuntimeResult<()> {
+        self.handle_lifecycle_event(&LifecycleEvent::OnDestroy)
+            .await?;
+        Ok(())
+    }
+    async fn handle_lifecycle_event(
+        &self,
+        event: &LifecycleEvent,
+    ) -> RuntimeResult<(Vec<Event>, HashMap<String, Value>)>;
 }
 
 // MicroAgentの実行時表現
@@ -23,33 +54,221 @@ pub struct RuntimeAgentData {
     observe_handlers: DashMap<String, ObserveHandler>,
     answer_handlers: DashMap<String, AnswerHandler>,
     react_handlers: DashMap<String, ReactHandler>,
+    lifecycle_handlers: DashMap<LifecycleEvent, LifecycleHandler>,
+    event_bus: Arc<EventBus>,
+    pending_requests: Arc<DashMap<String, oneshot::Sender<Event>>>,
+    private_shutdown_start_tx: broadcast::Sender<()>, // 個別シャットダウン開始用
+    private_shutdown_end_tx: broadcast::Sender<()>,   // 個別シャットダウン完了用
+}
+
+#[derive(Debug)]
+pub enum StreamMessage {
+    Event(Event),
+    ErrorEvent(ErrorEvent),
+    SystemShutdown,
+    PrivateShutdown,
 }
 
 #[async_trait]
 impl RuntimeAgent for RuntimeAgentData {
-    async fn run(&self) -> RuntimeResult<()> {
-        Ok(())
-    }
     fn name(&self) -> String {
         self.name.clone()
     }
-}
+    async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()> {
+        let (event_rx, error_rx) = self.event_bus.subscribe();
+        let private_shutdown_rx = self.private_shutdown_start_tx.subscribe();
 
-// ハンドラの型
-type ObserveHandler =
-    Box<dyn Fn(&Event) -> BoxFuture<'static, Option<HashMap<String, Value>>> + Send + Sync>;
-type AnswerHandler =
-    Box<dyn Fn(&Request) -> BoxFuture<'static, RuntimeResult<Value>> + Send + Sync>;
-type ReactHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, Option<Vec<Event>>> + Send + Sync>;
+        let on_init = self.handle_lifecycle_event(&LifecycleEvent::OnInit).await?;
+        for event in on_init.0 {
+            self.event_bus.publish(event).await?;
+        }
+        for (key, value) in on_init.1 {
+            self.state.insert(key, value);
+        }
 
-#[derive(Clone, Debug)]
-pub struct Request {
-    pub request_type: String,
-    pub parameters: HashMap<String, Value>,
+        self.event_bus
+            .publish(Event {
+                event_type: EventType::AgentStarted,
+                parameters: {
+                    let mut params = HashMap::new();
+                    params.insert("agent_id".to_string(), Value::String(self.name.clone()));
+                    params
+                },
+            })
+            .await?;
+
+        // イベントストリームの変換
+        let event_stream = BroadcastStream::new(event_rx.receiver).map(|e| {
+            tracing::debug!("Event received");
+            match e {
+                Ok(event) => Ok(StreamMessage::Event(event)),
+                Err(_) => Err(()),
+            }
+        });
+
+        // エラーストリームの変換
+        let error_stream = BroadcastStream::new(error_rx.receiver).map(|e| {
+            tracing::debug!("Error event received");
+            match e {
+                Ok(error) => Ok(StreamMessage::ErrorEvent(error)),
+                Err(_) => Err(()),
+            }
+        });
+
+        // システムシャットダウンストリームの変換
+        let system_shutdown_stream = BroadcastStream::new(shutdown_rx).map(|e| {
+            tracing::debug!("System shutdown received");
+            match e {
+                Ok(_) => Ok(StreamMessage::SystemShutdown),
+                Err(_) => Err(()),
+            }
+        });
+
+        // プライベートシャットダウンストリームの変換
+        let private_shutdown_stream = BroadcastStream::new(private_shutdown_rx).map(|e| {
+            tracing::debug!("Private shutdown received");
+            match e {
+                Ok(_) => Ok(StreamMessage::PrivateShutdown),
+                Err(_) => Err(()),
+            }
+        });
+
+        // ストリームの統合
+        let mut streams: SelectAll<Pin<Box<dyn Stream<Item = Result<StreamMessage, ()>> + Send>>> =
+            SelectAll::new();
+        streams.push(Box::pin(event_stream));
+        streams.push(Box::pin(error_stream));
+        streams.push(Box::pin(system_shutdown_stream));
+        streams.push(Box::pin(private_shutdown_stream));
+
+        while let Some(Ok(message)) = streams.next().await {
+            match message {
+                StreamMessage::Event(event) => {
+                    let new_events = self.handle_event(&event).await?;
+                    for event in new_events {
+                        self.event_bus.publish(event).await?;
+                    }
+                }
+                StreamMessage::ErrorEvent(error) => {
+                    tracing::error!("Error received in agent {}: {:?}", self.name, error);
+                }
+
+                StreamMessage::SystemShutdown => {
+                    tracing::info!("Agent {} received shutdown signal", self.name);
+                    break;
+                }
+                StreamMessage::PrivateShutdown => {
+                    tracing::info!("Agent {} received single shutdown signal", self.name);
+                    break;
+                }
+            }
+        }
+
+        // クリーンアップ処理
+        self.cleanup().await?;
+
+        self.private_shutdown_end_tx.send(()).map_err(|e| {
+            RuntimeError::Execution(ExecutionError::ShutdownFailed {
+                agent_name: self.name.clone(),
+                message: e.to_string(),
+            })
+        })?;
+
+        // AgentStoppedイベントを発行
+        self.event_bus
+            .publish(Event {
+                event_type: EventType::AgentStopped,
+                parameters: {
+                    let mut params = HashMap::new();
+                    params.insert("agent_id".to_string(), Value::String(self.name.clone()));
+                    params
+                },
+            })
+            .await?;
+
+        Ok(())
+    }
+
+    async fn shutdown(&self) -> RuntimeResult<()> {
+        self.private_shutdown_start_tx.send(()).map_err(|e| {
+            RuntimeError::Execution(ExecutionError::ShutdownFailed {
+                agent_name: self.name.clone(),
+                message: e.to_string(),
+            })
+        })?;
+        self.private_shutdown_end_tx
+            .subscribe()
+            .recv()
+            .await
+            .map_err(|e| {
+                RuntimeError::Execution(ExecutionError::ShutdownFailed {
+                    agent_name: self.name.clone(),
+                    message: e.to_string(),
+                })
+            })?;
+        Ok(())
+    }
+
+    // シャットダウン時のクリーンアップ処理
+    async fn cleanup(&self) -> RuntimeResult<()> {
+        // 1. OnDestroy処理の実行
+        let (events, states) = self
+            .handle_lifecycle_event(&LifecycleEvent::OnDestroy)
+            .await?;
+        for event in events {
+            self.event_bus.publish(event).await?;
+        }
+        for (key, value) in states {
+            self.state.insert(key, value);
+        }
+
+        // 2. 待機中のリクエストをキャンセル
+        for entry in self.pending_requests.iter() {
+            let request_id = entry.key();
+            let (_, tx) = self.pending_requests.remove(request_id).ok_or_else(|| {
+                RuntimeError::Execution(ExecutionError::InvalidPendingRequest {
+                    request_id: request_id.clone(),
+                })
+            })?;
+            let error_response = Event {
+                event_type: EventType::Response {
+                    request_type: "cancelled".to_string(),
+                    requester: "unknown".to_string(),
+                    responder: self.name.clone(),
+                    request_id: request_id.clone(),
+                },
+                parameters: {
+                    let mut params = HashMap::new();
+                    params.insert(
+                        "error".to_string(),
+                        Value::String("Agent shutdown".to_string()),
+                    );
+                    params
+                },
+            };
+            let _ = tx.send(error_response);
+        }
+        self.pending_requests.clear();
+
+        // 3. 状態の保存や他のリソースのクリーンアップ
+        // TODO: 必要に応じて実装
+
+        Ok(())
+    }
+
+    async fn handle_lifecycle_event(
+        &self,
+        event: &LifecycleEvent,
+    ) -> RuntimeResult<(Vec<Event>, HashMap<String, Value>)> {
+        if let Some(handler) = self.lifecycle_handlers.get(event) {
+            return handler().await;
+        }
+        Ok((vec![], HashMap::new()))
+    }
 }
 
 impl RuntimeAgentData {
-    pub fn new(agent_def: &MicroAgentDef) -> RuntimeResult<Self> {
+    pub fn new(agent_def: &MicroAgentDef, event_bus: &Arc<EventBus>) -> RuntimeResult<Self> {
         let state = Arc::new(DashMap::new());
 
         // 初期状態の設定
@@ -67,6 +286,11 @@ impl RuntimeAgentData {
             observe_handlers: DashMap::new(),
             answer_handlers: DashMap::new(),
             react_handlers: DashMap::new(),
+            lifecycle_handlers: DashMap::new(),
+            event_bus: event_bus.clone(),
+            pending_requests: Arc::new(DashMap::new()),
+            private_shutdown_start_tx: broadcast::channel(1).0,
+            private_shutdown_end_tx: broadcast::channel(1).0,
         })
     }
 
@@ -85,20 +309,118 @@ impl RuntimeAgentData {
         self.react_handlers.insert(event_type, handler);
     }
 
+    pub fn register_lifecycle(&mut self, event: LifecycleEvent, handler: LifecycleHandler) {
+        self.lifecycle_handlers.insert(event, handler);
+    }
+
     // イベントの処理
-    pub async fn handle_event(&self, event: &Event) -> RuntimeResult<Vec<Event>> {
+    async fn handle_event(&self, event: &Event) -> RuntimeResult<Vec<Event>> {
+        match &event.event_type {
+            EventType::Request {
+                request_type,
+                requester,
+                responder,
+                request_id,
+            } => {
+                if responder == &self.name {
+                    if let Some(handler) = self.answer_handlers.get(request_type) {
+                        // レスポンスイベントを生成して返す
+                        let response = handler(event).await?;
+                        let mut parameters = HashMap::new();
+                        parameters.insert("response".to_string(), response);
+                        let event = Event {
+                            event_type: EventType::Response {
+                                request_id: request_id.clone(),
+                                responder: self.name.clone(),
+                                requester: requester.clone(),
+                                request_type: request_type.clone(),
+                            },
+                            parameters,
+                        };
+                        Ok(vec![event])
+                    } else {
+                        Err(RuntimeError::Handler(HandlerError::NotFound {
+                            handler_type: "answer".to_string(),
+                            name: request_type.clone(),
+                        }))
+                    }
+                } else {
+                    // not for me
+                    Ok(vec![])
+                }
+            }
+
+            EventType::Response { request_id, .. } => {
+                // 待機中のリクエストがあれば、レスポンスを送信
+                if let Some((_, tx)) = self.pending_requests.remove(request_id) {
+                    let _ = tx.send(event.clone());
+                }
+                Ok(vec![])
+            }
+
+            // 通常のメッセージとカスタムイベント
+            EventType::Message { .. } | EventType::Custom(_) => {
+                self.handle_normal_event(event).await
+            }
+
+            // システムイベント
+            EventType::Tick
+            | EventType::StateUpdated { .. }
+            | EventType::AgentAdded
+            | EventType::AgentRemoved
+            | EventType::AgentStarted
+            | EventType::AgentStopped => self.handle_system_event(event).await,
+        }
+    }
+
+    // リクエスト送信と応答待ち
+    pub async fn request(
+        &self,
+        request_type: String,
+        responder: String,
+        parameters: HashMap<String, Value>,
+    ) -> RuntimeResult<Event> {
+        let request_id = Uuid::new_v4().to_string();
+
+        // 応答待ち用のチャネルを作成
+        let (tx, rx) = oneshot::channel();
+        self.pending_requests.insert(request_id.clone(), tx);
+
+        // リクエストを送信
+        self.event_bus
+            .publish(Event {
+                event_type: EventType::Request {
+                    request_type,
+                    requester: self.name.clone(),
+                    responder,
+                    request_id: request_id.clone(),
+                },
+                parameters,
+            })
+            .await?;
+
+        // レスポンスを待機
+        match rx.await {
+            Ok(response) => Ok(response),
+            Err(_) => Err(RuntimeError::Execution(ExecutionError::RequestTimeout {
+                request_id,
+            })),
+        }
+    }
+
+    async fn handle_normal_event(&self, event: &Event) -> RuntimeResult<Vec<Event>> {
         let mut new_events = Vec::new();
 
-        // observe ハンドラの実行
+        // Observe処理
         if let Some(handler) = self.observe_handlers.get(&event.event_type.to_string()) {
-            if let Some(updates) = handler.value()(event).await {
+            if let Some(updates) = handler(event).await {
                 for (key, value) in updates {
                     self.state.insert(key, value);
                 }
             }
         }
 
-        // react ハンドラの実行
+        // React処理
         if let Some(handler) = self.react_handlers.get(&event.event_type.to_string()) {
             if let Some(events) = handler(event).await {
                 new_events.extend(events);
@@ -108,16 +430,16 @@ impl RuntimeAgentData {
         Ok(new_events)
     }
 
-    // リクエストの処理
-    pub async fn handle_request(&self, request: &Request) -> RuntimeResult<Value> {
-        if let Some(handler) = self.answer_handlers.get(&request.request_type) {
-            handler.value()(request).await
-        } else {
-            Err(RuntimeError::Handler(HandlerError::NotFound {
-                handler_type: "answer".to_string(),
-                name: request.request_type.clone(),
-            }))
+    async fn handle_system_event(&self, event: &Event) -> RuntimeResult<Vec<Event>> {
+        // システムイベントは主にObserveで処理
+        if let Some(handler) = self.observe_handlers.get(&event.event_type.to_string()) {
+            if let Some(updates) = handler(event).await {
+                for (key, value) in updates {
+                    self.state.insert(key, value);
+                }
+            }
         }
+        Ok(vec![])
     }
 }
 

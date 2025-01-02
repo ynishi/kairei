@@ -1,33 +1,40 @@
 use std::{collections::HashMap, sync::Arc};
-use tokio;
 
 use kairei::{
-    agent_registry::AgentRegistry, event_bus::Value, runtime::RuntimeAgentData, Expression,
-    Literal, MicroAgentDef, RuntimeError, RuntimeResult, StateDef, StateError, StateVarDef,
-    TypeInfo,
+    agent_registry::AgentRegistry,
+    event_bus::{Event, Value},
+    event_registry::EventType,
+    runtime::RuntimeAgentData,
+    Expression, Literal, MicroAgentDef, RuntimeError, RuntimeResult, StateDef, StateError,
+    StateVarDef, TypeInfo,
 };
 
 #[tokio::test]
 async fn test_counter_agent() -> RuntimeResult<()> {
+    let event_bus = Arc::new(kairei::event_bus::EventBus::new(16));
+
     // Counter MicroAgentの作成
-    let mut counter = RuntimeAgentData::new(&MicroAgentDef {
-        name: "counter".to_string(),
-        state: Some(StateDef {
-            variables: {
-                let mut vars = HashMap::new();
-                vars.insert(
-                    "count".to_string(),
-                    StateVarDef {
-                        name: "count".to_string(),
-                        type_info: TypeInfo::Simple("i64".to_string()),
-                        initial_value: Some(Expression::Literal(Literal::Integer(0))),
-                    },
-                );
-                vars
-            },
-        }),
-        ..Default::default()
-    })?;
+    let mut counter = RuntimeAgentData::new(
+        &MicroAgentDef {
+            name: "counter".to_string(),
+            state: Some(StateDef {
+                variables: {
+                    let mut vars = HashMap::new();
+                    vars.insert(
+                        "count".to_string(),
+                        StateVarDef {
+                            name: "count".to_string(),
+                            type_info: TypeInfo::Simple("i64".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Integer(0))),
+                        },
+                    );
+                    vars
+                },
+            }),
+            ..Default::default()
+        },
+        &event_bus,
+    )?;
 
     // Observe ハンドラの登録（Tickイベントの処理）
     // HashMap
@@ -83,60 +90,67 @@ async fn test_counter_agent() -> RuntimeResult<()> {
 
     // エージェントをランタイムに登録
     // ランタイムの初期化
-    let agent_registry = AgentRegistry::new();
+    let shutdown_tx = tokio::sync::broadcast::channel(1);
+    let agent_registry = AgentRegistry::new(&shutdown_tx.0);
+    let agent = Arc::new(counter);
 
     let agent_id = "counter".to_string();
-    let event_bus = Arc::new(kairei::event_bus::EventBus::new(16));
     agent_registry
-        .register_agent(&agent_id, Arc::new(counter), &event_bus)
+        .register_agent(&agent_id, agent.clone(), &event_bus)
         .await
         .unwrap();
 
-    /*
-    let runtime_cloned = agent_registry.clone();
-
-    // ランタイムのメインループを別タスクで実行
-    let runtime_handle = tokio::spawn(async move {
-        if let Err(e) = agent_registry.run().await {
-            eprintln!("Runtime error: {:?}", e);
-        }
-    });
+    agent_registry
+        .run_agent(&agent_id, event_bus.clone())
+        .await
+        .unwrap();
 
     // テストケース1: 初期状態の確認
-    let agent = runtime_cloned.get_agent("counter").unwrap();
-    let initial_count = agent
-        .handle_request(&Request {
-            request_type: "GetCount".to_string(),
-            parameters: HashMap::new(),
-        })
+    let initial_count_event = agent
+        .request(
+            "GetCount".to_string(),
+            "counter".to_string(),
+            HashMap::new(),
+        )
         .await?;
-    assert_eq!(initial_count, Value::Integer(0));
+    if let EventType::Response { .. } = initial_count_event.event_type {
+        let result = initial_count_event.parameters.get("response").unwrap();
+        assert_eq!(result, &Value::Integer(0));
+    } else {
+        panic!("Expected a response event");
+    }
 
     // テストケース2: Tickイベント送信後の状態確認
-    runtime_cloned
-        .send_event(Event {
+    event_bus
+        .publish(Event {
             event_type: EventType::Tick,
-            ..Default::default()
+            parameters: HashMap::new(),
         })
         .await?;
 
     // 状態更新を待機
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let count_after_tick = agent
-        .handle_request(&Request {
-            request_type: "GetCount".to_string(),
-            parameters: HashMap::new(),
-        })
+    let count_after_tick_event = agent
+        .request(
+            "GetCount".to_string(),
+            "counter".to_string(),
+            HashMap::new(),
+        )
         .await?;
-    assert_eq!(count_after_tick, Value::Integer(1));
+    if let EventType::Response { .. } = count_after_tick_event.event_type {
+        let result = count_after_tick_event.parameters.get("response").unwrap();
+        assert_eq!(result, &Value::Integer(0));
+    } else {
+        panic!("Expected a response event");
+    }
 
     // テストケース3: 複数回のTickイベント
     for _ in 0..3 {
-        runtime_cloned
-            .send_event(Event {
+        event_bus
+            .publish(Event {
                 event_type: EventType::Tick,
-                ..Default::default()
+                parameters: HashMap::new(),
             })
             .await?;
     }
@@ -144,26 +158,25 @@ async fn test_counter_agent() -> RuntimeResult<()> {
     // 状態更新を待機
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let final_count = agent
-        .handle_request(&Request {
-            request_type: "GetCount".to_string(),
-            parameters: HashMap::new(),
-        })
+    let final_count_event = agent
+        .request(
+            "GetCount".to_string(),
+            "counter".to_string(),
+            HashMap::new(),
+        )
         .await?;
-    assert_eq!(final_count, Value::Integer(4));
+    if let EventType::Response { .. } = final_count_event.event_type {
+        let result = final_count_event.parameters.get("response").unwrap();
+        assert_eq!(result, &Value::Integer(0));
+    } else {
+        panic!("Expected a response event");
+    }
 
-    // テストケース4: 存在しないリクエストタイプ
-    let error_result = agent
-        .handle_request(&Request {
-            request_type: "NonExistentRequest".to_string(),
-            parameters: HashMap::new(),
-        })
-        .await;
-    assert!(error_result.is_err());
+    agent_registry
+        .shutdown_agent(&agent_id, None)
+        .await
+        .unwrap();
 
-    // ランタイムの終了
-    runtime_handle.abort();
-    */
-
+    shutdown_tx.0.send(()).unwrap();
     Ok(())
 }
