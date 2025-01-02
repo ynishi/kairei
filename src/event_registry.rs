@@ -20,11 +20,31 @@ pub enum EventType {
     Message {
         content_type: String,
     },
+    // Request/Response
+    Request {
+        request_type: String,
+        requester: String,  // リクエストの送信者
+        responder: String,  // 期待される応答者
+        request_id: String, // Globally unique request ID like UUID
+    },
+    Response {
+        request_type: String,
+        requester: String,  // 元のリクエストの送信者
+        responder: String,  // 応答者
+        request_id: String, // Globally unique request ID like UUID
+    },
     AgentAdded,
     AgentRemoved,
     AgentStarted,
     AgentStopped,
     Custom(String), // 拡張性のために残す
+}
+
+/// ライフサイクルイベント
+#[derive(Debug, Clone, PartialEq, Hash, Eq, strum::Display)]
+pub enum LifecycleEvent {
+    OnInit,
+    OnDestroy,
 }
 
 /// イベントパラメータの型情報

@@ -8,10 +8,6 @@ use crate::{event_registry::EventType, EventError, RuntimeError, RuntimeResult};
 pub struct Event {
     pub event_type: EventType,
     pub parameters: HashMap<String, Value>,
-    pub is_request: bool,
-    pub request_id: Option<String>,
-    pub target: Option<String>,
-    pub sender: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -80,7 +76,7 @@ impl EventBus {
 }
 
 pub struct EventReceiver {
-    receiver: broadcast::Receiver<Event>,
+    pub receiver: broadcast::Receiver<Event>,
 }
 
 impl EventReceiver {
@@ -106,7 +102,7 @@ impl EventReceiver {
 }
 
 pub struct ErrorReceiver {
-    receiver: broadcast::Receiver<ErrorEvent>,
+    pub receiver: broadcast::Receiver<ErrorEvent>,
 }
 
 impl ErrorReceiver {
