@@ -272,6 +272,13 @@ impl AgentRegistry {
     pub fn running_agent_count(&self) -> usize {
         self.running_agents.len()
     }
+
+    pub fn agent_names(&self) -> Vec<String> {
+        self.agents
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
+    }
 }
 
 // テスト用のヘルパー関数

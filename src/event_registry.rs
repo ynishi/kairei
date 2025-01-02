@@ -9,7 +9,7 @@ pub struct EventInfo {
     pub parameters: HashMap<String, ParameterType>, // (パラメータ名, 型)
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq, strum::Display, Default)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, strum::EnumString, strum::Display, Default)]
 pub enum EventType {
     #[default]
     Tick,
