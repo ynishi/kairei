@@ -1,13 +1,54 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::time::sleep;
+use uuid::Uuid;
 
 use kairei::{
     agent_registry::AgentRegistry,
-    event_bus::{Event, Value},
+    event_bus::{Event, EventBus, Value},
     event_registry::EventType,
     runtime::RuntimeAgentData,
     Expression, Literal, MicroAgentDef, RuntimeError, RuntimeResult, StateDef, StateError,
     StateVarDef, TypeInfo,
 };
+
+// テスト用のヘルパーAgent
+struct TestAgent {
+    pub name: String,
+    pub responses: Arc<Mutex<Vec<Event>>>,
+}
+
+impl TestAgent {
+    fn new(name: &str, event_bus: &Arc<EventBus>) -> Self {
+        let (mut event_rx, _) = event_bus.subscribe();
+        let responses = Arc::new(Mutex::new(vec![]));
+        let response_ref = responses.clone();
+        // 非同期にイベントを取得して、responsesに格納する処理を開始
+        tokio::spawn(async move {
+            while let Ok(event) = event_rx.recv().await {
+                response_ref.lock().unwrap().push(event);
+            }
+        });
+        Self {
+            name: name.to_string(),
+            responses,
+        }
+    }
+
+    fn get_response(&self, request_id: &str) -> Value {
+        let want_request_id = request_id.to_string();
+        let lock = self.responses.lock().unwrap();
+        let filtered = lock.iter().filter(|e| match &e.event_type {
+            EventType::Response { request_id, .. } => request_id == &want_request_id,
+            _ => false,
+        });
+        let res = filtered.last().unwrap();
+        res.parameters.get("response").unwrap().clone()
+    }
+}
 
 #[tokio::test]
 async fn test_counter_agent() -> RuntimeResult<()> {
@@ -37,8 +78,6 @@ async fn test_counter_agent() -> RuntimeResult<()> {
     )?;
 
     // Observe ハンドラの登録（Tickイベントの処理）
-    // HashMap
-    //
     let state = Arc::new(counter.state.clone());
 
     let observe_state = state.clone();
@@ -105,20 +144,30 @@ async fn test_counter_agent() -> RuntimeResult<()> {
         .await
         .unwrap();
 
+    sleep(Duration::from_millis(100)).await;
+
+    // テストエージェントのセットアップ
+    let test_agent = TestAgent::new("test_agent", &event_bus);
+
     // テストケース1: 初期状態の確認
-    let initial_count_event = agent
-        .request(
-            "GetCount".to_string(),
-            "counter".to_string(),
-            HashMap::new(),
-        )
+    let request_id = Uuid::new_v4().to_string();
+    event_bus
+        .publish(Event {
+            event_type: EventType::Request {
+                request_type: "GetCount".to_string(),
+                requester: test_agent.name.clone(),
+                responder: "counter".to_string(),
+                request_id: request_id.clone(),
+            },
+            parameters: HashMap::new(),
+        })
         .await?;
-    if let EventType::Response { .. } = initial_count_event.event_type {
-        let result = initial_count_event.parameters.get("response").unwrap();
-        assert_eq!(result, &Value::Integer(0));
-    } else {
-        panic!("Expected a response event");
-    }
+
+    // レスポンスの待機と確認
+    sleep(Duration::from_millis(100)).await;
+
+    let count = test_agent.get_response(&request_id);
+    assert_eq!(count, Value::Integer(0));
 
     // テストケース2: Tickイベント送信後の状態確認
     event_bus
@@ -131,19 +180,24 @@ async fn test_counter_agent() -> RuntimeResult<()> {
     // 状態更新を待機
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let count_after_tick_event = agent
-        .request(
-            "GetCount".to_string(),
-            "counter".to_string(),
-            HashMap::new(),
-        )
+    let request_id = Uuid::new_v4().to_string();
+    event_bus
+        .publish(Event {
+            event_type: EventType::Request {
+                request_type: "GetCount".to_string(),
+                requester: test_agent.name.clone(),
+                responder: "counter".to_string(),
+                request_id: request_id.clone(),
+            },
+            parameters: HashMap::new(),
+        })
         .await?;
-    if let EventType::Response { .. } = count_after_tick_event.event_type {
-        let result = count_after_tick_event.parameters.get("response").unwrap();
-        assert_eq!(result, &Value::Integer(0));
-    } else {
-        panic!("Expected a response event");
-    }
+
+    // レスポンスの待機と確認
+    sleep(Duration::from_millis(100)).await;
+
+    let count = test_agent.get_response(&request_id);
+    assert_eq!(count, Value::Integer(1));
 
     // テストケース3: 複数回のTickイベント
     for _ in 0..3 {
@@ -158,19 +212,24 @@ async fn test_counter_agent() -> RuntimeResult<()> {
     // 状態更新を待機
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let final_count_event = agent
-        .request(
-            "GetCount".to_string(),
-            "counter".to_string(),
-            HashMap::new(),
-        )
+    let request_id = Uuid::new_v4().to_string();
+    event_bus
+        .publish(Event {
+            event_type: EventType::Request {
+                request_type: "GetCount".to_string(),
+                requester: test_agent.name.clone(),
+                responder: "counter".to_string(),
+                request_id: request_id.clone(),
+            },
+            parameters: HashMap::new(),
+        })
         .await?;
-    if let EventType::Response { .. } = final_count_event.event_type {
-        let result = final_count_event.parameters.get("response").unwrap();
-        assert_eq!(result, &Value::Integer(0));
-    } else {
-        panic!("Expected a response event");
-    }
+
+    // レスポンスの待機と確認
+    sleep(Duration::from_millis(100)).await;
+
+    let count = test_agent.get_response(&request_id);
+    assert_eq!(count, Value::Integer(4));
 
     agent_registry
         .shutdown_agent(&agent_id, None)

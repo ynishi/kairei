@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{broadcast, oneshot};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::event_bus::{ErrorEvent, Event, EventBus, Value};
@@ -144,6 +145,7 @@ impl RuntimeAgent for RuntimeAgentData {
         while let Some(Ok(message)) = streams.next().await {
             match message {
                 StreamMessage::Event(event) => {
+                    debug!("Event received: {:?}", event);
                     let new_events = self.handle_event(&event).await?;
                     for event in new_events {
                         self.event_bus.publish(event).await?;
