@@ -31,6 +31,7 @@ pub enum Value {
 pub struct EventBus {
     event_sender: broadcast::Sender<Event>,
     error_sender: broadcast::Sender<ErrorEvent>,
+    capacity: usize,
     _internal_receiver: broadcast::Receiver<Event>, // EventBusをアクティブに保つための内部Receiver
     _internal_error_receiver: broadcast::Receiver<ErrorEvent>,
 }
@@ -46,6 +47,7 @@ impl EventBus {
         Self {
             event_sender,
             error_sender,
+            capacity,
             _internal_receiver: event_receiver,
             _internal_error_receiver: error_reciever,
         }
@@ -74,6 +76,26 @@ impl EventBus {
             })
         })?;
         Ok(())
+    }
+
+    pub fn queue_size(&self) -> usize {
+        self.event_sender.len()
+    }
+
+    pub fn error_queue_size(&self) -> usize {
+        self.error_sender.len()
+    }
+
+    pub fn subscribers_size(&self) -> usize {
+        self.event_sender.receiver_count()
+    }
+
+    pub fn error_subscribers_size(&self) -> usize {
+        self.error_sender.receiver_count()
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 }
 

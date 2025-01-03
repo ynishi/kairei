@@ -279,6 +279,11 @@ impl AgentRegistry {
             .map(|entry| entry.key().clone())
             .collect()
     }
+
+    pub fn get_info(&self, id: &str) -> Option<String> {
+        // TODO: エージェントの情報を取得する
+        self.agents.get(id).map(|agent| agent.name())
+    }
 }
 
 // テスト用のヘルパー関数
