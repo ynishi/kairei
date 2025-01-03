@@ -26,4 +26,8 @@ impl AstRegistry {
         ))?;
         Ok(ast.value().clone())
     }
+
+    pub async fn list_agent_asts(&self) -> Vec<String> {
+        self.asts.iter().map(|entry| entry.key().clone()).collect()
+    }
 }

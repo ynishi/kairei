@@ -1,11 +1,15 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
-use tokio::sync::{broadcast, RwLock};
+use dashmap::DashMap;
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+use tokio::{
+    sync::{broadcast, oneshot, RwLock},
+    time::timeout,
+};
 use uuid::Uuid;
 
 use crate::{
     agent_registry::AgentRegistry,
     ast_registry::AstRegistry,
-    event_bus::{EventBus, Value},
+    event_bus::{Event, EventBus, EventReceiver, Value},
     event_registry::{EventInfo, EventRegistry, EventType, ParameterType},
     runtime::RuntimeAgentData,
     EventError, ExecutionError, MicroAgentDef, RuntimeError, RuntimeResult,
@@ -20,6 +24,8 @@ pub struct System {
     ast_registry: Arc<RwLock<AstRegistry>>,
     shutdown_tx: broadcast::Sender<()>, // Systemがシャットダウンシグナルを送信
     _shutdown_rx: broadcast::Receiver<()>, // シャットダウンシグナルを受信
+    pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
+    filtered_subscriptions: Arc<DashMap<Vec<EventType>, broadcast::Sender<Event>>>, // Vec<EventType>は Sorted　である必要がある
 }
 
 impl System {
@@ -31,6 +37,25 @@ impl System {
         let agent_registry = Arc::new(tokio::sync::RwLock::new(AgentRegistry::new(&shutdown_tx)));
         let ast_registry = Arc::new(RwLock::new(AstRegistry::default()));
         let _shutdown_rx = shutdown_tx.subscribe();
+        let pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>> =
+            Arc::new(DashMap::new());
+        let pending_requests_ref = pending_requests.clone();
+        let mut event_rx = event_bus.subscribe().0;
+        let filtered_subscriptions = Arc::new(DashMap::new());
+
+        tokio::spawn(async move {
+            while let Ok(event) = event_rx.recv().await {
+                if let EventType::Response { request_id, .. } = event.event_type {
+                    if let Some((_, sender)) = pending_requests_ref.remove(&request_id) {
+                        if let Some(value) = event.parameters.get("response") {
+                            let _ = sender.send(value.clone());
+                        } else {
+                            let _ = sender.send(Value::Null);
+                        }
+                    }
+                }
+            }
+        });
 
         Self {
             event_registry,
@@ -39,6 +64,8 @@ impl System {
             ast_registry,
             shutdown_tx,
             _shutdown_rx,
+            pending_requests,
+            filtered_subscriptions,
         }
     }
 
@@ -99,6 +126,10 @@ impl System {
             .await
             .get_agent_ast(_agent_name)
             .await
+    }
+
+    pub async fn list_agent_asts(&self) -> RuntimeResult<Vec<String>> {
+        Ok(self.ast_registry.read().await.list_agent_asts().await)
     }
 
     pub async fn register_event_ast(
@@ -238,6 +269,80 @@ impl System {
         registry.run_agent(agent_name, self.event_bus.clone()).await
     }
 
+    /// Send/Receive events
+    pub async fn send_event(&self, event: Event) -> RuntimeResult<()> {
+        self.event_bus.publish(event).await
+    }
+
+    pub async fn send_request(&self, event: Event) -> RuntimeResult<Value> {
+        let request_id = match event.event_type.clone() {
+            EventType::Request { request_id, .. } => request_id,
+            _ => {
+                return Err(RuntimeError::Event(EventError::UnsupportedRequest {
+                    request_type: event.event_type.to_string(),
+                }));
+            }
+        };
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.pending_requests.insert(request_id.clone(), tx);
+        let event_bus = self.event_bus.clone();
+        event_bus.publish(event).await?;
+        let timeout_secs = 30;
+        match timeout(Duration::from_secs(timeout_secs), rx).await {
+            Ok(value) => value.map_err(|e| {
+                RuntimeError::Event(EventError::RecieveResponseFailed {
+                    request_id: request_id.to_string(),
+                    message: e.to_string(),
+                })
+            }),
+            Err(e) => Err(RuntimeError::Event(EventError::RecieveResponseTimeout {
+                request_id: request_id.to_string(),
+                timeout_secs,
+                message: e.to_string(),
+            })),
+        }
+    }
+
+    /// イベントの購読
+    pub async fn subscribe_events(
+        &self,
+        event_types: Vec<EventType>,
+    ) -> RuntimeResult<EventReceiver> {
+        let sorted = {
+            let mut sorted = event_types.clone();
+            sorted.sort();
+            sorted
+        };
+        if let Some(sender) = self.filtered_subscriptions.get(&sorted) {
+            return Ok(EventReceiver::new(sender.subscribe()));
+        }
+
+        let (tx, rx) = broadcast::channel(100);
+        self.filtered_subscriptions
+            .insert(sorted.clone(), tx.clone());
+
+        // イベントバスからサブスクライバーを取得
+        let mut subscriber = self.event_bus.subscribe().0;
+
+        let event_types = event_types.clone();
+        tokio::spawn(async move {
+            while let Ok(event) = subscriber.recv().await {
+                if event_types.contains(&event.event_type) {
+                    // エラーは無視（受信側がすべて切断された場合など）
+                    let _ = tx.send(event);
+                }
+            }
+        });
+
+        Ok(EventReceiver::new(rx))
+    }
+
+    pub fn cleanup_unused_subscriptions(&self) {
+        self.filtered_subscriptions
+            .retain(|_, sender| sender.receiver_count() > 0)
+    }
+
+    /// basic accessors
     pub fn event_bus(&self) -> Arc<EventBus> {
         self.event_bus.clone()
     }
@@ -246,7 +351,7 @@ impl System {
         &self.event_registry
     }
 
-    pub fn runtime(&self) -> &Arc<RwLock<AgentRegistry>> {
+    pub fn agent_registry(&self) -> &Arc<RwLock<AgentRegistry>> {
         &self.agent_registry
     }
 }
