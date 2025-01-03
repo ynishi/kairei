@@ -56,6 +56,7 @@ impl System {
 
         tokio::spawn(async move {
             while let Ok(event) = event_rx.recv().await {
+                println!("abc{:?}", event);
                 if let EventType::Response { request_id, .. } = event.event_type {
                     if let Some((_, sender)) = pending_requests_ref.remove(&request_id) {
                         if let Some(value) = event.parameters.get("response") {
@@ -374,10 +375,10 @@ impl System {
 
         Ok(SystemStatus {
             started_at: self.started_at,
-            running: true, // TODO: シャットダウン状態の追跡
+            running: self.last_status.read().await.last_event_type != EventType::SystemStopped,
             uptime: self.uptime_instant.elapsed(),
             agent_count: registry.agent_names().len(),
-            runnnig_agent_count: registry.running_agent_count(),
+            running_agent_count: registry.running_agent_count(),
             event_queue_size: event_bus.queue_size(),
             event_subscribers: event_bus.subscribers_size(),
             event_capacity: event_bus.capacity(),
@@ -442,7 +443,7 @@ pub struct SystemStatus {
     pub running: bool,
     pub uptime: Duration,
     pub agent_count: usize,
-    pub runnnig_agent_count: usize,
+    pub running_agent_count: usize,
     pub event_queue_size: usize,
     pub event_subscribers: usize,
     pub event_capacity: usize,
