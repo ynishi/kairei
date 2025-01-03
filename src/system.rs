@@ -1,13 +1,17 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tokio::sync::{broadcast, RwLock};
+use uuid::Uuid;
 
 use crate::{
     agent_registry::AgentRegistry,
     ast_registry::AstRegistry,
-    event_bus::EventBus,
+    event_bus::{EventBus, Value},
     event_registry::{EventInfo, EventRegistry, EventType, ParameterType},
-    EventError, MicroAgentDef, RuntimeError, RuntimeResult,
+    runtime::RuntimeAgentData,
+    EventError, ExecutionError, MicroAgentDef, RuntimeError, RuntimeResult,
 };
+
+type AgentName = String;
 
 pub struct System {
     event_registry: Arc<RwLock<EventRegistry>>,
@@ -36,6 +40,11 @@ impl System {
             shutdown_tx,
             _shutdown_rx,
         }
+    }
+
+    // システムの初期化処理(builtin agent, eventの登録)
+    pub async fn setup_builtin(&self) -> RuntimeResult<()> {
+        todo!()
     }
 
     pub async fn start(&self) -> RuntimeResult<()> {
@@ -113,6 +122,105 @@ impl System {
             .ok_or(RuntimeError::Event(EventError::NotFound(name.to_string())))
     }
 
+    pub async fn scale_up(
+        &self,
+        name: &str,
+        count: usize,
+        _metadata: HashMap<String, Value>,
+    ) -> RuntimeResult<Vec<String>> {
+        let request_id = Uuid::new_v4().to_string();
+
+        // ASTの存在確認
+        let registry = self.ast_registry.read().await;
+        let ast_def = registry.get_agent_ast(name).await?;
+
+        let mut created_agents = Vec::with_capacity(count);
+
+        // TODO: ScaleManagerAgent へのリクエストを送信してオプションを取得する
+
+        // 指定された数だけエージェントを作成
+        for i in 0..count {
+            let agent_name = format!("{}-{}-{}", name, request_id, i);
+            let agent_def = ast_def.clone();
+
+            let agent_data = Arc::new(RuntimeAgentData::new(&agent_def, &self.event_bus())?);
+
+            let registry = self.agent_registry.write().await;
+            registry
+                .register_agent(&agent_name, agent_data, &self.event_bus().clone())
+                .await?;
+            registry
+                .run_agent(&agent_name, self.event_bus().clone())
+                .await?;
+
+            created_agents.push(agent_name);
+        }
+
+        Ok(created_agents)
+    }
+
+    /// スケールダウン
+    /// * name - スケール対象のAST名
+    /// * count - 削除するインスタンス数
+    /// * selector - 削除対象の選択方法（オプション）
+    pub async fn scale_down(
+        &self,
+        name: &str,
+        count: usize,
+        _metadata: HashMap<String, Value>,
+    ) -> RuntimeResult<()> {
+        let target_agent_names = self.find_agents_by_base_name(name).await;
+        // 削除対象が足りない場合はエラー
+        if target_agent_names.len() < count {
+            return Err(RuntimeError::Execution(
+                ExecutionError::ScalingNotEnoughAgents {
+                    base_name: name.to_string(),
+                    required: count,
+                    current: target_agent_names.len(),
+                },
+            ));
+        }
+
+        // TODO: ScaleManagerAgent へのリクエストを送信して削除対象を取得する
+
+        let agent_names_to_remove = target_agent_names.iter().take(count);
+
+        // 対象エージェントの停止と削除
+        for agent_name in agent_names_to_remove {
+            let registry = self.agent_registry.write().await;
+            registry.shutdown_agent(agent_name, None).await?;
+        }
+
+        Ok(())
+    }
+
+    /// 現在のスケール状態を取得
+    pub async fn get_scale_status(&self, name: &str) -> RuntimeResult<ScaleStatus> {
+        let agent_names = self.find_agents_by_base_name(name).await;
+
+        let registory = self.agent_registry.read().await;
+
+        Ok(ScaleStatus {
+            base_name: name.to_string(),
+            total_count: agent_names.len(),
+            running_count: agent_names
+                .iter()
+                .filter(|name| registory.is_agent_running(name))
+                .count(),
+            agent_names,
+        })
+    }
+
+    async fn find_agents_by_base_name(&self, name: &str) -> Vec<AgentName> {
+        let registry = self.agent_registry.read().await;
+        registry
+            .agent_names()
+            .iter()
+            .filter(|n| n.starts_with(name))
+            .cloned()
+            .collect::<Vec<String>>()
+    }
+
     /// Agent management
     pub async fn start_agent(&self, agent_name: &str) -> RuntimeResult<()> {
         let registry = self.agent_registry.read().await;
@@ -141,6 +249,14 @@ impl System {
     pub fn runtime(&self) -> &Arc<RwLock<AgentRegistry>> {
         &self.agent_registry
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ScaleStatus {
+    pub base_name: String,
+    pub total_count: usize,
+    pub running_count: usize,
+    pub agent_names: Vec<AgentName>,
 }
 
 #[cfg(test)]

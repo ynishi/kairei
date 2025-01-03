@@ -169,6 +169,12 @@ pub enum ExecutionError {
     InvalidOperation(String),
     #[error("Scaling error: {0}")]
     ScalingError(String),
+    #[error("Scaling not enough agents: {base_name}, request: {required}, actual: {current}")]
+    ScalingNotEnoughAgents {
+        base_name: String,
+        required: usize,
+        current: usize,
+    },
     #[error("Event error: {0}")]
     EventError(String),
     #[error("AST error: {0}")]
