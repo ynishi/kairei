@@ -163,6 +163,7 @@ pub enum TypeInfo {
     },
     Option(Box<TypeInfo>),
     Array(Box<TypeInfo>),
+    Map(Box<TypeInfo>, Box<TypeInfo>),
     Custom {
         name: String,
         constraints: HashMap<String, Expression>,
@@ -247,6 +248,8 @@ pub enum Literal {
     String(String),
     Boolean(bool),
     Duration(Duration),
+    List(Vec<Literal>),
+    Map(HashMap<String, Literal>),
     Null,
 }
 
