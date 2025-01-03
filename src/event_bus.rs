@@ -82,7 +82,7 @@ pub struct EventReceiver {
 }
 
 impl EventReceiver {
-    fn new(receiver: broadcast::Receiver<Event>) -> Self {
+    pub fn new(receiver: broadcast::Receiver<Event>) -> Self {
         Self { receiver }
     }
 

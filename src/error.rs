@@ -78,6 +78,9 @@ pub enum EventError {
     #[error("Event type not supported: {event_type}")]
     UnsupportedType { event_type: String },
 
+    #[error("Unsupported request event: {request_type}")]
+    UnsupportedRequest { request_type: String },
+
     #[error("Invalid event parameters: {message}")]
     InvalidParameters { message: String },
 
@@ -100,6 +103,16 @@ pub enum EventError {
 
     #[error("Event Recieve failed: {message}")]
     RecieveFailed { message: String },
+
+    #[error("Event Recieve response failed: {message}")]
+    RecieveResponseFailed { request_id: String, message: String },
+
+    #[error("Event Recieve response timeout: {request_id}")]
+    RecieveResponseTimeout {
+        request_id: String,
+        timeout_secs: u64,
+        message: String,
+    },
 
     #[error("Event lagged: {count}")]
     Lagged { count: u64 },
