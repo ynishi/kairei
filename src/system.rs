@@ -1,5 +1,11 @@
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::{
     sync::{broadcast, oneshot, RwLock},
     time::timeout,
@@ -24,8 +30,12 @@ pub struct System {
     ast_registry: Arc<RwLock<AstRegistry>>,
     shutdown_tx: broadcast::Sender<()>, // Systemがシャットダウンシグナルを送信
     _shutdown_rx: broadcast::Receiver<()>, // シャットダウンシグナルを受信
+    // event request/response
     pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
     filtered_subscriptions: Arc<DashMap<Vec<EventType>, broadcast::Sender<Event>>>, // Vec<EventType>は Sorted　である必要がある
+    // metrics
+    started_at: DateTime<Utc>,
+    uptime_instant: Instant,
 }
 
 impl System {
@@ -57,6 +67,9 @@ impl System {
             }
         });
 
+        let started_at = Utc::now();
+        let uptime_instant = Instant::now();
+
         Self {
             event_registry,
             event_bus,
@@ -66,6 +79,8 @@ impl System {
             _shutdown_rx,
             pending_requests,
             filtered_subscriptions,
+            started_at,
+            uptime_instant,
         }
     }
 
@@ -308,18 +323,13 @@ impl System {
         &self,
         event_types: Vec<EventType>,
     ) -> RuntimeResult<EventReceiver> {
-        let sorted = {
-            let mut sorted = event_types.clone();
-            sorted.sort();
-            sorted
-        };
-        if let Some(sender) = self.filtered_subscriptions.get(&sorted) {
+        let key = self.get_filtered_subscription_key(&event_types);
+        if let Some(sender) = self.filtered_subscriptions.get(&key) {
             return Ok(EventReceiver::new(sender.subscribe()));
         }
 
         let (tx, rx) = broadcast::channel(100);
-        self.filtered_subscriptions
-            .insert(sorted.clone(), tx.clone());
+        self.filtered_subscriptions.insert(key.clone(), tx.clone());
 
         // イベントバスからサブスクライバーを取得
         let mut subscriber = self.event_bus.subscribe().0;
@@ -337,9 +347,49 @@ impl System {
         Ok(EventReceiver::new(rx))
     }
 
+    fn get_filtered_subscription_key(&self, event_types: &[EventType]) -> Vec<EventType> {
+        let mut sorted = event_types.to_vec();
+        sorted.sort();
+        sorted
+    }
+
     pub fn cleanup_unused_subscriptions(&self) {
         self.filtered_subscriptions
             .retain(|_, sender| sender.receiver_count() > 0)
+    }
+
+    /// Status and Metrics
+    pub async fn get_system_status(&self) -> RuntimeResult<SystemStatus> {
+        let registry = self.agent_registry.read().await;
+        let event_bus = &self.event_bus;
+
+        Ok(SystemStatus {
+            started_at: self.started_at,
+            running: true, // TODO: シャットダウン状態の追跡
+            uptime: self.uptime_instant.elapsed(),
+            agent_count: registry.agent_names().len(),
+            runnnig_agent_count: registry.running_agent_count(),
+            event_queue_size: event_bus.queue_size(),
+            event_subscribers: event_bus.subscribers_size(),
+            event_capacity: event_bus.capacity(),
+        })
+    }
+
+    /// 特定のエージェントの状態取得
+    pub async fn get_agent_status(&self, agent_name: &str) -> RuntimeResult<AgentStatus> {
+        let registry = self.agent_registry.read().await;
+        let agent_info = registry.get_info(agent_name).ok_or_else(|| {
+            RuntimeError::Execution(ExecutionError::AgentNotFound {
+                id: agent_name.to_string(),
+            })
+        })?;
+
+        // TODO
+        Ok(AgentStatus {
+            name: agent_name.to_string(),
+            state: agent_info,
+            last_active: Utc::now(),
+        })
     }
 
     /// basic accessors
@@ -362,6 +412,26 @@ pub struct ScaleStatus {
     pub total_count: usize,
     pub running_count: usize,
     pub agent_names: Vec<AgentName>,
+}
+
+// システム全体の状態
+#[derive(Debug, Clone)]
+pub struct SystemStatus {
+    pub started_at: DateTime<Utc>,
+    pub running: bool,
+    pub uptime: Duration,
+    pub agent_count: usize,
+    pub runnnig_agent_count: usize,
+    pub event_queue_size: usize,
+    pub event_subscribers: usize,
+    pub event_capacity: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentStatus {
+    pub name: String,
+    pub state: String,
+    pub last_active: DateTime<Utc>,
 }
 
 #[cfg(test)]
