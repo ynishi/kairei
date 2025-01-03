@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::{DateTime, Utc};
 use tokio::sync::broadcast;
 use tracing::debug;
 
@@ -26,6 +27,28 @@ pub enum Value {
     String(String),
     Boolean(bool),
     Null,
+}
+
+#[derive(Debug, Clone)]
+pub struct LastStatus {
+    pub last_event_type: EventType,
+    pub last_event_time: DateTime<Utc>,
+}
+
+impl From<LastStatus> for Event {
+    fn from(status: LastStatus) -> Self {
+        Event {
+            event_type: status.last_event_type,
+            parameters: {
+                let mut params = HashMap::new();
+                params.insert(
+                    "last_event_time".to_string(),
+                    Value::String(status.last_event_time.to_rfc3339()),
+                );
+                params
+            },
+        }
+    }
 }
 
 pub struct EventBus {

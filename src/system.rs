@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::{
     agent_registry::AgentRegistry,
     ast_registry::AstRegistry,
-    event_bus::{Event, EventBus, EventReceiver, Value},
+    event_bus::{Event, EventBus, EventReceiver, LastStatus, Value},
     event_registry::{EventInfo, EventRegistry, EventType, ParameterType},
     runtime::RuntimeAgentData,
     EventError, ExecutionError, MicroAgentDef, RuntimeError, RuntimeResult,
@@ -36,6 +36,7 @@ pub struct System {
     // metrics
     started_at: DateTime<Utc>,
     uptime_instant: Instant,
+    last_status: Arc<RwLock<LastStatus>>,
 }
 
 impl System {
@@ -70,6 +71,11 @@ impl System {
         let started_at = Utc::now();
         let uptime_instant = Instant::now();
 
+        let last_status = Arc::new(RwLock::new(LastStatus {
+            last_event_type: EventType::SystemStarted,
+            last_event_time: started_at,
+        }));
+
         Self {
             event_registry,
             event_bus,
@@ -81,6 +87,7 @@ impl System {
             filtered_subscriptions,
             started_at,
             uptime_instant,
+            last_status,
         }
     }
 
@@ -105,11 +112,13 @@ impl System {
     }
 
     pub async fn shutdown(&self) -> RuntimeResult<()> {
+        self.update_system_status(EventType::SystemStopping).await;
         // シャットダウンシグナルを送信
         self.shutdown_tx
             .send(())
             .expect("Failed to send shutdown signal");
         // TODO: シャットダウン処理完了を受けて、システムを停止する
+        self.update_system_status(EventType::SystemStopping).await;
         Ok(())
     }
 
@@ -378,18 +387,30 @@ impl System {
     /// 特定のエージェントの状態取得
     pub async fn get_agent_status(&self, agent_name: &str) -> RuntimeResult<AgentStatus> {
         let registry = self.agent_registry.read().await;
-        let agent_info = registry.get_info(agent_name).ok_or_else(|| {
+        let agent_status = registry.agent_status(agent_name).await.ok_or_else(|| {
             RuntimeError::Execution(ExecutionError::AgentNotFound {
                 id: agent_name.to_string(),
             })
         })?;
 
-        // TODO
         Ok(AgentStatus {
             name: agent_name.to_string(),
-            state: agent_info,
-            last_active: Utc::now(),
+            state: agent_status.last_event_type.to_string(),
+            last_lifecycle_updated: agent_status.last_event_time,
         })
+    }
+
+    async fn update_system_status(&self, event_type: EventType) {
+        let mut lock = self.last_status.write().await;
+        lock.last_event_type = event_type.clone();
+        lock.last_event_time = Utc::now();
+        let last_status = lock.clone();
+        drop(lock);
+        // ignore error
+        let _ = self
+            .event_bus
+            .publish(Event::from(last_status.clone()))
+            .await;
     }
 
     /// basic accessors
@@ -431,7 +452,7 @@ pub struct SystemStatus {
 pub struct AgentStatus {
     pub name: String,
     pub state: String,
-    pub last_active: DateTime<Utc>,
+    pub last_lifecycle_updated: DateTime<Utc>,
 }
 
 #[cfg(test)]

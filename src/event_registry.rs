@@ -35,10 +35,19 @@ pub enum EventType {
         responder: String,  // 応答者
         request_id: String, // Globally unique request ID like UUID
     },
+    // Lifecycle
+    AgentCreated,
     AgentAdded,
     AgentRemoved,
+    AgentStarting,
     AgentStarted,
+    AgentStopping,
     AgentStopped,
+    // SystemLifecycle
+    SystemStarting,
+    SystemStarted,
+    SystemStopping,
+    SystemStopped,
     Custom(String), // 拡張性のために残す
 }
 

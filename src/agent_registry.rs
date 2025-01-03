@@ -5,7 +5,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time::timeout;
 
-use crate::event_bus::{ErrorEvent, Event, EventBus, Value};
+use crate::event_bus::{ErrorEvent, Event, EventBus, LastStatus, Value};
 use crate::event_registry::EventType;
 use crate::runtime::RuntimeAgent;
 use crate::{ExecutionError, RuntimeError, RuntimeResult};
@@ -280,15 +280,19 @@ impl AgentRegistry {
             .collect()
     }
 
-    pub fn get_info(&self, id: &str) -> Option<String> {
-        // TODO: エージェントの情報を取得する
-        self.agents.get(id).map(|agent| agent.name())
+    pub async fn agent_status(&self, id: &str) -> Option<LastStatus> {
+        if let Some(agent) = self.agents.get(id) {
+            Some(agent.value().status().await)
+        } else {
+            None
+        }
     }
 }
 
 // テスト用のヘルパー関数
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use futures::{stream::SelectAll, Stream};
     use std::{pin::Pin, sync::atomic::AtomicBool, time::Duration};
     use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
@@ -357,6 +361,12 @@ mod tests {
     impl RuntimeAgent for MockAgent {
         fn name(&self) -> String {
             self.name.clone()
+        }
+        async fn status(&self) -> LastStatus {
+            LastStatus {
+                last_event_type: EventType::AgentStarted,
+                last_event_time: Utc::now(),
+            }
         }
         async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()> {
             let (event_rx, _) = self.event_bus.subscribe();
