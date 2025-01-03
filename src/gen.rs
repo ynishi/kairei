@@ -205,6 +205,11 @@ impl CodeGen for TypeInfo {
                 let item_type_tokens = item_type.generate_rust();
                 quote! { Vec<#item_type_tokens> }
             }
+            TypeInfo::Map(key_type, value_type) => {
+                let key_type_tokens = key_type.generate_rust();
+                let value_type_tokens = value_type.generate_rust();
+                quote! { HashMap<#key_type_tokens, #value_type_tokens> }
+            }
             TypeInfo::Custom { name, .. } => {
                 let type_ident = format_ident!("{}", name);
                 // 今は利用しない
@@ -318,6 +323,17 @@ impl CodeGen for Literal {
             Literal::Duration(d) => {
                 let secs = d.as_secs();
                 quote! { Duration::from_secs(#secs) }
+            }
+            Literal::List(l) => {
+                let items = l.iter().map(|item| item.generate_rust());
+                quote! { vec![#(#items),*] }
+            }
+            Literal::Map(m) => {
+                let items = m.iter().map(|(k, v)| {
+                    let value = v.generate_rust();
+                    quote! { (#k, #value) }
+                });
+                quote! { vec![#(#items),*].into_iter().collect() }
             }
             Literal::Null => quote! { None },
         }

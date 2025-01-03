@@ -783,6 +783,15 @@ fn parse_literal(input: &str) -> IResult<&str, Literal> {
         // 真偽値
         map(tag("true"), |_| Literal::Boolean(true)),
         map(tag("false"), |_| Literal::Boolean(false)),
+        // List型(要素はLiteralのみ)
+        map(
+            delimited(
+                char('['),
+                separated_list0(ws(char(',')), parse_literal),
+                char(']'),
+            ),
+            Literal::List,
+        ),
         // null
         map(tag("null"), |_| Literal::Null),
     ))(input)
@@ -1172,6 +1181,24 @@ mod tests {
                 Literal::Boolean(b) => b.to_string(),
                 Literal::Null => "null".to_string(),
                 Literal::Float(f) => f.to_string(),
+                Literal::List(l) => format!(
+                    "[{}]",
+                    l.iter()
+                        .map(|item| format_expression(&Expression::Literal(item.clone())))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                Literal::Map(m) => format!(
+                    "{{{}}}",
+                    m.iter()
+                        .map(|(k, v)| format!(
+                            "{}: {}",
+                            k,
+                            format_expression(&Expression::Literal(v.clone()))
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
                 Literal::Duration(d) => format!("{:?}", d),
             },
             Expression::Variable(name) => name.clone(),

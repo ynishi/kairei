@@ -134,6 +134,9 @@ pub enum StateError {
 
     #[error("Invalid state value for {key}: {message}")]
     InvalidValue { key: String, message: String },
+
+    #[error("State access error: {0}")]
+    AccessError(String),
 }
 
 #[derive(Error, Debug)]
@@ -196,6 +199,10 @@ pub enum ExecutionError {
     ASTNotFound(String),
     #[error("System error: {0}")]
     SystemError(String),
+
+    // eval error
+    #[error("Eval error: {0}")]
+    EvalError(String),
 }
 
 // 便利な Result 型エイリアス
