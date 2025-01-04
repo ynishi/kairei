@@ -507,13 +507,9 @@ mod tests {
 
         // 状態を設定
         {
-            context
-                .set_state("counter", Value::Integer(10))
-                .await
-                .unwrap();
+            context.set_state("counter", Value::Integer(10)).unwrap();
             context
                 .set_state("settings.enabled", Value::Boolean(true))
-                .await
                 .unwrap();
         }
 
