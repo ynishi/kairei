@@ -221,9 +221,17 @@ impl StatementEvaluator {
             },
             parameters: evaluated_params,
         };
-        let response = context.request_event(request).await.map_err(|e| {
+        let response_event = context.send_request(request).await.map_err(|e| {
             RuntimeError::Execution(ExecutionError::EvaluationFailed(e.to_string()))
         })?;
+        let response = response_event
+            .parameters
+            .get("response")
+            .ok_or(RuntimeError::Execution(ExecutionError::EvaluationFailed(
+                "response not found".to_string(),
+            )))?
+            .clone()
+            .into();
         Ok(response)
     }
 
@@ -319,7 +327,10 @@ impl StatementEvaluator {
 mod tests {
     use event_bus::EventBus;
 
-    use crate::{eval::context::AgentInfo, BinaryOperator, Literal};
+    use crate::{
+        eval::context::{AgentInfo, StateAccessMode},
+        BinaryOperator, Literal,
+    };
 
     use super::*;
     use std::sync::Arc;
@@ -330,6 +341,7 @@ mod tests {
         Arc::new(ExecutionContext::new(
             Arc::new(EventBus::new(16)),
             AgentInfo::default(),
+            StateAccessMode::ReadWrite,
         ))
     }
 
