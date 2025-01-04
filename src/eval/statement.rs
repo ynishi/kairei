@@ -111,7 +111,7 @@ impl StatementEvaluator {
             .await
     }
 
-    async fn eval_expression(
+    pub async fn eval_expression(
         &self,
         expr: &Expression,
         context: Arc<ExecutionContext>,
@@ -317,7 +317,9 @@ impl StatementEvaluator {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BinaryOperator, Literal};
+    use event_bus::EventBus;
+
+    use crate::{eval::context::AgentInfo, BinaryOperator, Literal};
 
     use super::*;
     use std::sync::Arc;
@@ -325,7 +327,10 @@ mod tests {
     // テスト用のヘルパー関数
     async fn setup_context() -> Arc<ExecutionContext> {
         // 基本的なコンテキストのセットアップ
-        Arc::new(ExecutionContext::new())
+        Arc::new(ExecutionContext::new(
+            Arc::new(EventBus::new(16)),
+            AgentInfo::default(),
+        ))
     }
 
     #[tokio::test]

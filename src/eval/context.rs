@@ -101,12 +101,6 @@ pub struct ExecutionContext {
     pub timeout: Duration,
 }
 
-impl Default for ExecutionContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Context生成時に追加されて、共有される。更新されない。
 #[derive(Clone, Debug, Default)]
 pub struct AgentInfo {
@@ -314,13 +308,13 @@ impl ExecutionContext {
         self.shared.agent_info.agent_name.clone()
     }
 
-    pub fn new() -> Self {
+    pub fn new(event_bus: Arc<EventBus>, agent_info: AgentInfo) -> Self {
         Self {
             shared: SharedContext {
                 state: Arc::new(DashMap::new()),
-                event_bus: Arc::new(EventBus::new(16)),
+                event_bus,
                 parent_scopes: Arc::new(Vec::new()),
-                agent_info: AgentInfo::default(),
+                agent_info,
             },
             current_scope: DashMap::new(),
             access_mode: StateAccessMode::ReadWrite,
@@ -420,6 +414,15 @@ impl ExecutionContext {
         })?;
         // TODO: handle response
         Ok(Value::Null)
+    }
+
+    pub async fn notify_state_update(
+        &self,
+        _key: &str,
+        _value: &Value,
+    ) -> Result<(), ContextError> {
+        // TODO: implement
+        Ok(())
     }
 }
 
