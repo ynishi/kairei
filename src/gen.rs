@@ -219,7 +219,7 @@ impl CodeGen for TypeInfo {
     }
 }
 
-impl CodeGen for Block {
+impl CodeGen for HandlerBlock {
     fn generate_rust(&self) -> TokenStream {
         let stmts = self.statements.iter().map(|s| s.generate_rust());
 
@@ -273,6 +273,14 @@ impl CodeGen for Statement {
                     } #else_block_tokens
                 }
             }
+            Statement::Expression(expr) => {
+                let expr_tokens = expr.generate_rust();
+                quote! { #expr_tokens; }
+            }
+            Statement::Block(statments) => {
+                let stmts_tokens = statments.iter().map(|s| s.generate_rust());
+                quote! { {  #(#stmts_tokens;)* } }
+            }
             Statement::Return(expr) => {
                 let expr_tokens = expr.generate_rust();
                 quote! {
@@ -280,6 +288,13 @@ impl CodeGen for Statement {
                 }
             }
         }
+    }
+}
+
+impl CodeGen for Vec<Statement> {
+    fn generate_rust(&self) -> TokenStream {
+        let stmts = self.iter().map(|s| s.generate_rust());
+        quote! { #(#stmts;)* }
     }
 }
 
@@ -308,10 +323,6 @@ impl CodeGen for Expression {
                 let right_tokens = right.generate_rust();
                 let op_tokens = op.generate_rust();
                 quote! { #left_tokens #op_tokens #right_tokens }
-            }
-            Expression::Await(expr) => {
-                let expr_tokens = expr.generate_rust();
-                quote! { #expr_tokens.await }
             }
         }
     }
@@ -375,7 +386,7 @@ mod tests {
         let micro_agent = MicroAgentDef {
             name: "TestAgent".to_string(),
             lifecycle: Some(LifecycleDef {
-                on_init: Some(Block {
+                on_init: Some(HandlerBlock {
                     statements: vec![Statement::Assignment {
                         target: Expression::StateAccess(StateAccessPath(vec![
                             "self".to_string(),
@@ -426,7 +437,7 @@ mod tests {
     #[test]
     fn test_lifecycle_def() {
         let lifecycle = LifecycleDef {
-            on_init: Some(Block {
+            on_init: Some(HandlerBlock {
                 statements: vec![Statement::Assignment {
                     target: Expression::StateAccess(StateAccessPath(vec![
                         "self".to_string(),
@@ -435,7 +446,7 @@ mod tests {
                     value: Expression::Literal(Literal::Integer(0)),
                 }],
             }),
-            on_destroy: Some(Block {
+            on_destroy: Some(HandlerBlock {
                 statements: vec![Statement::Emit {
                     event_type: EventType::Custom("destroy".to_string()),
                     parameters: vec![],
@@ -519,7 +530,7 @@ mod tests {
             handlers: vec![EventHandler {
                 event_type: EventType::Tick,
                 parameters: vec![],
-                block: Block {
+                block: HandlerBlock {
                     statements: vec![Statement::Assignment {
                         target: Expression::StateAccess(StateAccessPath(vec![
                             "self".to_string(),
@@ -565,7 +576,7 @@ mod tests {
                     err_type: Box::new(TypeInfo::Simple("Error".to_string())),
                 },
                 constraints: None,
-                block: Block {
+                block: HandlerBlock {
                     statements: vec![Statement::Return(Expression::StateAccess(StateAccessPath(
                         vec!["self".to_string(), "counter".to_string()],
                     )))],
@@ -591,7 +602,7 @@ mod tests {
                     content_type: "reset".to_string(),
                 },
                 parameters: vec![],
-                block: Block {
+                block: HandlerBlock {
                     statements: vec![
                         Statement::Assignment {
                             target: Expression::StateAccess(StateAccessPath(vec![
@@ -635,7 +646,7 @@ mod tests {
         let event_handler = EventHandler {
             event_type: EventType::Tick,
             parameters: vec![],
-            block: Block {
+            block: HandlerBlock {
                 statements: vec![Statement::Assignment {
                     target: Expression::StateAccess(StateAccessPath(vec![
                         "self".to_string(),
@@ -677,7 +688,7 @@ mod tests {
                 err_type: Box::new(TypeInfo::Simple("Error".to_string())),
             },
             constraints: None,
-            block: Block {
+            block: HandlerBlock {
                 statements: vec![Statement::Return(Expression::StateAccess(StateAccessPath(
                     vec!["self".to_string(), "counter".to_string()],
                 )))],
@@ -749,7 +760,7 @@ mod tests {
 
     #[test]
     fn test_block() {
-        let block = Block {
+        let block = HandlerBlock {
             statements: vec![
                 Statement::Assignment {
                     target: Expression::StateAccess(StateAccessPath(vec![
@@ -793,24 +804,20 @@ mod tests {
                 ]))),
                 right: Box::new(Expression::Literal(Literal::Integer(0))),
             },
-            then_block: Block {
-                statements: vec![Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec![
-                        "self".to_string(),
-                        "counter".to_string(),
-                    ])),
-                    value: Expression::Literal(Literal::Integer(1)),
-                }],
-            },
-            else_block: Some(Block {
-                statements: vec![Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec![
-                        "self".to_string(),
-                        "counter".to_string(),
-                    ])),
-                    value: Expression::Literal(Literal::Integer(2)),
-                }],
-            }),
+            then_block: vec![Statement::Assignment {
+                target: Expression::StateAccess(StateAccessPath(vec![
+                    "self".to_string(),
+                    "counter".to_string(),
+                ])),
+                value: Expression::Literal(Literal::Integer(1)),
+            }],
+            else_block: Some(vec![Statement::Assignment {
+                target: Expression::StateAccess(StateAccessPath(vec![
+                    "self".to_string(),
+                    "counter".to_string(),
+                ])),
+                value: Expression::Literal(Literal::Integer(2)),
+            }]),
         };
         let return_statement = Statement::Return(Expression::Literal(Literal::Integer(42)));
 

@@ -51,6 +51,8 @@ impl From<expression::Value> for Value {
             expression::Value::List(l) => Value::List(l.into_iter().map(Value::from).collect()),
             expression::Value::Null => Value::Null,
             expression::Value::Duration(d) => Value::Duration(d),
+            expression::Value::Unit => Value::Null,
+            expression::Value::Tuple(t) => Value::List(t.into_iter().map(Value::from).collect()),
             expression::Value::Map(m) => Value::Map(
                 m.into_iter()
                     .map(|(k, v)| (k, Value::from(v)))
