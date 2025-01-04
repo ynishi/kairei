@@ -236,6 +236,10 @@ impl CodeGen for Block {
 impl CodeGen for Statement {
     fn generate_rust(&self) -> TokenStream {
         match self {
+            Statement::Await { .. } => {
+                // 今は利用しない
+                quote! {}
+            }
             Statement::Assignment { target, value } => {
                 let target_tokens = target.generate_rust();
                 let value_tokens = value.generate_rust();
@@ -601,8 +605,8 @@ mod tests {
                                 agent_name: "self".to_string(),
                                 state_name: "counter".to_string(),
                             },
-                            parameters: vec![Expression::Literal(Literal::String(
-                                "counter".to_string(),
+                            parameters: vec![Argument::Positional(Expression::Literal(
+                                Literal::String("counter".to_string()),
                             ))],
                             target: Some("manager".to_string()),
                         },
