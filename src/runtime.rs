@@ -6,16 +6,14 @@ use futures::{stream::SelectAll, Stream};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::{broadcast, oneshot, RwLock};
+use tokio::sync::{broadcast, RwLock};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tracing::debug;
-use uuid::Uuid;
 
 use crate::eval::context::{AgentInfo, ExecutionContext, StateAccessMode};
 use crate::eval::evaluator::Evaluator;
 use crate::eval::expression;
-use crate::eval::statement::StatementResult;
-use crate::event_bus::{self, ErrorEvent, Event, EventBus, LastStatus, Value};
+use crate::event_bus::{ErrorEvent, Event, EventBus, LastStatus, Value};
 use crate::event_registry::{EventType, LifecycleEvent};
 use crate::{
     EventHandler, ExecutionError, HandlerBlock, HandlerError, MicroAgentDef, RequestHandler,
@@ -23,15 +21,10 @@ use crate::{
 };
 
 // ハンドラの型
-type ObserveHandler =
-    Box<dyn Fn(&Event) -> BoxFuture<'static, Option<HashMap<String, Value>>> + Send + Sync>;
-type AnswerHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, RuntimeResult<Value>> + Send + Sync>;
-type ReactHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, Option<Vec<Event>>> + Send + Sync>;
-type LifecycleHandler = Box<
-    dyn Fn() -> BoxFuture<'static, RuntimeResult<(Vec<Event>, HashMap<String, Value>)>>
-        + Send
-        + Sync,
->;
+type ObserveHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, RuntimeResult<()>> + Send + Sync>;
+type AnswerHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, RuntimeResult<()>> + Send + Sync>;
+type ReactHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, RuntimeResult<()>> + Send + Sync>;
+type LifecycleHandler = Box<dyn Fn() -> BoxFuture<'static, RuntimeResult<()>> + Send + Sync>;
 
 // 並行処理のためのTrait
 #[async_trait]
@@ -49,16 +42,12 @@ pub trait RuntimeAgent: Send + Sync {
             .await?;
         Ok(())
     }
-    async fn handle_lifecycle_event(
-        &self,
-        event: &LifecycleEvent,
-    ) -> RuntimeResult<(Vec<Event>, HashMap<String, Value>)>;
+    async fn handle_lifecycle_event(&self, event: &LifecycleEvent) -> RuntimeResult<()>;
 }
 
 // MicroAgentの実行時表現
 pub struct RuntimeAgentData {
     name: String,
-    pub state: DashMap<String, Value>,
     observe_handlers: DashMap<String, ObserveHandler>,
     answer_handlers: DashMap<String, AnswerHandler>,
     react_handlers: DashMap<String, ReactHandler>,
@@ -66,7 +55,6 @@ pub struct RuntimeAgentData {
     pub evaluator: Arc<Evaluator>,
     pub base_context: Arc<ExecutionContext>, // 基本コンテキスト
     event_bus: Arc<EventBus>,
-    pending_requests: Arc<DashMap<String, oneshot::Sender<Event>>>,
     private_shutdown_start_tx: broadcast::Sender<()>, // 個別シャットダウン開始用
     private_shutdown_end_tx: broadcast::Sender<()>,   // 個別シャットダウン完了用
     last_status: RwLock<LastStatus>,
@@ -93,13 +81,7 @@ impl RuntimeAgent for RuntimeAgentData {
         let (event_rx, error_rx) = self.event_bus.subscribe();
         let private_shutdown_rx = self.private_shutdown_start_tx.subscribe();
 
-        let on_init = self.handle_lifecycle_event(&LifecycleEvent::OnInit).await?;
-        for event in on_init.0 {
-            self.event_bus.publish(event).await?;
-        }
-        for (key, value) in on_init.1 {
-            self.state.insert(key, value);
-        }
+        self.handle_lifecycle_event(&LifecycleEvent::OnInit).await?;
 
         // イベントストリームの変換
         let event_stream = BroadcastStream::new(event_rx.receiver).map(|e| {
@@ -151,10 +133,7 @@ impl RuntimeAgent for RuntimeAgentData {
             match message {
                 StreamMessage::Event(event) => {
                     debug!("Event received: {:?}", event);
-                    let new_events = self.handle_event(&event).await?;
-                    for event in new_events {
-                        self.event_bus.publish(event).await?;
-                    }
+                    self.handle_event(&event).await?;
                 }
                 StreamMessage::ErrorEvent(error) => {
                     tracing::error!("Error received in agent {}: {:?}", self.name, error);
@@ -221,43 +200,19 @@ impl RuntimeAgent for RuntimeAgentData {
     // シャットダウン時のクリーンアップ処理
     async fn cleanup(&self) -> RuntimeResult<()> {
         // 1. OnDestroy処理の実行
-        let (events, states) = self
-            .handle_lifecycle_event(&LifecycleEvent::OnDestroy)
+        self.handle_lifecycle_event(&LifecycleEvent::OnDestroy)
             .await?;
-        for event in events {
-            self.event_bus.publish(event).await?;
-        }
-        for (key, value) in states {
-            self.state.insert(key, value);
-        }
 
         // 2. 待機中のリクエストをキャンセル
-        for entry in self.pending_requests.iter() {
-            let request_id = entry.key();
-            let (_, tx) = self.pending_requests.remove(request_id).ok_or_else(|| {
-                RuntimeError::Execution(ExecutionError::InvalidPendingRequest {
-                    request_id: request_id.clone(),
+        self.base_context
+            .cancel_pending_requests()
+            .await
+            .map_err(|e| {
+                RuntimeError::Execution(ExecutionError::CleanUpFailed {
+                    agent_name: self.name.clone(),
+                    message: e.to_string(),
                 })
             })?;
-            let error_response = Event {
-                event_type: EventType::Response {
-                    request_type: "cancelled".to_string(),
-                    requester: "unknown".to_string(),
-                    responder: self.name.clone(),
-                    request_id: request_id.clone(),
-                },
-                parameters: {
-                    let mut params = HashMap::new();
-                    params.insert(
-                        "error".to_string(),
-                        Value::String("Agent shutdown".to_string()),
-                    );
-                    params
-                },
-            };
-            let _ = tx.send(error_response);
-        }
-        self.pending_requests.clear();
 
         // 3. 状態の保存や他のリソースのクリーンアップ
         // TODO: 必要に応じて実装
@@ -265,14 +220,11 @@ impl RuntimeAgent for RuntimeAgentData {
         Ok(())
     }
 
-    async fn handle_lifecycle_event(
-        &self,
-        event: &LifecycleEvent,
-    ) -> RuntimeResult<(Vec<Event>, HashMap<String, Value>)> {
+    async fn handle_lifecycle_event(&self, event: &LifecycleEvent) -> RuntimeResult<()> {
         if let Some(handler) = self.lifecycle_handlers.get(event) {
             return handler().await;
         }
-        Ok((vec![], HashMap::new()))
+        Ok(())
     }
 }
 
@@ -286,7 +238,11 @@ impl RuntimeAgentData {
 
         let evaluator = Arc::new(Evaluator::new());
 
-        let base_context = Arc::new(ExecutionContext::new(event_bus.clone(), agent_info));
+        let base_context = Arc::new(ExecutionContext::new(
+            event_bus.clone(),
+            agent_info,
+            StateAccessMode::ReadWrite,
+        ));
 
         if let Some(state_def) = &agent_def.state {
             for (name, var_def) in &state_def.variables {
@@ -320,11 +276,9 @@ impl RuntimeAgentData {
             last_event_type: EventType::AgentCreated,
             last_event_time: Utc::now(),
         });
-        let state = DashMap::new();
 
         Ok(Self {
             name: agent_def.name.clone(),
-            state,
             observe_handlers: DashMap::new(),
             answer_handlers: DashMap::new(),
             react_handlers: DashMap::new(),
@@ -332,7 +286,6 @@ impl RuntimeAgentData {
             base_context,
             evaluator,
             event_bus: event_bus.clone(),
-            pending_requests: Arc::new(DashMap::new()),
             private_shutdown_start_tx: broadcast::channel(1).0,
             private_shutdown_end_tx: broadcast::channel(1).0,
             last_status,
@@ -421,22 +374,16 @@ impl RuntimeAgentData {
                     }
                 }
 
-                let result = evaluator
+                evaluator
                     .eval_handler_block(&handler.block, context_ref)
-                    .await;
-
-                match result {
-                    Ok(statement_result) => match statement_result {
-                        StatementResult::Value(value) => {
-                            let event_value = event_bus::Value::from(value);
-                            let mut updates = HashMap::new();
-                            updates.insert("value".to_string(), event_value);
-                            Some(updates)
-                        }
-                        _ => None,
-                    },
-                    Err(_) => None,
-                }
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| {
+                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                            "Failed to evaluate observe handler: {}",
+                            e
+                        )))
+                    })
             })
         })
     }
@@ -471,19 +418,16 @@ impl RuntimeAgentData {
                     }
                 }
 
-                let result = evaluator
+                evaluator
                     .eval_handler_block(&handler.block, context_ref)
-                    .await;
-
-                match result {
-                    Ok(statement_result) => match statement_result {
-                        StatementResult::Value(value) => Ok(event_bus::Value::from(value)),
-                        _ => Ok(event_bus::Value::Null),
-                    },
-                    Err(_) => Err(RuntimeError::Execution(ExecutionError::EvaluationFailed(
-                        "Failed to evaluate answer handler".to_string(),
-                    ))),
-                }
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| {
+                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                            "Failed to evaluate observe handler: {}",
+                            e
+                        )))
+                    })
             })
         })
     }
@@ -517,14 +461,16 @@ impl RuntimeAgentData {
                     }
                 }
 
-                let result = evaluator
+                evaluator
                     .eval_handler_block(&handler.block, context_ref)
-                    .await;
-
-                match result {
-                    Ok(_statement_result) => None,
-                    Err(_) => None,
-                }
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| {
+                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                            "Failed to evaluate observe handler: {}",
+                            e
+                        )))
+                    })
             })
         })
     }
@@ -547,42 +493,31 @@ impl RuntimeAgentData {
                 let context = base.fork(Some(StateAccessMode::ReadWrite)).await;
                 let context_ref = Arc::new(context);
 
-                let _result = evaluator
+                evaluator
                     .eval_handler_block(&handler_block, context_ref)
-                    .await;
-                Err(RuntimeError::Execution(ExecutionError::EvaluationFailed(
-                    "Failed to evaluate lifecycle handler".to_string(),
-                )))
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| {
+                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                            "Failed to evaluate lifecycle handler {}",
+                            e
+                        )))
+                    })
             })
         })
     }
 
     // イベントの処理
-    async fn handle_event(&self, event: &Event) -> RuntimeResult<Vec<Event>> {
-        // TODO: use evaluator to evaluate expressions in event parameters
+    async fn handle_event(&self, event: &Event) -> RuntimeResult<()> {
         match &event.event_type {
             EventType::Request {
                 request_type,
-                requester,
                 responder,
-                request_id,
+                ..
             } => {
                 if responder == &self.name {
                     if let Some(handler) = self.answer_handlers.get(request_type) {
-                        // レスポンスイベントを生成して返す
-                        let response = handler(event).await?;
-                        let mut parameters = HashMap::new();
-                        parameters.insert("response".to_string(), response);
-                        let event = Event {
-                            event_type: EventType::Response {
-                                request_id: request_id.clone(),
-                                responder: self.name.clone(),
-                                requester: requester.clone(),
-                                request_type: request_type.clone(),
-                            },
-                            parameters,
-                        };
-                        Ok(vec![event])
+                        handler(event).await
                     } else {
                         Err(RuntimeError::Handler(HandlerError::NotFound {
                             handler_type: "answer".to_string(),
@@ -591,16 +526,8 @@ impl RuntimeAgentData {
                     }
                 } else {
                     // not for me
-                    Ok(vec![])
+                    Ok(())
                 }
-            }
-
-            EventType::Response { request_id, .. } => {
-                // 待機中のリクエストがあれば、レスポンスを送信
-                if let Some((_, tx)) = self.pending_requests.remove(request_id) {
-                    let _ = tx.send(event.clone());
-                }
-                Ok(vec![])
             }
 
             // 通常のメッセージとカスタムイベント
@@ -622,76 +549,31 @@ impl RuntimeAgentData {
             | EventType::SystemStarted
             | EventType::SystemStopping
             | EventType::SystemStopped => self.handle_system_event(event).await,
+            // レスポンスは直接evaluatorで処理する
+            EventType::Response { .. } => Ok(()),
         }
     }
 
-    // リクエスト送信と応答待ち
-    pub async fn request(
-        &self,
-        request_type: String,
-        responder: String,
-        parameters: HashMap<String, Value>,
-    ) -> RuntimeResult<Event> {
-        let request_id = Uuid::new_v4().to_string();
-
-        // 応答待ち用のチャネルを作成
-        let (tx, rx) = oneshot::channel();
-        self.pending_requests.insert(request_id.clone(), tx);
-
-        // リクエストを送信
-        self.event_bus
-            .publish(Event {
-                event_type: EventType::Request {
-                    request_type,
-                    requester: self.name.clone(),
-                    responder,
-                    request_id: request_id.clone(),
-                },
-                parameters,
-            })
-            .await?;
-
-        // レスポンスを待機
-        match rx.await {
-            Ok(response) => Ok(response),
-            Err(_) => Err(RuntimeError::Execution(ExecutionError::RequestTimeout {
-                request_id,
-            })),
-        }
-    }
-
-    async fn handle_normal_event(&self, event: &Event) -> RuntimeResult<Vec<Event>> {
-        let mut new_events = Vec::new();
-
+    async fn handle_normal_event(&self, event: &Event) -> RuntimeResult<()> {
         // Observe処理
         if let Some(handler) = self.observe_handlers.get(&event.event_type.to_string()) {
-            if let Some(updates) = handler(event).await {
-                for (key, value) in updates {
-                    self.state.insert(key, value);
-                }
-            }
+            handler(event).await?;
         }
 
         // React処理
         if let Some(handler) = self.react_handlers.get(&event.event_type.to_string()) {
-            if let Some(events) = handler(event).await {
-                new_events.extend(events);
-            }
+            handler(event).await?;
         }
 
-        Ok(new_events)
+        Ok(())
     }
 
-    async fn handle_system_event(&self, event: &Event) -> RuntimeResult<Vec<Event>> {
+    async fn handle_system_event(&self, event: &Event) -> RuntimeResult<()> {
         // システムイベントは主にObserveで処理
         if let Some(handler) = self.observe_handlers.get(&event.event_type.to_string()) {
-            if let Some(updates) = handler(event).await {
-                for (key, value) in updates {
-                    self.state.insert(key, value);
-                }
-            }
+            handler(event).await?;
         }
-        Ok(vec![])
+        Ok(())
     }
 
     async fn update_last_status(&self, event_type: EventType) -> RuntimeResult<()> {

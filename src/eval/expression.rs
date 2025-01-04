@@ -403,7 +403,11 @@ impl ExpressionEvaluator {
 
 #[cfg(test)]
 mod tests {
-    use crate::{eval::context::AgentInfo, event_bus::EventBus, StateAccessPath};
+    use crate::{
+        eval::context::{AgentInfo, StateAccessMode},
+        event_bus::EventBus,
+        StateAccessPath,
+    };
 
     use super::*;
     use std::time::Duration;
@@ -413,6 +417,7 @@ mod tests {
         Arc::new(ExecutionContext::new(
             Arc::new(EventBus::new(16)),
             AgentInfo::default(),
+            StateAccessMode::ReadWrite,
         ))
     }
 

@@ -1,12 +1,15 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tokio::sync::{oneshot, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use uuid::Uuid;
 
-use crate::event_bus::{Event, EventBus};
+use crate::event_bus::{self, Event, EventBus};
+use crate::event_registry::EventType;
 use crate::{EventError, StateError};
 
 use super::expression::Value;
@@ -111,6 +114,8 @@ pub struct AgentInfo {
 
 type ParentScopes = Vec<Arc<DashMap<String, Arc<SafeRwLock<Value>>>>>;
 
+type RequestId = String; // リクエストID, UUIDを使用
+
 /// 共有可能なコンテキストの状態
 #[derive(Clone)]
 pub struct SharedContext {
@@ -118,6 +123,7 @@ pub struct SharedContext {
     state: Arc<DashMap<String, Arc<SafeRwLock<Value>>>>,
     event_bus: Arc<EventBus>,
     parent_scopes: Arc<ParentScopes>,
+    pending_requests: Arc<DashMap<RequestId, oneshot::Sender<Event>>>,
     agent_info: AgentInfo, // システム提供の情報を追加
 }
 
@@ -167,6 +173,7 @@ impl ExecutionContext {
             state: self.shared.state.clone(),         // グローバル状態は共有
             event_bus: self.shared.event_bus.clone(), // イベントバスは共有
             parent_scopes: Arc::new(new_parents),     // 新しい親スコープチェーン
+            pending_requests: self.shared.pending_requests.clone(),
             agent_info: self.shared.agent_info.clone(),
         };
 
@@ -246,7 +253,7 @@ impl ExecutionContext {
             StateAccessMode::ReadWrite => {
                 let safe_value = Arc::new(SafeRwLock::new(value));
                 self.shared.state.insert(name.to_string(), safe_value);
-                Ok(())
+                self.notify_state_update(name, &Value::Unit)
             }
         }
     }
@@ -261,7 +268,17 @@ impl ExecutionContext {
             StateAccessMode::ReadWrite => {
                 if let Some(value) = self.shared.state.get(name) {
                     match value.write_with_timeout(DEFAULT_TIMEOUT).await {
-                        Ok(mut guard) => f(&mut guard),
+                        Ok(mut guard) => {
+                            if f(&mut guard).is_ok() {
+                                drop(guard);
+                                self.notify_state_update(name, &Value::Unit)
+                            } else {
+                                Err(ContextError::StateError(StateError::InvalidValue {
+                                    key: name.to_string(),
+                                    message: "Invalid value".to_string(),
+                                }))
+                            }
+                        }
                         Err(LockError::Timeout) => Err(ContextError::LockTimeout(name.to_string())),
                         Err(LockError::Deadlock) => Err(ContextError::Deadlock(name.to_string())),
                     }
@@ -308,55 +325,33 @@ impl ExecutionContext {
         self.shared.agent_info.agent_name.clone()
     }
 
-    pub fn new(event_bus: Arc<EventBus>, agent_info: AgentInfo) -> Self {
-        Self {
+    pub fn new(
+        event_bus: Arc<EventBus>,
+        agent_info: AgentInfo,
+        access_mode: StateAccessMode,
+    ) -> Self {
+        let (mut event_rx, _) = event_bus.subscribe();
+        let new_self = Self {
             shared: SharedContext {
                 state: Arc::new(DashMap::new()),
                 event_bus,
                 parent_scopes: Arc::new(Vec::new()),
+                pending_requests: Arc::new(DashMap::new()),
                 agent_info,
             },
             current_scope: DashMap::new(),
-            access_mode: StateAccessMode::ReadWrite,
+            access_mode,
             timeout: DEFAULT_TIMEOUT,
-        }
-    }
-
-    // コンストラクタの修正
-    pub fn new_answer_context(
-        state: Arc<DashMap<String, Arc<SafeRwLock<Value>>>>,
-        event_bus: Arc<EventBus>,
-        agent_info: AgentInfo,
-    ) -> Self {
-        Self {
-            shared: SharedContext {
-                state,
-                event_bus,
-                parent_scopes: Arc::new(Vec::new()),
-                agent_info,
-            },
-            current_scope: DashMap::new(),
-            access_mode: StateAccessMode::ReadOnly,
-            timeout: DEFAULT_TIMEOUT,
-        }
-    }
-
-    pub fn new_general_context(
-        state: Arc<DashMap<String, Arc<SafeRwLock<Value>>>>,
-        event_bus: Arc<EventBus>,
-        agent_info: AgentInfo,
-    ) -> Self {
-        Self {
-            shared: SharedContext {
-                state,
-                event_bus,
-                parent_scopes: Arc::new(Vec::new()),
-                agent_info,
-            },
-            current_scope: DashMap::new(),
-            access_mode: StateAccessMode::ReadWrite,
-            timeout: DEFAULT_TIMEOUT,
-        }
+        };
+        let self_ref = new_self.clone();
+        tokio::spawn(async move {
+            while let Ok(event) = event_rx.recv().await {
+                if let EventType::Response { request_id, .. } = &event.event_type.clone() {
+                    self_ref.handle_response(request_id, event).await;
+                }
+            }
+        });
+        new_self
     }
 
     // 統一された変数アクセスインターフェース
@@ -406,23 +401,77 @@ impl ExecutionContext {
             .map_err(|e| ContextError::EventSendFailed(e.to_string()))
     }
 
-    pub async fn request_event(&self, event: Event) -> Result<Value, ContextError> {
-        self.shared.event_bus.publish(event).await.map_err(|_| {
-            ContextError::EventError(EventError::SendFailed {
-                message: "send failed".to_string(),
+    pub fn notify_state_update(&self, key: &str, value: &Value) -> Result<(), ContextError> {
+        let mut parameters = HashMap::new();
+        parameters.insert("value".to_string(), event_bus::Value::from(value.clone()));
+        self.shared
+            .event_bus
+            .sync_publish(Event {
+                event_type: EventType::StateUpdated {
+                    agent_name: self.shared.agent_info.agent_name.clone(),
+                    state_name: key.to_string(),
+                },
+                parameters,
             })
-        })?;
-        // TODO: handle response
-        Ok(Value::Null)
+            .map_err(|e| ContextError::EventSendFailed(e.to_string()))?;
+        Ok(())
     }
 
-    pub async fn notify_state_update(
-        &self,
-        _key: &str,
-        _value: &Value,
-    ) -> Result<(), ContextError> {
-        // TODO: implement
+    pub async fn send_request(&self, request: Event) -> Result<Event, ContextError> {
+        let (tx, rx) = oneshot::channel();
+        let request_id = Uuid::new_v4().to_string();
+
+        // 内部でリクエスト管理
+        self.shared.pending_requests.insert(request_id, tx);
+
+        // リクエストイベントの発行
+        self.shared.event_bus.publish(request).await.map_err(|e| {
+            ContextError::EventError(EventError::SendFailed {
+                message: e.to_string(),
+            })
+        })?;
+
+        // レスポンス待機
+        rx.await.map_err(|e| {
+            ContextError::EventError(EventError::SendFailed {
+                message: e.to_string(),
+            })
+        })
+    }
+
+    pub async fn cancel_pending_requests(&self) -> Result<(), ContextError> {
+        for entry in self.shared.pending_requests.iter() {
+            let request_id = entry.key();
+            let (_, tx) = self.shared.pending_requests.remove(request_id).ok_or({
+                ContextError::EventError(EventError::NotFound(request_id.to_string()))
+            })?;
+            let error_response = Event {
+                event_type: EventType::Response {
+                    request_type: "cancelled".to_string(),
+                    requester: "unknown".to_string(),
+                    responder: self.shared.agent_info.agent_name.clone(),
+                    request_id: request_id.clone(),
+                },
+                parameters: {
+                    let mut params = HashMap::new();
+                    params.insert(
+                        "error".to_string(),
+                        event_bus::Value::String("Agent shutdown".to_string()),
+                    );
+                    params
+                },
+            };
+            let _ = tx.send(error_response);
+        }
+        self.shared.pending_requests.clear();
         Ok(())
+    }
+
+    // レスポンスの処理（内部メソッド）
+    async fn handle_response(&self, request_id: &str, response: Event) {
+        if let Some((_, tx)) = self.shared.pending_requests.remove(request_id) {
+            let _ = tx.send(response);
+        }
     }
 }
 
@@ -431,15 +480,13 @@ mod tests {
     use super::*;
 
     async fn setup_readwrite_test_context() -> ExecutionContext {
-        let state = Arc::new(DashMap::new());
         let event_bus = Arc::new(EventBus::new(10));
-        ExecutionContext::new_general_context(state, event_bus, AgentInfo::default())
+        ExecutionContext::new(event_bus, AgentInfo::default(), StateAccessMode::ReadWrite)
     }
 
     async fn setup_readonly_context() -> ExecutionContext {
-        let state = Arc::new(DashMap::new());
         let event_bus = Arc::new(EventBus::new(10));
-        ExecutionContext::new_answer_context(state, event_bus, AgentInfo::default())
+        ExecutionContext::new(event_bus, AgentInfo::default(), StateAccessMode::ReadOnly)
     }
 
     #[tokio::test]

@@ -199,6 +199,8 @@ pub enum ExecutionError {
     ASTNotFound(String),
     #[error("System error: {0}")]
     SystemError(String),
+    #[error("Clean up failed: {agent_name}, {message}")]
+    CleanUpFailed { agent_name: String, message: String },
 
     // eval error
     #[error("Eval error: {0}")]

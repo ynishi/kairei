@@ -146,6 +146,16 @@ impl EventBus {
         Ok(())
     }
 
+    pub fn sync_publish(&self, event: Event) -> RuntimeResult<()> {
+        debug!("Publishing event: {:?}", event);
+        self.event_sender.send(event).map_err(|e| {
+            RuntimeError::Event(EventError::SendFailed {
+                message: e.to_string(),
+            })
+        })?;
+        Ok(())
+    }
+
     pub async fn publish_error(&self, error: ErrorEvent) -> RuntimeResult<()> {
         self.error_sender.send(error).map_err(|e| {
             RuntimeError::Event(EventError::SendFailed {

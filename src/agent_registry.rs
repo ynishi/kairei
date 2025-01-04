@@ -444,11 +444,8 @@ mod tests {
 
             Ok(())
         }
-        async fn handle_lifecycle_event(
-            &self,
-            _event: &LifecycleEvent,
-        ) -> RuntimeResult<(Vec<Event>, HashMap<String, Value>)> {
-            Ok((vec![], HashMap::new()))
+        async fn handle_lifecycle_event(&self, _event: &LifecycleEvent) -> RuntimeResult<()> {
+            Ok(())
         }
     }
 
