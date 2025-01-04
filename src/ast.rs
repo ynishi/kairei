@@ -50,7 +50,7 @@ pub struct ReactDef {
     pub handlers: Vec<EventHandler>,
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq, strum::Display)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum EventType {
     Tick,
     StateUpdated {
@@ -61,6 +61,20 @@ pub enum EventType {
         content_type: String,
     },
     Custom(String), // 拡張性のために残す
+}
+
+impl fmt::Display for EventType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            EventType::Tick => write!(f, "Tick"),
+            EventType::StateUpdated {
+                agent_name,
+                state_name,
+            } => write!(f, "StateUpdated.{}.{}", agent_name, state_name),
+            EventType::Message { content_type } => write!(f, "Message.{}", content_type),
+            EventType::Custom(name) => write!(f, "Custom.{}", name),
+        }
+    }
 }
 
 // イベントハンドラ

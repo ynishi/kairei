@@ -11,10 +11,15 @@ use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::event_bus::{ErrorEvent, Event, EventBus, LastStatus, Value};
+use crate::eval::context::{AgentInfo, ExecutionContext, StateAccessMode};
+use crate::eval::evaluator::Evaluator;
+use crate::eval::expression;
+use crate::eval::statement::StatementResult;
+use crate::event_bus::{self, ErrorEvent, Event, EventBus, LastStatus, Value};
 use crate::event_registry::{EventType, LifecycleEvent};
 use crate::{
-    ExecutionError, Expression, HandlerError, Literal, MicroAgentDef, RuntimeError, RuntimeResult,
+    EventHandler, ExecutionError, HandlerBlock, HandlerError, MicroAgentDef, RequestHandler,
+    RuntimeError, RuntimeResult,
 };
 
 // ハンドラの型
@@ -53,11 +58,13 @@ pub trait RuntimeAgent: Send + Sync {
 // MicroAgentの実行時表現
 pub struct RuntimeAgentData {
     name: String,
-    pub state: Arc<DashMap<String, Value>>,
+    pub state: DashMap<String, Value>,
     observe_handlers: DashMap<String, ObserveHandler>,
     answer_handlers: DashMap<String, AnswerHandler>,
     react_handlers: DashMap<String, ReactHandler>,
     lifecycle_handlers: DashMap<LifecycleEvent, LifecycleHandler>,
+    pub evaluator: Arc<Evaluator>,
+    pub base_context: Arc<ExecutionContext>, // 基本コンテキスト
     event_bus: Arc<EventBus>,
     pending_requests: Arc<DashMap<String, oneshot::Sender<Event>>>,
     private_shutdown_start_tx: broadcast::Sender<()>, // 個別シャットダウン開始用
@@ -270,14 +277,35 @@ impl RuntimeAgent for RuntimeAgentData {
 }
 
 impl RuntimeAgentData {
-    pub fn new(agent_def: &MicroAgentDef, event_bus: &Arc<EventBus>) -> RuntimeResult<Self> {
-        let state = Arc::new(DashMap::new());
+    pub async fn new(agent_def: &MicroAgentDef, event_bus: &Arc<EventBus>) -> RuntimeResult<Self> {
+        let agent_info = AgentInfo {
+            agent_name: agent_def.name.clone(),
+            agent_type: "".to_string(),
+            created_at: Utc::now(),
+        };
 
-        // 初期状態の設定
+        let evaluator = Arc::new(Evaluator::new());
+
+        let base_context = Arc::new(ExecutionContext::new(event_bus.clone(), agent_info));
+
         if let Some(state_def) = &agent_def.state {
             for (name, var_def) in &state_def.variables {
                 if let Some(initial) = &var_def.initial_value {
-                    state.insert(name.clone(), eval_expression(initial)?);
+                    let value = evaluator
+                        .eval_expression(initial, base_context.clone())
+                        .await
+                        .map_err(|e| {
+                            RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                                "Failed to evaluate initial value for variable {}: {}",
+                                name, e
+                            )))
+                        })?;
+                    base_context.set_state(name.as_str(), value).map_err(|e| {
+                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                            "Failed to set initial value for variable {}: {}",
+                            name, e
+                        )))
+                    })?;
                 }
             }
         }
@@ -292,6 +320,7 @@ impl RuntimeAgentData {
             last_event_type: EventType::AgentCreated,
             last_event_time: Utc::now(),
         });
+        let state = DashMap::new();
 
         Ok(Self {
             name: agent_def.name.clone(),
@@ -300,6 +329,8 @@ impl RuntimeAgentData {
             answer_handlers: DashMap::new(),
             react_handlers: DashMap::new(),
             lifecycle_handlers: DashMap::new(),
+            base_context,
+            evaluator,
             event_bus: event_bus.clone(),
             pending_requests: Arc::new(DashMap::new()),
             private_shutdown_start_tx: broadcast::channel(1).0,
@@ -308,27 +339,227 @@ impl RuntimeAgentData {
         })
     }
 
+    pub fn register_handlers_from_ast(&mut self, agent_def: MicroAgentDef) -> RuntimeResult<()> {
+        if let Some(observe_def) = &agent_def.observe {
+            for handler in observe_def.handlers.iter() {
+                let created = Self::create_observe_handler(
+                    self.evaluator.clone(),
+                    Arc::new(handler.clone()),
+                    self.base_context.clone(),
+                );
+                self.register_observe(&handler.event_type.to_string(), created);
+            }
+        }
+        if let Some(answer_def) = &agent_def.answer {
+            for handler in answer_def.handlers.iter() {
+                let created = Self::create_answer_handler(
+                    self.evaluator.clone(),
+                    Arc::new(handler.clone()),
+                    self.base_context.clone(),
+                );
+                self.register_answer(&handler.request_type.to_string(), created);
+            }
+        }
+        if let Some(react_def) = &agent_def.react {
+            for handler in react_def.handlers.iter() {
+                let created = Self::create_react_handler(
+                    self.evaluator.clone(),
+                    Arc::new(handler.clone()),
+                    self.base_context.clone(),
+                );
+                self.register_react(&handler.event_type.to_string(), created);
+            }
+        }
+        if let Some(lifecycle_def) = &agent_def.lifecycle {
+            if let Some(on_init) = &lifecycle_def.on_init {
+                let created = Self::create_lifecycle_handler(
+                    self.evaluator.clone(),
+                    Arc::new(on_init.clone()),
+                    self.base_context.clone(),
+                );
+                self.register_lifecycle(LifecycleEvent::OnInit, created);
+            }
+            if let Some(on_destroy) = &lifecycle_def.on_destroy {
+                let created = Self::create_lifecycle_handler(
+                    self.evaluator.clone(),
+                    Arc::new(on_destroy.clone()),
+                    self.base_context.clone(),
+                );
+                self.register_lifecycle(LifecycleEvent::OnDestroy, created);
+            }
+        }
+        Ok(())
+    }
+
     // observe ハンドラの登録
-    pub fn register_observe(&mut self, event_type: String, handler: ObserveHandler) {
-        self.observe_handlers.insert(event_type, handler);
+    pub fn register_observe(&mut self, event_type: &str, handler: ObserveHandler) {
+        self.observe_handlers
+            .insert(event_type.to_string(), handler);
+    }
+
+    pub fn create_observe_handler(
+        evaluator: Arc<Evaluator>,
+        event_handler: Arc<EventHandler>,
+        base_context: Arc<ExecutionContext>,
+    ) -> ObserveHandler {
+        Box::new(move |event| {
+            let evaluator = evaluator.clone();
+            let handler = event_handler.clone();
+            let base = base_context.clone();
+            let event = event.clone();
+
+            Box::pin(async move {
+                let context = base.fork(Some(StateAccessMode::ReadWrite)).await;
+                let context_ref = Arc::new(context);
+
+                for param in &handler.parameters {
+                    if let Some(value) = event.parameters.get(&param.name) {
+                        context_ref
+                            .set_variable(&param.name, expression::Value::from(value.clone()))
+                            .await
+                            .unwrap();
+                    }
+                }
+
+                let result = evaluator
+                    .eval_handler_block(&handler.block, context_ref)
+                    .await;
+
+                match result {
+                    Ok(statement_result) => match statement_result {
+                        StatementResult::Value(value) => {
+                            let event_value = event_bus::Value::from(value);
+                            let mut updates = HashMap::new();
+                            updates.insert("value".to_string(), event_value);
+                            Some(updates)
+                        }
+                        _ => None,
+                    },
+                    Err(_) => None,
+                }
+            })
+        })
     }
 
     // answer ハンドラの登録
-    pub fn register_answer(&mut self, request_type: String, handler: AnswerHandler) {
-        self.answer_handlers.insert(request_type, handler);
+    pub fn register_answer(&mut self, request_type: &str, handler: AnswerHandler) {
+        self.answer_handlers
+            .insert(request_type.to_string(), handler);
+    }
+
+    pub fn create_answer_handler(
+        evaluator: Arc<Evaluator>,
+        event_handler: Arc<RequestHandler>,
+        base_context: Arc<ExecutionContext>,
+    ) -> AnswerHandler {
+        Box::new(move |event| {
+            let evaluator = evaluator.clone();
+            let handler = event_handler.clone();
+            let base = base_context.clone();
+            let event = event.clone();
+
+            Box::pin(async move {
+                let context = base.fork(Some(StateAccessMode::ReadOnly)).await;
+                let context_ref = Arc::new(context);
+
+                for param in &handler.parameters {
+                    if let Some(value) = event.parameters.get(&param.name) {
+                        context_ref
+                            .set_variable(&param.name, expression::Value::from(value.clone()))
+                            .await
+                            .unwrap();
+                    }
+                }
+
+                let result = evaluator
+                    .eval_handler_block(&handler.block, context_ref)
+                    .await;
+
+                match result {
+                    Ok(statement_result) => match statement_result {
+                        StatementResult::Value(value) => Ok(event_bus::Value::from(value)),
+                        _ => Ok(event_bus::Value::Null),
+                    },
+                    Err(_) => Err(RuntimeError::Execution(ExecutionError::EvaluationFailed(
+                        "Failed to evaluate answer handler".to_string(),
+                    ))),
+                }
+            })
+        })
     }
 
     // react ハンドラの登録
-    pub fn register_react(&mut self, event_type: String, handler: ReactHandler) {
-        self.react_handlers.insert(event_type, handler);
+    pub fn register_react(&mut self, event_type: &str, handler: ReactHandler) {
+        self.react_handlers.insert(event_type.to_string(), handler);
+    }
+
+    pub fn create_react_handler(
+        evaluator: Arc<Evaluator>,
+        event_handler: Arc<EventHandler>,
+        base_context: Arc<ExecutionContext>,
+    ) -> ReactHandler {
+        Box::new(move |event| {
+            let evaluator = evaluator.clone();
+            let handler = event_handler.clone();
+            let base = base_context.clone();
+            let event = event.clone();
+
+            Box::pin(async move {
+                let context = base.fork(Some(StateAccessMode::ReadWrite)).await;
+                let context_ref = Arc::new(context);
+
+                for param in &handler.parameters {
+                    if let Some(value) = event.parameters.get(&param.name) {
+                        context_ref
+                            .set_variable(&param.name, expression::Value::from(value.clone()))
+                            .await
+                            .unwrap();
+                    }
+                }
+
+                let result = evaluator
+                    .eval_handler_block(&handler.block, context_ref)
+                    .await;
+
+                match result {
+                    Ok(_statement_result) => None,
+                    Err(_) => None,
+                }
+            })
+        })
     }
 
     pub fn register_lifecycle(&mut self, event: LifecycleEvent, handler: LifecycleHandler) {
         self.lifecycle_handlers.insert(event, handler);
     }
 
+    pub fn create_lifecycle_handler(
+        evaluator: Arc<Evaluator>,
+        handler_block: Arc<HandlerBlock>,
+        base_context: Arc<ExecutionContext>,
+    ) -> LifecycleHandler {
+        Box::new(move || {
+            let evaluator = evaluator.clone();
+            let handler_block = handler_block.clone();
+            let base = base_context.clone();
+
+            Box::pin(async move {
+                let context = base.fork(Some(StateAccessMode::ReadWrite)).await;
+                let context_ref = Arc::new(context);
+
+                let _result = evaluator
+                    .eval_handler_block(&handler_block, context_ref)
+                    .await;
+                Err(RuntimeError::Execution(ExecutionError::EvaluationFailed(
+                    "Failed to evaluate lifecycle handler".to_string(),
+                )))
+            })
+        })
+    }
+
     // イベントの処理
     async fn handle_event(&self, event: &Event) -> RuntimeResult<Vec<Event>> {
+        // TODO: use evaluator to evaluate expressions in event parameters
         match &event.event_type {
             EventType::Request {
                 request_type,
@@ -475,23 +706,5 @@ impl RuntimeAgentData {
             .insert("agent_id".to_string(), Value::String(self.name.clone()));
         self.event_bus.publish(event).await?;
         Ok(())
-    }
-}
-
-// 式の評価
-fn eval_expression(expr: &Expression) -> RuntimeResult<Value> {
-    match expr {
-        Expression::Literal(lit) => Ok(match lit {
-            Literal::Integer(i) => Value::Integer(*i),
-            Literal::Float(f) => Value::Float(*f),
-            Literal::String(s) => Value::String(s.clone()),
-            Literal::Boolean(b) => Value::Boolean(*b),
-            Literal::Duration(d) => Value::Float(d.as_secs_f64()),
-            Literal::Null => Value::Null,
-        }),
-        // 他の式の評価は必要に応じて実装
-        _ => Err(RuntimeError::Execution(ExecutionError::EvaluationFailed(
-            "Unsupported expression".to_string(),
-        ))),
     }
 }

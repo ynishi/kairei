@@ -403,14 +403,17 @@ impl ExpressionEvaluator {
 
 #[cfg(test)]
 mod tests {
-    use crate::StateAccessPath;
+    use crate::{eval::context::AgentInfo, event_bus::EventBus, StateAccessPath};
 
     use super::*;
     use std::time::Duration;
 
     // テスト用のヘルパー関数
     async fn setup_context() -> Arc<ExecutionContext> {
-        Arc::new(ExecutionContext::new())
+        Arc::new(ExecutionContext::new(
+            Arc::new(EventBus::new(16)),
+            AgentInfo::default(),
+        ))
     }
 
     #[tokio::test]

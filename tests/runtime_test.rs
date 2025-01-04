@@ -75,14 +75,15 @@ async fn test_counter_agent() -> RuntimeResult<()> {
             ..Default::default()
         },
         &event_bus,
-    )?;
+    )
+    .await?;
 
     // Observe ハンドラの登録（Tickイベントの処理）
     let state = Arc::new(counter.state.clone());
 
     let observe_state = state.clone();
     counter.register_observe(
-        "Tick".to_string(),
+        "Tick",
         Box::new(move |_event| {
             let state = observe_state.clone();
             Box::pin(async move {
@@ -106,7 +107,7 @@ async fn test_counter_agent() -> RuntimeResult<()> {
     let state = state.clone();
     let answer_state = state.clone();
     counter.register_answer(
-        "GetCount".to_string(),
+        "GetCount",
         Box::new(move |_request| {
             let state = answer_state.clone();
             Box::pin(async move {

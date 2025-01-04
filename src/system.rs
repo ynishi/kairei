@@ -199,7 +199,7 @@ impl System {
             let agent_name = format!("{}-{}-{}", name, request_id, i);
             let agent_def = ast_def.clone();
 
-            let agent_data = Arc::new(RuntimeAgentData::new(&agent_def, &self.event_bus())?);
+            let agent_data = Arc::new(RuntimeAgentData::new(&agent_def, &self.event_bus()).await?);
 
             let registry = self.agent_registry.write().await;
             registry
