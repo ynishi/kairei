@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use crate::{
     event_bus::{self, Event},
-    event_registry, Argument, AwaitType, EventType, ExecutionError, Expression, HandlerBlock,
-    RequestOptions, RequestType, RuntimeError, RuntimeResult, Statement,
+    event_registry, Argument, AwaitType, EventType, ExecutionError, Expression, RequestOptions,
+    RequestType, RuntimeError, RuntimeResult, Statement,
 };
 
 use super::{
@@ -38,14 +38,6 @@ pub struct StatementEvaluator {
 }
 
 impl StatementEvaluator {
-    pub async fn eval_handler_block(
-        &self,
-        block: &HandlerBlock,
-        context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<StatementResult> {
-        self.eval_block(&block.statements, context).await
-    }
-
     #[async_recursion]
     pub async fn eval_statement(
         &self,
@@ -90,6 +82,14 @@ impl StatementEvaluator {
                     .await
             }
             Statement::Await(await_type) => self.eval_await(await_type, context).await,
+        }
+    }
+}
+
+impl Default for StatementEvaluator {
+    fn default() -> Self {
+        Self {
+            expression_evaluator: Arc::new(ExpressionEvaluator::new()),
         }
     }
 }
@@ -255,7 +255,7 @@ impl StatementEvaluator {
         }
     }
 
-    async fn eval_block(
+    pub async fn eval_block(
         &self,
         statements: &[Statement],
         context: Arc<ExecutionContext>,

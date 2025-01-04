@@ -246,7 +246,7 @@ impl ExecutionContext {
     }
 
     /// 状態変数の更新
-    pub async fn set_state(&self, name: &str, value: Value) -> Result<(), ContextError> {
+    pub fn set_state(&self, name: &str, value: Value) -> Result<(), ContextError> {
         match self.access_mode {
             StateAccessMode::ReadOnly => Err(ContextError::ReadOnlyViolation),
             StateAccessMode::ReadWrite => {
@@ -375,7 +375,7 @@ impl ExecutionContext {
 
     pub async fn set(&self, access: VariableAccess, value: Value) -> Result<(), ContextError> {
         match access {
-            VariableAccess::State(key) => self.set_state(&key, value).await,
+            VariableAccess::State(key) => self.set_state(&key, value),
             VariableAccess::Local(name) => self.set_variable(&name, value).await,
         }
     }
@@ -444,7 +444,7 @@ mod tests {
         let context = setup_readwrite_test_context().await;
 
         // 状態変数の設定
-        let result = context.set_state("count", Value::Integer(42)).await;
+        let result = context.set_state("count", Value::Integer(42));
         assert!(result.is_ok());
 
         // 状態変数の読み取り
@@ -459,13 +459,13 @@ mod tests {
     #[tokio::test]
     async fn test_state_variable_access_readonly() {
         let context = setup_readwrite_test_context().await;
-        let result = context.set_state("count", Value::Integer(42)).await;
+        let result = context.set_state("count", Value::Integer(42));
         assert!(result.is_ok());
 
         let context = context.fork(Some(StateAccessMode::ReadOnly)).await;
 
         // 状態変数の設定
-        let result = context.set_state("count", Value::Integer(42)).await;
+        let result = context.set_state("count", Value::Integer(42));
         assert!(result.is_err());
 
         // 状態変数の読み取り
@@ -544,7 +544,6 @@ mod tests {
             handles.push(tokio::spawn(async move {
                 context
                     .set_state(&format!("key_{}", i), Value::Integer(i))
-                    .await
                     .unwrap();
                 tokio::time::sleep(Duration::from_millis(10)).await;
                 let value = context.get_state(&format!("key_{}", i)).await.unwrap();
@@ -563,10 +562,7 @@ mod tests {
         let context = setup_readwrite_test_context().await;
 
         // 親コンテキストで変数を設定
-        context
-            .set_state("shared", Value::Integer(1))
-            .await
-            .unwrap();
+        context.set_state("shared", Value::Integer(1)).unwrap();
         context
             .set_variable("local", Value::Integer(2))
             .await

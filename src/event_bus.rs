@@ -62,6 +62,27 @@ impl From<expression::Value> for Value {
     }
 }
 
+impl From<Value> for expression::Value {
+    fn from(val: Value) -> Self {
+        match val {
+            Value::Integer(i) => expression::Value::Integer(i),
+            Value::Float(f) => expression::Value::Float(f),
+            Value::String(s) => expression::Value::String(s),
+            Value::Boolean(b) => expression::Value::Boolean(b),
+            Value::List(l) => expression::Value::List(l.into_iter().map(Into::into).collect()),
+            Value::Null => expression::Value::Null,
+            Value::Duration(d) => expression::Value::Duration(d),
+            Value::Map(m) => {
+                expression::Value::Map(m.into_iter().map(|(k, v)| (k, v.into())).collect::<HashMap<
+                    String,
+                    expression::Value,
+                >>(
+                ))
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LastStatus {
     pub last_event_type: EventType,
