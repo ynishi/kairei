@@ -1,3 +1,4 @@
+use core::fmt;
 use std::collections::HashMap;
 
 // MicroAgentのトップレベル構造
@@ -103,7 +104,7 @@ impl EventHandler {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, strum::Display)]
 pub enum RequestType {
     Query { query_type: String },
     Action { action_type: String },
@@ -185,13 +186,13 @@ pub enum Statement {
     },
     Emit {
         event_type: EventType,
-        parameters: Vec<Expression>,
+        parameters: Vec<Argument>,
         target: Option<String>, // Noneの場合はブロードキャスト
     },
     Request {
         agent: String,
         request_type: RequestType,
-        parameters: Vec<Expression>,
+        parameters: Vec<Argument>,
         options: Option<RequestOptions>,
     },
     If {
@@ -199,9 +200,19 @@ pub enum Statement {
         then_block: Block,
         else_block: Option<Block>,
     },
+    Await(AwaitType),
     Return(Expression),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum AwaitType {
+    // 複数のStatementを並列実行して全ての完了を待つ
+    Block(Vec<Statement>),
+    // 単一のStatementの完了を待つ
+    Single(Box<Statement>),
+}
+
+use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use proc_macro2::TokenStream;
@@ -215,6 +226,12 @@ pub struct RequestOptions {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StateAccessPath(pub Vec<String>); // user.profile.name -> vec!["user", "profile", "name"]
+
+impl Display for StateAccessPath {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.0.join("."))
+    }
+}
 
 impl StateAccessPath {
     pub fn from_dot_path(path: &str) -> Self {
@@ -251,6 +268,13 @@ pub enum Literal {
     List(Vec<Literal>),
     Map(HashMap<String, Literal>),
     Null,
+}
+
+// Argumentの型
+#[derive(Debug, Clone, PartialEq)]
+pub enum Argument {
+    Named { name: String, value: Expression },
+    Positional(Expression),
 }
 
 // 二項演算子

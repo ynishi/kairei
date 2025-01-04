@@ -455,12 +455,26 @@ fn parse_block(input: &str) -> IResult<&str, Block> {
 
 fn parse_statement(input: &str) -> IResult<&str, Statement> {
     alt((
+        parse_await,
+        parse_await_block,
         parse_assignment,
         parse_emit_statement,
         parse_request_statement,
         parse_if_statement,
         parse_return_statement,
     ))(input)
+}
+
+fn parse_await(input: &str) -> IResult<&str, Statement> {
+    map(preceded(ws(tag("await")), parse_statement), |s| {
+        Statement::Await(AwaitType::Single(Box::new(s)))
+    })(input)
+}
+
+fn parse_await_block(input: &str) -> IResult<&str, Statement> {
+    map(preceded(ws(tag("await")), parse_block), |block| {
+        Statement::Await(AwaitType::Block(block.statements))
+    })(input)
 }
 
 fn parse_assignment(input: &str) -> IResult<&str, Statement> {
@@ -478,7 +492,7 @@ fn parse_emit_statement(input: &str) -> IResult<&str, Statement> {
             opt(preceded(ws(tag("to")), identifier)),
             opt(delimited(
                 ws(char('(')),
-                separated_list0(ws(char(',')), parse_expression),
+                separated_list0(ws(char(',')), parse_argument),
                 ws(char(')')),
             )),
         )),
@@ -496,19 +510,39 @@ fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
             ws(tag("request")),
             parse_request_type,
             opt(parse_request_options),
-            delimited(
-                ws(char('(')),
-                separated_list0(ws(char(',')), parse_expression),
-                ws(char(')')),
-            ),
+            preceded(ws(tag("to")), identifier),
+            parse_arguments,
         )),
-        |(_, request_type, options, parameters)| Statement::Request {
-            agent: "".to_string(), // TODO: Parse agent
+        |(_, request_type, options, target, parameters)| Statement::Request {
+            agent: target.to_string(),
             request_type,
             parameters,
             options,
         },
     )(input)
+}
+
+fn parse_arguments(input: &str) -> IResult<&str, Vec<Argument>> {
+    delimited(
+        ws(char('(')),
+        separated_list0(ws(char(',')), parse_argument),
+        ws(char(')')),
+    )(input)
+}
+
+fn parse_argument(input: &str) -> IResult<&str, Argument> {
+    alt((
+        // キーワード付き引数のパース
+        map(
+            tuple((identifier, ws(char(':')), parse_expression)),
+            |(name, _, value)| Argument::Named {
+                name: name.to_string(),
+                value: value.clone(),
+            },
+        ),
+        // キーワードなし引数のパース
+        map(parse_expression, Argument::Positional),
+    ))(input)
 }
 
 fn parse_if_statement(input: &str) -> IResult<&str, Statement> {
@@ -536,22 +570,7 @@ fn parse_return_statement(input: &str) -> IResult<&str, Statement> {
 
 // Expressions
 fn parse_expression(input: &str) -> IResult<&str, Expression> {
-    parse_await(input)
-}
-
-fn parse_await(input: &str) -> IResult<&str, Expression> {
-    alt((
-        // await式
-        map(
-            tuple((
-                ws(tag("await")),
-                parse_logical_or, // または適切な優先順位の式パーサー
-            )),
-            |(_, expr)| Expression::Await(Box::new(expr)),
-        ),
-        // await以外の式
-        parse_logical_or,
-    ))(input)
+    parse_logical_or(input)
 }
 
 // 論理OR (||)
@@ -1015,9 +1034,60 @@ mod tests {
             if (count > 10) {
                 return count
             }
+            await count = count + 2
         }"#;
         let result = parse_block(input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_statement() {
+        let cases = [
+            "count = count + 1",
+            "emit Updated to manager",
+            "if (count > 10) { return count }",
+            "await count = count + 2",
+            r#"await {
+                count1 = count1 + 1
+                count2 = count2 + 2
+            }"#,
+        ];
+
+        for input in cases {
+            let result = parse_statement(input);
+            assert!(result.is_ok(), "Failed to parse: {}", input);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_single() {
+        let input = "await count = 0";
+        let result = parse_await(input);
+        println!("{:?}", result);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+
+        assert!(matches!(
+            await_statement,
+            Statement::Await(AwaitType::Single(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block() {
+        let input = "await {
+               count1 = 0
+               count2 = 1
+           }";
+        let result = parse_await_block(input);
+        println!("{:?}", result);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+
+        assert!(matches!(
+            await_statement,
+            Statement::Await(AwaitType::Block(_))
+        ));
     }
 
     #[test]
@@ -1067,6 +1137,23 @@ mod tests {
 
         for input in inputs {
             let result = parse_request_options(input);
+            assert!(result.is_ok(), "Failed to parse: {}", input);
+        }
+    }
+
+    #[test]
+    fn test_parse_arguments() {
+        let inputs = [
+            "(name: \"test\")",
+            "( count: 10)",
+            "(flag:true )",
+            "(value)",
+            "(count: count + 1)",
+            "(name: \"test\", count: 10, flag: true)",
+        ];
+
+        for input in inputs {
+            let result = parse_arguments(input);
             assert!(result.is_ok(), "Failed to parse: {}", input);
         }
     }
@@ -1161,7 +1248,6 @@ mod tests {
                 "1 + 2 * 3 == 4 && a || b",
                 "((((1 + (2 * 3)) == 4) && a) || b)",
             ),
-            ("await someFunc(x + y)", "await(someFunc((x + y)))"),
         ];
 
         for (input, expected) in cases {

@@ -1,15 +1,24 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use chrono::{DateTime, Utc};
 use tokio::sync::broadcast;
 use tracing::debug;
 
-use crate::{event_registry::EventType, EventError, RuntimeError, RuntimeResult};
+use crate::{eval::expression, event_registry::EventType, EventError, RuntimeError, RuntimeResult};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Event {
     pub event_type: EventType,
     pub parameters: HashMap<String, Value>,
+}
+
+impl Event {
+    pub fn new(event_type: &EventType, parameters: &HashMap<String, Value>) -> Self {
+        Self {
+            event_type: event_type.clone(),
+            parameters: parameters.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -27,7 +36,28 @@ pub enum Value {
     String(String),
     Boolean(bool),
     List(Vec<Value>),
+    Duration(Duration),
+    Map(HashMap<String, Value>),
     Null,
+}
+
+impl From<expression::Value> for Value {
+    fn from(value: expression::Value) -> Self {
+        match value {
+            expression::Value::Integer(i) => Value::Integer(i),
+            expression::Value::Float(f) => Value::Float(f),
+            expression::Value::String(s) => Value::String(s),
+            expression::Value::Boolean(b) => Value::Boolean(b),
+            expression::Value::List(l) => Value::List(l.into_iter().map(Value::from).collect()),
+            expression::Value::Null => Value::Null,
+            expression::Value::Duration(d) => Value::Duration(d),
+            expression::Value::Map(m) => Value::Map(
+                m.into_iter()
+                    .map(|(k, v)| (k, Value::from(v)))
+                    .collect::<HashMap<String, Value>>(),
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

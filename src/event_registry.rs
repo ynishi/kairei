@@ -1,4 +1,4 @@
-use crate::{EventError, RuntimeError, RuntimeResult};
+use crate::{ast, EventError, RuntimeError, RuntimeResult};
 use dashmap::DashMap;
 use std::{collections::HashMap, sync::Arc};
 
@@ -49,6 +49,26 @@ pub enum EventType {
     SystemStopping,
     SystemStopped,
     Custom(String), // 拡張性のために残す
+}
+
+impl From<&ast::EventType> for EventType {
+    fn from(event_type: &ast::EventType) -> Self {
+        match event_type {
+            ast::EventType::Tick => Self::Tick,
+            ast::EventType::StateUpdated {
+                agent_name,
+                state_name,
+            } => Self::StateUpdated {
+                agent_name: agent_name.clone(),
+                state_name: state_name.clone(),
+            },
+            ast::EventType::Message { content_type } => Self::Message {
+                content_type: content_type.clone(),
+            },
+
+            ast::EventType::Custom(name) => Self::Custom(name.clone()),
+        }
+    }
 }
 
 /// ライフサイクルイベント
