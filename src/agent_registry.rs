@@ -5,6 +5,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time::timeout;
 
+use crate::eval::expression;
 use crate::event_bus::{ErrorEvent, Event, EventBus, LastStatus, Value};
 use crate::event_registry::EventType;
 use crate::runtime::RuntimeAgent;
@@ -283,6 +284,14 @@ impl AgentRegistry {
     pub async fn agent_status(&self, id: &str) -> Option<LastStatus> {
         if let Some(agent) = self.agents.get(id) {
             Some(agent.value().status().await)
+        } else {
+            None
+        }
+    }
+
+    pub async fn agent_state(&self, id: &str, key: &str) -> Option<expression::Value> {
+        if let Some(agent) = self.agents.get(id) {
+            agent.value().state(key).await
         } else {
             None
         }

@@ -9,9 +9,7 @@ pub struct EventInfo {
     pub parameters: HashMap<String, ParameterType>, // (パラメータ名, 型)
 }
 
-#[derive(
-    Debug, Clone, PartialEq, Hash, Eq, strum::EnumString, strum::Display, Default, PartialOrd, Ord,
-)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, strum::EnumString, Default, PartialOrd, Ord)]
 pub enum EventType {
     #[default]
     Tick,
@@ -49,6 +47,33 @@ pub enum EventType {
     SystemStopping,
     SystemStopped,
     Custom(String), // 拡張性のために残す
+}
+
+impl std::fmt::Display for EventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EventType::Tick => write!(f, "Tick"),
+            EventType::StateUpdated {
+                agent_name,
+                state_name,
+            } => write!(f, "StateUpdated({}.{})", agent_name, state_name),
+            EventType::Message { content_type } => write!(f, "{}", content_type),
+            EventType::Request { request_type, .. } => write!(f, "{}", request_type),
+            EventType::Response { request_type, .. } => write!(f, "{}", request_type),
+            EventType::AgentCreated => write!(f, "AgentCreated"),
+            EventType::AgentAdded => write!(f, "AgentAdded"),
+            EventType::AgentRemoved => write!(f, "AgentRemoved"),
+            EventType::AgentStarting => write!(f, "AgentStarting"),
+            EventType::AgentStarted => write!(f, "AgentStarted"),
+            EventType::AgentStopping => write!(f, "AgentStopping"),
+            EventType::AgentStopped => write!(f, "AgentStopped"),
+            EventType::SystemStarting => write!(f, "SystemStarting"),
+            EventType::SystemStarted => write!(f, "SystemStarted"),
+            EventType::SystemStopping => write!(f, "SystemStopping"),
+            EventType::SystemStopped => write!(f, "SystemStopped"),
+            EventType::Custom(name) => write!(f, "{}", name),
+        }
+    }
 }
 
 impl From<&ast::EventType> for EventType {
