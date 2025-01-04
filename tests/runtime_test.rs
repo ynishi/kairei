@@ -7,14 +7,18 @@ use std::{
 use tokio::time::sleep;
 use uuid::Uuid;
 
+use kairei::system::System;
 use kairei::{
     agent_registry::AgentRegistry,
+    ast,
     event_bus::{Event, EventBus, Value},
     event_registry::EventType,
     runtime::RuntimeAgentData,
-    Expression, Literal, MicroAgentDef, RuntimeError, RuntimeResult, StateDef, StateError,
-    StateVarDef, TypeInfo,
+    AnswerDef, EventHandler, Expression, HandlerBlock, Literal, MicroAgentDef, ObserveDef,
+    RequestHandler, RequestType, RuntimeError, RuntimeResult, StateAccessPath, StateDef,
+    StateError, StateVarDef, Statement, TypeInfo,
 };
+use kairei::eval::expression;
 
 // テスト用のヘルパーAgent
 struct TestAgent {
@@ -50,6 +54,120 @@ impl TestAgent {
         res.parameters.get("response").unwrap().clone()
     }
 }
+
+fn create_ping_pong_asts() -> (MicroAgentDef, MicroAgentDef) {
+    let ping_ast = MicroAgentDef {
+        name: "ping".to_string(),
+        state: Some(StateDef {
+            variables: {
+                let mut vars = HashMap::new();
+                vars.insert(
+                    "received_pong".to_string(),
+                    StateVarDef {
+                        name: "received_pong".to_string(),
+                        type_info: TypeInfo::Simple("bool".to_string()),
+                        initial_value: Some(Expression::Literal(Literal::Boolean(false))),
+                    },
+                );
+                vars
+            },
+        }),
+        observe: Some(ObserveDef {
+            handlers: vec![EventHandler {
+                event_type: ast::EventType::Message {
+                    content_type: "pong".to_string(),
+                },
+                parameters: vec![],
+                block: HandlerBlock {
+                    statements: vec![
+                        Statement::Request {
+                            agent: "pong".to_string(),
+                            request_type: RequestType::Custom("ping".to_string()),
+                            parameters: vec![],
+                            options: None,
+                        },
+                        Statement::Assignment {
+                            target: Expression::StateAccess(StateAccessPath(vec![
+                                "received_pong".to_string()
+                            ])),
+                            value: Expression::Literal(Literal::Boolean(true)),
+                        },
+                    ],
+                },
+            }],
+        }),
+        ..Default::default()
+    };
+
+    let pong_ast = MicroAgentDef {
+        name: "pong".to_string(),
+        answer: Some(AnswerDef {
+            handlers: vec![RequestHandler {
+                request_type: RequestType::Custom("ping".to_string()),
+                parameters: vec![],
+                return_type: TypeInfo::Simple("bool".to_string()),
+                constraints: None,
+                block: HandlerBlock {
+                    statements: vec![Statement::Return(Expression::Literal(Literal::Boolean(
+                        true,
+                    )))],
+                },
+            }],
+        }),
+        ..Default::default()
+    };
+
+    (ping_ast, pong_ast)
+}
+
+#[tokio::test]
+async fn test_system_integration() {
+    let system = System::new(20).await;
+
+    // Ping-Pong AgentのAST作成
+    let (ping_ast, pong_ast) = create_ping_pong_asts();
+
+    // ASTの登録
+    system.register_agent_ast("ping", &ping_ast).await.unwrap();
+    system.register_agent_ast("pong", &pong_ast).await.unwrap();
+
+    // エージェントのスケールアップ（各1インスタンス）
+    let ping_instances = system.scale_up("ping", 1, HashMap::new()).await.unwrap();
+    let pong_instances = system.scale_up("pong", 1, HashMap::new()).await.unwrap();
+
+    // エージェントの起動
+    for instance in ping_instances.iter().chain(pong_instances.iter()) {
+        system.start_agent(instance).await.unwrap();
+    }
+
+    // 起動待機
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Pingエージェントに開始イベントを送信
+    system
+        .send_event(Event {
+            event_type: EventType::Request {
+                request_type: "Start".to_string(),
+                requester: "test".to_string(),
+                responder: ping_instances[0].clone(),
+                request_id: Uuid::new_v4().to_string(),
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // 結果の確認（適切な待機時間を入れる）
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // 最初のPingインスタンスの状態を確認
+    let value = system
+        .get_agent_state(&ping_instances[0], "received_pong")
+        .await
+        .unwrap();
+    assert_eq!(value, expression::Value::Boolean(true));
+}
+
 /*
 #[tokio::test]
 async fn test_counter_agent() -> RuntimeResult<()> {

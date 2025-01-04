@@ -12,7 +12,7 @@ use crate::event_bus::{self, Event, EventBus};
 use crate::event_registry::EventType;
 use crate::{EventError, StateError};
 
-use super::expression::Value;
+use super::expression::{self, Value};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -399,6 +399,38 @@ impl ExecutionContext {
             .publish(event)
             .await
             .map_err(|e| ContextError::EventSendFailed(e.to_string()))
+    }
+
+    pub async fn send_response(
+        &self,
+        request: EventType,
+        response: expression::Value,
+    ) -> Result<(), ContextError> {
+        if let EventType::Request {
+            request_type,
+            requester,
+            responder,
+            request_id,
+        } = request
+        {
+            let response_event = Event {
+                event_type: EventType::Response {
+                    request_id,
+                    request_type,
+                    requester,
+                    responder,
+                },
+                parameters: vec![("response".to_string(), event_bus::Value::from(response))]
+                    .into_iter()
+                    .collect::<HashMap<String, event_bus::Value>>(),
+            };
+            self.emit_event(response_event).await?
+        } else {
+            return Err(ContextError::EventError(EventError::UnsupportedType {
+                event_type: request.to_string(),
+            }));
+        }
+        Ok(())
     }
 
     pub fn notify_state_update(&self, key: &str, value: &Value) -> Result<(), ContextError> {

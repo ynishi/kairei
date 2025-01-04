@@ -10,8 +10,10 @@ use tokio::{
     sync::{broadcast, oneshot, RwLock},
     time::timeout,
 };
+use tracing::debug;
 use uuid::Uuid;
 
+use crate::eval::expression;
 use crate::{
     agent_registry::AgentRegistry,
     ast_registry::AstRegistry,
@@ -56,7 +58,7 @@ impl System {
 
         tokio::spawn(async move {
             while let Ok(event) = event_rx.recv().await {
-                println!("abc{:?}", event);
+                debug!("event: {:?}", event);
                 if let EventType::Response { request_id, .. } = event.event_type {
                     if let Some((_, sender)) = pending_requests_ref.remove(&request_id) {
                         if let Some(value) = event.parameters.get("response") {
@@ -328,6 +330,20 @@ impl System {
         }
     }
 
+    pub async fn get_agent_state(
+        &self,
+        agent_name: &str,
+        key: &str,
+    ) -> RuntimeResult<expression::Value> {
+        let registry = self.agent_registry.read().await;
+        registry
+            .agent_state(agent_name, key)
+            .await
+            .ok_or(RuntimeError::Execution(ExecutionError::AgentNotFound {
+                id: agent_name.to_string(),
+            }))
+    }
+
     /// イベントの購読
     pub async fn subscribe_events(
         &self,
@@ -460,6 +476,13 @@ pub struct AgentStatus {
 mod tests {
     use std::time::Duration;
 
+    use crate::{
+        event_bus,
+        event_registry::{self, EventType},
+        AnswerDef, EventHandler, Expression, HandlerBlock, Literal, ObserveDef, RequestHandler,
+        StateDef, StateVarDef, Statement, TypeInfo,
+    };
+
     use super::*;
     use tokio::{test, time::sleep};
 
@@ -482,5 +505,112 @@ mod tests {
         let result = system.emergency_shutdown().await;
         sleep(Duration::from_secs(1)).await;
         assert!(result.is_ok());
+    }
+
+    fn create_ping_pong_asts() -> (MicroAgentDef, MicroAgentDef) {
+        let ping_ast = MicroAgentDef {
+            name: "ping".to_string(),
+            state: Some(StateDef {
+                variables: {
+                    let mut vars = HashMap::new();
+                    vars.insert(
+                        "received_pong".to_string(),
+                        StateVarDef {
+                            name: "received_pong".to_string(),
+                            type_info: TypeInfo::Simple("bool".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Boolean(false))),
+                        },
+                    );
+                    vars
+                },
+            }),
+            observe: Some(ObserveDef {
+                handlers: alloc::__rust_force_expr!(<[_]>::into_vec(
+                    #[rustc_box]
+                    alloc::boxed::Box::new([(EventHandler {
+                        event_type: EventType::Messages("Start".into()),
+                        parameters: vec![],
+                        block: HandlerBlock {
+                            statements: vec![
+                                Statement::Request {
+                                    agent: "pong".to_string(),
+                                    request_type: "ping".to_string(),
+                                    parameters: vec![],
+                                },
+                                Statement::Assignment {
+                                    target: Expression::StateAccess(StateAccessPath(vec![
+                                        "received_pong".to_string(),
+                                    ])),
+                                    value: Expression::Literal(Literal::Boolean(true)),
+                                },
+                            ],
+                        },
+                    })])
+                )),
+            }),
+            ..Default::default()
+        };
+
+        let pong_ast = MicroAgentDef {
+            name: "pong".to_string(),
+            answer: Some(AnswerDef {
+                handlers: vec![RequestHandler {
+                    request_type: "ping".to_string(),
+                    parameters: vec![],
+                    return_type: TypeInfo::Simple("bool".to_string()),
+                    constraints: None,
+                    block: HandlerBlock {
+                        statements: vec![Statement::Return(Expression::Literal(Literal::Boolean(
+                            true,
+                        )))],
+                    },
+                }],
+            }),
+            ..Default::default()
+        };
+
+        (ping_ast, pong_ast)
+    }
+
+    #[tokio::test]
+    async fn test_system_integration() {
+        let system = System::new(20).await;
+
+        // Ping-Pong AgentのAST作成
+        let (ping_ast, pong_ast) = create_ping_pong_asts();
+
+        // ASTの登録
+        system.register_agent_ast("ping", &ping_ast).await.unwrap();
+        system.register_agent_ast("pong", &pong_ast).await.unwrap();
+
+        // エージェントのスケールアップ（各1インスタンス）
+        let ping_instances = system.scale_up("ping", 1, HashMap::new()).await.unwrap();
+        let pong_instances = system.scale_up("pong", 1, HashMap::new()).await.unwrap();
+
+        // エージェントの起動
+        for instance in ping_instances.iter().chain(pong_instances.iter()) {
+            system.start_agent(instance).await.unwrap();
+        }
+
+        // 起動待機
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Pingエージェントに開始イベントを送信
+        system
+            .send_event(Event {
+                event_type: EventType::Message {
+                    content_type: "Start".into(),
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        // 結果の確認（適切な待機時間を入れる）
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 最初のPingインスタンスの状態を確認
+        let state = system.get_agent_state(&ping_instances[0]).await.unwrap();
+        assert_eq!(state.get("received_pong"), Some(&Value::Boolean(true)));
     }
 }

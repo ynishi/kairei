@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::{Expression, HandlerBlock, RuntimeResult};
+use crate::{event_registry::EventType, Expression, HandlerBlock, RuntimeError, RuntimeResult};
 
 use super::{
     context::ExecutionContext,
     expression::Value,
-    statement::{StatementEvaluator, StatementResult},
+    statement::{ControlFlow, StatementEvaluator, StatementResult},
 };
 
 #[derive(Default)]
@@ -27,6 +27,37 @@ impl Evaluator {
         self.statement_evaluator
             .eval_block(&block.statements, context)
             .await
+    }
+
+    pub async fn eval_answer_handler_block(
+        &self,
+        block: &HandlerBlock,
+        context: Arc<ExecutionContext>,
+        event: EventType,
+    ) -> RuntimeResult<StatementResult> {
+        let res = self
+            .statement_evaluator
+            .eval_block(&block.statements, context.clone())
+            .await?;
+        if let StatementResult::Control(ControlFlow::Return(value)) = res {
+            context.send_response(event, value).await.map_err(|e| {
+                RuntimeError::Execution(crate::ExecutionError::EvalError(format!(
+                    "Failed to send response: {}",
+                    e
+                )))
+            })?;
+        } else {
+            context
+                .send_response(event, Value::Unit)
+                .await
+                .map_err(|e| {
+                    RuntimeError::Execution(crate::ExecutionError::EvalError(format!(
+                        "Failed to send response: {}",
+                        e
+                    )))
+                })?;
+        }
+        Ok(StatementResult::Value(Value::Unit))
     }
 
     pub async fn eval_expression(

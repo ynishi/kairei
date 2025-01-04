@@ -31,6 +31,7 @@ type LifecycleHandler = Box<dyn Fn() -> BoxFuture<'static, RuntimeResult<()>> + 
 pub trait RuntimeAgent: Send + Sync {
     fn name(&self) -> String;
     async fn status(&self) -> LastStatus;
+    async fn state(&self, key: &str) -> Option<expression::Value>;
     async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()>;
     async fn shutdown(&self) -> RuntimeResult<()> {
         // simply cleanup
@@ -48,6 +49,7 @@ pub trait RuntimeAgent: Send + Sync {
 // MicroAgentの実行時表現
 pub struct RuntimeAgentData {
     name: String,
+    ast: MicroAgentDef,
     observe_handlers: DashMap<String, ObserveHandler>,
     answer_handlers: DashMap<String, AnswerHandler>,
     react_handlers: DashMap<String, ReactHandler>,
@@ -76,8 +78,39 @@ impl RuntimeAgent for RuntimeAgentData {
     async fn status(&self) -> LastStatus {
         self.last_status.read().await.clone()
     }
+
+    async fn state(&self, key: &str) -> Option<expression::Value> {
+        self.base_context.get_state(key).await.ok()
+    }
     async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()> {
         self.update_last_status(EventType::AgentStarting).await?;
+
+        // state blockを評価して初期値を設定
+        if let Some(state_def) = &self.ast.state {
+            for (name, var_def) in &state_def.variables {
+                if let Some(initial) = &var_def.initial_value {
+                    let value = self
+                        .evaluator
+                        .eval_expression(initial, self.base_context.clone())
+                        .await
+                        .map_err(|e| {
+                            RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                                "Failed to evaluate initial value for variable {}: {}",
+                                name, e
+                            )))
+                        })?;
+                    self.base_context
+                        .set_state(name.as_str(), value)
+                        .map_err(|e| {
+                            RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                                "Failed to set initial value for variable {}: {}",
+                                name, e
+                            )))
+                        })?;
+                }
+            }
+        }
+
         let (event_rx, error_rx) = self.event_bus.subscribe();
         let private_shutdown_rx = self.private_shutdown_start_tx.subscribe();
 
@@ -244,41 +277,14 @@ impl RuntimeAgentData {
             StateAccessMode::ReadWrite,
         ));
 
-        if let Some(state_def) = &agent_def.state {
-            for (name, var_def) in &state_def.variables {
-                if let Some(initial) = &var_def.initial_value {
-                    let value = evaluator
-                        .eval_expression(initial, base_context.clone())
-                        .await
-                        .map_err(|e| {
-                            RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
-                                "Failed to evaluate initial value for variable {}: {}",
-                                name, e
-                            )))
-                        })?;
-                    base_context.set_state(name.as_str(), value).map_err(|e| {
-                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
-                            "Failed to set initial value for variable {}: {}",
-                            name, e
-                        )))
-                    })?;
-                }
-            }
-        }
-
-        let mut parameters = HashMap::new();
-        parameters.insert(
-            "agent_id".to_string(),
-            Value::String(agent_def.name.clone()),
-        );
-
         let last_status = RwLock::new(LastStatus {
             last_event_type: EventType::AgentCreated,
             last_event_time: Utc::now(),
         });
 
-        Ok(Self {
+        let mut new_self = Self {
             name: agent_def.name.clone(),
+            ast: agent_def.clone(),
             observe_handlers: DashMap::new(),
             answer_handlers: DashMap::new(),
             react_handlers: DashMap::new(),
@@ -289,10 +295,13 @@ impl RuntimeAgentData {
             private_shutdown_start_tx: broadcast::channel(1).0,
             private_shutdown_end_tx: broadcast::channel(1).0,
             last_status,
-        })
+        };
+
+        new_self.register_handlers_from_ast(agent_def)?;
+        Ok(new_self)
     }
 
-    pub fn register_handlers_from_ast(&mut self, agent_def: MicroAgentDef) -> RuntimeResult<()> {
+    pub fn register_handlers_from_ast(&mut self, agent_def: &MicroAgentDef) -> RuntimeResult<()> {
         if let Some(observe_def) = &agent_def.observe {
             for handler in observe_def.handlers.iter() {
                 let created = Self::create_observe_handler(
@@ -404,6 +413,7 @@ impl RuntimeAgentData {
             let handler = event_handler.clone();
             let base = base_context.clone();
             let event = event.clone();
+            let event_type = event.event_type.clone();
 
             Box::pin(async move {
                 let context = base.fork(Some(StateAccessMode::ReadOnly)).await;
@@ -419,12 +429,12 @@ impl RuntimeAgentData {
                 }
 
                 evaluator
-                    .eval_handler_block(&handler.block, context_ref)
+                    .eval_answer_handler_block(&handler.block, context_ref, event_type)
                     .await
                     .map(|_| ())
                     .map_err(|e| {
                         RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
-                            "Failed to evaluate observe handler: {}",
+                            "Failed to evaluate answer handler: {}",
                             e
                         )))
                     })
@@ -467,7 +477,7 @@ impl RuntimeAgentData {
                     .map(|_| ())
                     .map_err(|e| {
                         RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
-                            "Failed to evaluate observe handler: {}",
+                            "Failed to evaluate react handler: {}",
                             e
                         )))
                     })
@@ -509,6 +519,7 @@ impl RuntimeAgentData {
 
     // イベントの処理
     async fn handle_event(&self, event: &Event) -> RuntimeResult<()> {
+        debug!("Event received: {:?}", event);
         match &event.event_type {
             EventType::Request {
                 request_type,
@@ -555,6 +566,15 @@ impl RuntimeAgentData {
     }
 
     async fn handle_normal_event(&self, event: &Event) -> RuntimeResult<()> {
+        debug!(
+            "Normal event received: {:?}, {}, {:?}",
+            event,
+            &event.event_type.to_string(),
+            self.react_handlers
+                .iter()
+                .map(|e| e.key().clone())
+                .collect::<Vec<String>>()
+        );
         // Observe処理
         if let Some(handler) = self.observe_handlers.get(&event.event_type.to_string()) {
             handler(event).await?;
@@ -588,5 +608,332 @@ impl RuntimeAgentData {
             .insert("agent_id".to_string(), Value::String(self.name.clone()));
         self.event_bus.publish(event).await?;
         Ok(())
+    }
+}
+#[cfg(test)]
+mod tests {
+    use std::{sync::Mutex, time::Duration};
+
+    use uuid::Uuid;
+
+    use crate::{
+        ast, AnswerDef, BinaryOperator, Expression, Literal, ObserveDef, Parameter, ReactDef,
+        RequestType, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_runtime_agent() {
+        let event_bus = Arc::new(EventBus::new(20));
+
+        // Counter AgentのASTを作成
+        let counter_def = &MicroAgentDef {
+            name: "counter".to_string(),
+            state: Some(StateDef {
+                variables: {
+                    let mut vars = HashMap::new();
+                    vars.insert(
+                        "count".to_string(),
+                        StateVarDef {
+                            name: "count".to_string(),
+                            type_info: TypeInfo::Simple("i64".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Integer(0))),
+                        },
+                    );
+                    vars
+                },
+            }),
+            observe: Some(ObserveDef {
+                handlers: vec![EventHandler {
+                    event_type: ast::EventType::Tick,
+                    parameters: vec![],
+                    block: HandlerBlock {
+                        statements: vec![Statement::Assignment {
+                            target: Expression::StateAccess(StateAccessPath(vec![
+                                "count".to_string()
+                            ])),
+                            value: Expression::BinaryOp {
+                                op: BinaryOperator::Add,
+                                left: Box::new(Expression::StateAccess(StateAccessPath(vec![
+                                    "count".to_string(),
+                                ]))),
+                                right: Box::new(Expression::Literal(Literal::Integer(1))),
+                            },
+                        }],
+                    },
+                }],
+            }),
+            ..Default::default()
+        };
+
+        // RuntimeAgentを生成
+        let agent = RuntimeAgentData::new(&counter_def, &event_bus)
+            .await
+            .unwrap();
+        let context = agent.base_context.clone();
+
+        // 初期状態を確認
+        let result = context.get_state("count").await;
+        assert!(result.is_err());
+
+        // エージェントを起動
+        let shutdown_rx = broadcast::channel(1).1;
+        tokio::spawn(async move {
+            agent.run(shutdown_rx).await.unwrap();
+        });
+
+        // 起動直後を確認
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let state = context.get_state("count").await.unwrap();
+        assert_eq!(state, expression::Value::Integer(0));
+
+        // Tickイベントを送信
+        event_bus
+            .publish(Event {
+                event_type: EventType::Tick,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        // イベント処理後を確認
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let state = context.get_state("count").await.unwrap();
+        assert_eq!(state, expression::Value::Integer(1));
+    }
+
+    struct TestAgent {
+        pub name: String,
+        pub responses: Arc<Mutex<Vec<Event>>>,
+    }
+
+    impl TestAgent {
+        fn new(name: &str, event_bus: &Arc<EventBus>) -> Self {
+            let (mut event_rx, _) = event_bus.subscribe();
+            let responses = Arc::new(Mutex::new(vec![]));
+            let response_ref = responses.clone();
+            // 非同期にイベントを取得して、responsesに格納する処理を開始
+            tokio::spawn(async move {
+                while let Ok(event) = event_rx.recv().await {
+                    response_ref.lock().unwrap().push(event);
+                }
+            });
+            Self {
+                name: name.to_string(),
+                responses,
+            }
+        }
+
+        fn get_response(&self, request_id: &str) -> Value {
+            let want_request_id = request_id.to_string();
+            let lock = self.responses.lock().unwrap();
+            let filtered = lock.iter().filter(|e| match &e.event_type {
+                EventType::Response { request_id, .. } => request_id == &want_request_id,
+                _ => false,
+            });
+            let res = filtered.last().unwrap();
+            res.parameters.get("response").unwrap().clone()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_answer_handler() {
+        let event_bus = Arc::new(EventBus::new(20));
+        let answer_def = &MicroAgentDef {
+            name: "calculator".to_string(),
+            state: Some(StateDef {
+                variables: {
+                    let mut vars = HashMap::new();
+                    vars.insert(
+                        "self.x".to_string(),
+                        StateVarDef {
+                            name: "self.x".to_string(),
+                            type_info: TypeInfo::Simple("i64".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Integer(2))),
+                        },
+                    );
+                    vars
+                },
+            }),
+            answer: Some(AnswerDef {
+                handlers: vec![RequestHandler {
+                    request_type: RequestType::Custom("add".to_string()),
+                    parameters: vec![
+                        Parameter {
+                            name: "a".to_string(),
+                            type_info: TypeInfo::Simple("i64".to_string()),
+                        },
+                        Parameter {
+                            name: "b".to_string(),
+                            type_info: TypeInfo::Simple("i64".to_string()),
+                        },
+                    ],
+                    return_type: TypeInfo::Simple("i64".to_string()),
+                    constraints: None,
+                    block: HandlerBlock {
+                        statements: vec![
+                            Statement::Assignment {
+                                target: Expression::Variable("last_result".into()),
+                                value: Expression::BinaryOp {
+                                    op: BinaryOperator::Add,
+                                    left: Box::new(Expression::Variable("a".into())),
+                                    right: Box::new(Expression::Variable("b".into())),
+                                },
+                            },
+                            Statement::Assignment {
+                                target: Expression::Variable("last_result".into()),
+                                value: Expression::BinaryOp {
+                                    op: BinaryOperator::Add,
+                                    left: Box::new(Expression::StateAccess(StateAccessPath(vec![
+                                        "self".into(),
+                                        "x".into(),
+                                    ]))),
+                                    right: Box::new(Expression::Variable("last_result".into())),
+                                },
+                            },
+                            Statement::Return(Expression::Variable("last_result".into())),
+                        ],
+                    },
+                }],
+            }),
+            ..Default::default()
+        };
+
+        let agent = RuntimeAgentData::new(&answer_def, &event_bus)
+            .await
+            .unwrap();
+        let context = agent.base_context.clone();
+        let shutdown_rx = broadcast::channel(1).1;
+        let sender_agent = TestAgent::new("test", &event_bus);
+
+        tokio::spawn(async move {
+            agent.run(shutdown_rx).await.unwrap();
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // リクエストを送信
+        let request_id = Uuid::new_v4().to_string();
+        event_bus
+            .publish(Event {
+                event_type: EventType::Request {
+                    request_type: "add".into(),
+                    requester: "test".into(),
+                    responder: "calculator".into(),
+                    request_id: request_id.clone(),
+                },
+                parameters: {
+                    let mut params = HashMap::new();
+                    params.insert("a".to_string(), Value::Integer(3));
+                    params.insert("b".to_string(), Value::Integer(5));
+                    params
+                },
+            })
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        let state = context.get_state("self.x").await.unwrap();
+        assert_eq!(state, expression::Value::Integer(2));
+        let response = sender_agent.get_response(&request_id);
+        assert_eq!(response, Value::Integer(10));
+    }
+
+    #[tokio::test]
+    async fn test_react_handler() {
+        let event_bus = Arc::new(EventBus::new(20));
+        let react_def = &MicroAgentDef {
+            name: "reactor".to_string(),
+            state: Some(StateDef {
+                variables: {
+                    let mut vars = HashMap::new();
+                    vars.insert(
+                        "event_count".to_string(),
+                        StateVarDef {
+                            name: "event_count".to_string(),
+                            type_info: TypeInfo::Simple("i64".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Integer(0))),
+                        },
+                    );
+                    vars.insert(
+                        "last_value".to_string(),
+                        StateVarDef {
+                            name: "last_value".to_string(),
+                            type_info: TypeInfo::Simple("i64".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Integer(0))),
+                        },
+                    );
+                    vars
+                },
+            }),
+            react: Some(ReactDef {
+                handlers: vec![EventHandler {
+                    event_type: ast::EventType::Message {
+                        content_type: "update".into(),
+                    },
+                    parameters: vec![Parameter {
+                        name: "value".to_string(),
+                        type_info: TypeInfo::Simple("i64".to_string()),
+                    }],
+                    block: HandlerBlock {
+                        statements: vec![
+                            Statement::Assignment {
+                                target: Expression::StateAccess(StateAccessPath(vec![
+                                    "event_count".into(),
+                                ])),
+                                value: Expression::BinaryOp {
+                                    op: BinaryOperator::Add,
+                                    left: Box::new(Expression::StateAccess(StateAccessPath(vec![
+                                        "event_count".into(),
+                                    ]))),
+                                    right: Box::new(Expression::Literal(Literal::Integer(1))),
+                                },
+                            },
+                            Statement::Assignment {
+                                target: Expression::StateAccess(StateAccessPath(vec![
+                                    "last_value".into(),
+                                ])),
+                                value: Expression::Variable("value".into()),
+                            },
+                        ],
+                    },
+                }],
+            }),
+            ..Default::default()
+        };
+
+        let agent = RuntimeAgentData::new(&react_def, &event_bus).await.unwrap();
+        let context = agent.base_context.clone();
+        let shutdown_rx = broadcast::channel(1).1;
+
+        tokio::spawn(async move {
+            agent.run(shutdown_rx).await.unwrap();
+        });
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // カスタムイベントを送信
+        event_bus
+            .publish(Event {
+                event_type: EventType::Message {
+                    content_type: "update".into(),
+                },
+                parameters: {
+                    let mut params = HashMap::new();
+                    params.insert("value".to_string(), Value::Integer(42));
+                    params
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let last_value = context.get_state("last_value").await.unwrap();
+        assert_eq!(last_value, expression::Value::Integer(42));
+
+        let event_count = context.get_state("event_count").await.unwrap();
+        assert_eq!(event_count, expression::Value::Integer(1));
     }
 }

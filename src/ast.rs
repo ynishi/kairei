@@ -71,8 +71,8 @@ impl fmt::Display for EventType {
                 agent_name,
                 state_name,
             } => write!(f, "StateUpdated.{}.{}", agent_name, state_name),
-            EventType::Message { content_type } => write!(f, "Message.{}", content_type),
-            EventType::Custom(name) => write!(f, "Custom.{}", name),
+            EventType::Message { content_type } => write!(f, "{}", content_type),
+            EventType::Custom(name) => write!(f, "{}", name),
         }
     }
 }
@@ -118,11 +118,21 @@ impl EventHandler {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, strum::Display)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RequestType {
     Query { query_type: String },
     Action { action_type: String },
     Custom(String), // 拡張性のために残す
+}
+
+impl fmt::Display for RequestType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RequestType::Query { query_type } => write!(f, "Query.{}", query_type),
+            RequestType::Action { action_type } => write!(f, "Action.{}", action_type),
+            RequestType::Custom(name) => write!(f, "{}", name),
+        }
+    }
 }
 
 // リクエストハンドラ
