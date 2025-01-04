@@ -146,7 +146,7 @@ impl StatementEvaluator {
             RuntimeError::Execution(ExecutionError::InvalidOperation(e.to_string()))
         })?;
 
-        Ok(value)
+        Ok(Value::Unit)
     }
 
     async fn eval_emit(
@@ -260,20 +260,23 @@ impl StatementEvaluator {
         statements: &[Statement],
         context: Arc<ExecutionContext>,
     ) -> RuntimeResult<StatementResult> {
+        let mut last = Value::Unit;
         for stmt in statements.iter() {
             let result = self.eval_statement(stmt, context.clone()).await?;
             match result {
-                StatementResult::Value(_) => {}
+                StatementResult::Value(value) => {
+                    last = value;
+                }
                 StatementResult::Control(ControlFlow::Break(value)) => {
                     return Ok(StatementResult::Value(value))
                 }
                 StatementResult::Control(ControlFlow::Continue) => continue,
                 StatementResult::Control(ControlFlow::Return(value)) => {
-                    return Ok(StatementResult::Value(value))
+                    return Ok(StatementResult::Control(ControlFlow::Return(value)))
                 }
             }
         }
-        Ok(StatementResult::Value(Value::Unit))
+        Ok(StatementResult::Value(last))
     }
 
     async fn eval_await(
@@ -309,5 +312,256 @@ impl StatementEvaluator {
                 self.eval_statement(statement, context).await
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{BinaryOperator, Literal};
+
+    use super::*;
+    use std::sync::Arc;
+
+    // テスト用のヘルパー関数
+    async fn setup_context() -> Arc<ExecutionContext> {
+        // 基本的なコンテキストのセットアップ
+        Arc::new(ExecutionContext::new())
+    }
+
+    #[tokio::test]
+    async fn test_expression_statement() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        // 単純な式の評価
+        let stmt = Statement::Expression(Expression::Literal(Literal::Integer(42)));
+        let result = evaluator
+            .eval_statement(&stmt, context.clone())
+            .await
+            .unwrap();
+        assert!(matches!(result, StatementResult::Value(Value::Integer(42))));
+
+        // 二項演算式の評価
+        let stmt = Statement::Expression(Expression::BinaryOp {
+            op: BinaryOperator::Add,
+            left: Box::new(Expression::Literal(Literal::Integer(10))),
+            right: Box::new(Expression::Literal(Literal::Integer(5))),
+        });
+        let result = evaluator.eval_statement(&stmt, context).await.unwrap();
+        assert!(matches!(result, StatementResult::Value(Value::Integer(15))));
+    }
+
+    #[tokio::test]
+    async fn test_assignment_statement() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        // 基本的な代入
+        let stmt = Statement::Assignment {
+            target: Expression::Variable("x".to_string()),
+            value: Expression::Literal(Literal::Integer(42)),
+        };
+        let result = evaluator
+            .eval_statement(&stmt, context.clone())
+            .await
+            .unwrap();
+        assert!(matches!(result, StatementResult::Value(Value::Unit)));
+
+        // 代入された値の確認
+        let value = context.get_variable("x").await.unwrap();
+        assert_eq!(value, Value::Integer(42));
+
+        // 代入後の演算
+        let stmt = Statement::Assignment {
+            target: Expression::Variable("x".to_string()),
+            value: Expression::BinaryOp {
+                op: BinaryOperator::Add,
+                left: Box::new(Expression::Literal(Literal::Integer(10))),
+                right: Box::new(Expression::Variable("x".to_string())),
+            },
+        };
+        evaluator
+            .eval_statement(&stmt, context.clone())
+            .await
+            .unwrap();
+        let value = context.get_variable("x").await.unwrap();
+        assert_eq!(value, Value::Integer(52));
+    }
+
+    #[tokio::test]
+    async fn test_block_statement() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        // 複数のステートメントを含むブロック
+        let stmt = Statement::Block(vec![
+            Statement::Assignment {
+                target: Expression::Variable("x".to_string()),
+                value: Expression::Literal(Literal::Integer(10)),
+            },
+            Statement::Assignment {
+                target: Expression::Variable("y".to_string()),
+                value: Expression::Literal(Literal::Integer(20)),
+            },
+            Statement::Expression(Expression::BinaryOp {
+                op: BinaryOperator::Add,
+                left: Box::new(Expression::Variable("y".to_string())),
+                right: Box::new(Expression::Variable("x".to_string())),
+            }),
+        ]);
+
+        let result = evaluator
+            .eval_statement(&stmt, context.clone())
+            .await
+            .unwrap();
+        assert!(matches!(result, StatementResult::Value(Value::Integer(30))));
+    }
+
+    #[tokio::test]
+    async fn test_if_statement() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        // true条件のIf文
+        let stmt = Statement::If {
+            condition: Expression::Literal(Literal::Boolean(true)),
+            then_block: vec![Statement::Expression(Expression::Literal(
+                Literal::Integer(1),
+            ))],
+            else_block: Some(vec![Statement::Expression(Expression::Literal(
+                Literal::Integer(2),
+            ))]),
+        };
+        let result = evaluator
+            .eval_statement(&stmt, context.clone())
+            .await
+            .unwrap();
+        println!("{:?}", result);
+        assert!(matches!(result, StatementResult::Value(Value::Integer(1))));
+
+        // false条件のIf文
+        let stmt = Statement::If {
+            condition: Expression::Literal(Literal::Boolean(false)),
+            then_block: vec![Statement::Expression(Expression::Literal(
+                Literal::Integer(1),
+            ))],
+            else_block: Some(vec![Statement::Expression(Expression::Literal(
+                Literal::Integer(2),
+            ))]),
+        };
+        let result = evaluator
+            .eval_statement(&stmt, context.clone())
+            .await
+            .unwrap();
+        assert!(matches!(result, StatementResult::Value(Value::Integer(2))));
+
+        // else節なしのIf文
+        let stmt = Statement::If {
+            condition: Expression::Literal(Literal::Boolean(false)),
+            then_block: vec![Statement::Expression(Expression::Literal(
+                Literal::Integer(1),
+            ))],
+            else_block: None,
+        };
+        let result = evaluator.eval_statement(&stmt, context).await.unwrap();
+        assert!(matches!(result, StatementResult::Value(Value::Unit)));
+    }
+
+    #[tokio::test]
+    async fn test_return_statement() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        // 単純なreturn
+        let stmt = Statement::Return(Expression::Literal(Literal::Integer(42)));
+        let result = evaluator
+            .eval_statement(&stmt, context.clone())
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            StatementResult::Control(ControlFlow::Return(Value::Integer(42)))
+        ));
+
+        // ブロック内のreturn
+        let stmt = Statement::Block(vec![
+            Statement::Assignment {
+                target: Expression::Variable("x".to_string()),
+                value: Expression::Literal(Literal::Integer(10)),
+            },
+            Statement::Return(Expression::Variable("x".to_string())),
+            Statement::Expression(Expression::Literal(Literal::Integer(20))), // この行は実行されない
+        ]);
+        let result = evaluator.eval_statement(&stmt, context).await.unwrap();
+        assert!(matches!(
+            result,
+            StatementResult::Control(ControlFlow::Return(Value::Integer(10)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_complex_nested_statements() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        // 複雑なネストされた文の評価
+        let stmt = Statement::Block(vec![
+            Statement::Assignment {
+                target: Expression::Variable("x".to_string()),
+                value: Expression::Literal(Literal::Integer(10)),
+            },
+            Statement::If {
+                condition: Expression::BinaryOp {
+                    op: BinaryOperator::Equal,
+                    left: Box::new(Expression::BinaryOp {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Variable("x".to_string())),
+                        right: Box::new(Expression::Literal(Literal::Integer(5))),
+                    }),
+                    right: Box::new(Expression::Literal(Literal::Integer(15))),
+                },
+                then_block: vec![
+                    Statement::Assignment {
+                        target: Expression::Variable("y".to_string()),
+                        value: Expression::Literal(Literal::Integer(20)),
+                    },
+                    Statement::Return(Expression::BinaryOp {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Variable("x".to_string())),
+                        right: Box::new(Expression::Variable("y".to_string())),
+                    }),
+                ],
+                else_block: Some(vec![Statement::Return(Expression::Literal(
+                    Literal::Integer(0),
+                ))]),
+            },
+        ]);
+
+        let result = evaluator.eval_statement(&stmt, context).await.unwrap();
+        assert!(matches!(
+            result,
+            StatementResult::Control(ControlFlow::Return(Value::Integer(30)))
+        ));
+    }
+
+    // エラーケースのテスト
+    #[tokio::test]
+    async fn test_error_cases() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        // 未定義変数の参照
+        let stmt = Statement::Expression(Expression::Variable("undefined".to_string()));
+        let result = evaluator.eval_statement(&stmt, context.clone()).await;
+        assert!(result.is_err());
+
+        // 型の不一致（数値の加算に文字列を使用）
+        let stmt = Statement::Expression(Expression::BinaryOp {
+            left: Box::new(Expression::Literal(Literal::Integer(10))),
+            op: BinaryOperator::Add,
+            right: Box::new(Expression::Literal(Literal::String("20".to_string()))),
+        });
+        let result = evaluator.eval_statement(&stmt, context).await;
+        assert!(result.is_err());
     }
 }
