@@ -15,8 +15,8 @@ pub struct MicroAgentDef {
 // ライフサイクル定義
 #[derive(Debug, Clone, PartialEq)]
 pub struct LifecycleDef {
-    pub on_init: Option<Block>,
-    pub on_destroy: Option<Block>,
+    pub on_init: Option<HandlerBlock>,
+    pub on_destroy: Option<HandlerBlock>,
 }
 
 // 状態定義
@@ -68,7 +68,7 @@ pub enum EventType {
 pub struct EventHandler {
     pub event_type: EventType,
     pub parameters: Vec<Parameter>, // イベントの型に応じたパラメータ定義
-    pub block: Block,
+    pub block: HandlerBlock,
 }
 
 impl From<HandlerDef> for EventHandler {
@@ -118,7 +118,7 @@ pub struct RequestHandler {
     pub parameters: Vec<Parameter>, // リクエストの型に応じたパラメータ定義
     pub return_type: TypeInfo,
     pub constraints: Option<Constraints>,
-    pub block: Block,
+    pub block: HandlerBlock,
 }
 
 impl RequestHandler {
@@ -173,17 +173,23 @@ pub enum TypeInfo {
 
 // コードブロック
 #[derive(Debug, Clone, PartialEq)]
-pub struct Block {
+pub struct HandlerBlock {
     pub statements: Vec<Statement>,
 }
+
+type Statements = Vec<Statement>;
 
 // 文
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
+    // expressions
+    Expression(Expression),
     Assignment {
         target: Expression,
         value: Expression,
     },
+    Return(Expression),
+    // events
     Emit {
         event_type: EventType,
         parameters: Vec<Argument>,
@@ -195,19 +201,21 @@ pub enum Statement {
         parameters: Vec<Argument>,
         options: Option<RequestOptions>,
     },
+    // grouping
+    Block(Statements),
+    Await(AwaitType),
+    // control flow
     If {
         condition: Expression,
-        then_block: Block,
-        else_block: Option<Block>,
+        then_block: Statements,
+        else_block: Option<Statements>,
     },
-    Await(AwaitType),
-    Return(Expression),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AwaitType {
     // 複数のStatementを並列実行して全ての完了を待つ
-    Block(Vec<Statement>),
+    Block(Statements),
     // 単一のStatementの完了を待つ
     Single(Box<Statement>),
 }
@@ -254,7 +262,6 @@ pub enum Expression {
         left: Box<Expression>,
         right: Box<Expression>,
     },
-    Await(Box<Expression>),
 }
 
 // リテラル
@@ -355,7 +362,7 @@ pub struct HandlersDef {
 pub struct HandlerDef {
     pub event_name: String,
     pub parameters: Vec<Parameter>,
-    pub block: Block,
+    pub block: HandlerBlock,
 }
 
 // 文（MicroAgentと共通だが、World用に制限される）
@@ -369,8 +376,8 @@ pub enum WorldStatement {
     Expression(Expression),
     If {
         condition: Expression,
-        then_block: Block,
-        else_block: Option<Block>,
+        then_block: Statements,
+        else_block: Option<Statements>,
     },
 }
 
@@ -495,7 +502,7 @@ mod tests {
                 handlers: vec![HandlerDef {
                     event_name: "Tick".to_string(),
                     parameters: vec![],
-                    block: Block { statements: vec![] },
+                    block: HandlerBlock { statements: vec![] },
                 }],
             },
         };

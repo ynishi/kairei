@@ -235,11 +235,11 @@ fn parse_int_config(key: &'static str) -> impl Fn(&str) -> IResult<&str, usize> 
 }
 
 // Block contents
-fn parse_init_handler(input: &str) -> IResult<&str, Block> {
+fn parse_init_handler(input: &str) -> IResult<&str, HandlerBlock> {
     preceded(tag("onInit"), parse_block)(input)
 }
 
-fn parse_destroy_handler(input: &str) -> IResult<&str, Block> {
+fn parse_destroy_handler(input: &str) -> IResult<&str, HandlerBlock> {
     preceded(ws(tag("onDestroy")), parse_block)(input)
 }
 
@@ -446,10 +446,14 @@ fn parse_constraint_item(input: &str) -> IResult<&str, (String, f64)> {
 }
 
 /// Block and Statement
-fn parse_block(input: &str) -> IResult<&str, Block> {
+fn parse_block(input: &str) -> IResult<&str, HandlerBlock> {
+    map(parse_statements, |statements| HandlerBlock { statements })(input)
+}
+
+fn parse_statements(input: &str) -> IResult<&str, Vec<Statement>> {
     map(
         delimited(ws(char('{')), many0(parse_statement), ws(char('}'))),
-        |statements| Block { statements },
+        |statements| statements,
     )(input)
 }
 
@@ -472,8 +476,8 @@ fn parse_await(input: &str) -> IResult<&str, Statement> {
 }
 
 fn parse_await_block(input: &str) -> IResult<&str, Statement> {
-    map(preceded(ws(tag("await")), parse_block), |block| {
-        Statement::Await(AwaitType::Block(block.statements))
+    map(preceded(ws(tag("await")), parse_statements), |statements| {
+        Statement::Await(AwaitType::Block(statements))
     })(input)
 }
 
@@ -550,8 +554,8 @@ fn parse_if_statement(input: &str) -> IResult<&str, Statement> {
         tuple((
             ws(tag("if")),
             delimited(ws(char('(')), parse_expression, ws(char(')'))),
-            parse_block,
-            opt(preceded(ws(tag("else")), parse_block)),
+            parse_statements,
+            opt(preceded(ws(tag("else")), parse_statements)),
         )),
         |(_, condition, then_block, else_block)| Statement::If {
             condition,
@@ -1325,7 +1329,6 @@ mod tests {
                     format_expression(right)
                 )
             }
-            Expression::Await(expr) => format!("await({})", format_expression(expr)),
         }
     }
     #[test]

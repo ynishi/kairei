@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
-use async_trait::async_trait;
+use async_recursion::async_recursion;
 
 use crate::{BinaryOperator, ExecutionError, Expression, Literal, RuntimeError, RuntimeResult};
 
@@ -16,32 +16,25 @@ pub enum Value {
     List(Vec<Value>),
     Map(HashMap<String, Value>),
     Duration(std::time::Duration),
+    Tuple(Vec<Value>),
+    Unit, // Return value for statements
     Null,
 }
 
-#[async_trait]
-pub trait ExpressionEvaluator {
-    async fn eval_expression(
-        &self,
-        expr: &Expression,
-        context: &mut ExecutionContext,
-    ) -> RuntimeResult<Value>;
-}
+pub struct ExpressionEvaluator;
 
-pub struct BasicExpressionEvaluator;
-
-impl Default for BasicExpressionEvaluator {
+impl Default for ExpressionEvaluator {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[async_trait]
-impl ExpressionEvaluator for BasicExpressionEvaluator {
-    async fn eval_expression(
+impl ExpressionEvaluator {
+    #[async_recursion]
+    pub async fn eval_expression(
         &self,
         expr: &Expression,
-        context: &mut ExecutionContext,
+        context: Arc<ExecutionContext>,
     ) -> RuntimeResult<Value> {
         match expr {
             Expression::Literal(lit) => Self::eval_literal(lit),
@@ -57,12 +50,9 @@ impl ExpressionEvaluator for BasicExpressionEvaluator {
             Expression::BinaryOp { op, left, right } => {
                 self.eval_binary_op(op, left, right, context).await
             }
-            Expression::Await(expr) => self.eval_await(expr, context).await,
         }
     }
-}
 
-impl BasicExpressionEvaluator {
     pub fn new() -> Self {
         Self
     }
@@ -93,9 +83,13 @@ impl BasicExpressionEvaluator {
     }
 
     // 変数の評価
-    async fn eval_variable(&self, name: &str, context: &ExecutionContext) -> RuntimeResult<Value> {
+    async fn eval_variable(
+        &self,
+        name: &str,
+        context: Arc<ExecutionContext>,
+    ) -> RuntimeResult<Value> {
         let access = VariableAccess::Local(name.to_string());
-        context.access_variable(access).await.map_err(|e| {
+        context.get(access).await.map_err(|e| {
             RuntimeError::Execution(ExecutionError::EventError(format!(
                 "Variable not found: {}, {}",
                 name, e
@@ -107,10 +101,10 @@ impl BasicExpressionEvaluator {
     async fn eval_state_access(
         &self,
         path: &str,
-        context: &ExecutionContext,
+        context: Arc<ExecutionContext>,
     ) -> RuntimeResult<Value> {
         let access = VariableAccess::State(path.to_string());
-        context.access_variable(access).await.map_err(|e| {
+        context.get(access).await.map_err(|e| {
             RuntimeError::Execution(ExecutionError::EventError(format!(
                 "State not found: {}, {}",
                 path, e
@@ -123,12 +117,12 @@ impl BasicExpressionEvaluator {
         &self,
         function: &str,
         arguments: &[Expression],
-        context: &mut ExecutionContext,
+        context: Arc<ExecutionContext>,
     ) -> RuntimeResult<Value> {
         // 引数を評価
         let mut evaluated_args = Vec::with_capacity(arguments.len());
         for arg in arguments {
-            let value = self.eval_expression(arg, context).await?;
+            let value = self.eval_expression(arg, context.clone()).await?;
             evaluated_args.push(value);
         }
 
@@ -153,9 +147,9 @@ impl BasicExpressionEvaluator {
         op: &BinaryOperator,
         left: &Expression,
         right: &Expression,
-        context: &mut ExecutionContext,
+        context: Arc<ExecutionContext>,
     ) -> RuntimeResult<Value> {
-        let left_val = self.eval_expression(left, context).await?;
+        let left_val = self.eval_expression(left, context.clone()).await?;
         let right_val = self.eval_expression(right, context).await?;
 
         match op {
@@ -172,15 +166,6 @@ impl BasicExpressionEvaluator {
             BinaryOperator::And => self.eval_and(&left_val, &right_val),
             BinaryOperator::Or => self.eval_or(&left_val, &right_val),
         }
-    }
-
-    // awaitの評価
-    async fn eval_await(
-        &self,
-        expr: &Expression,
-        context: &mut ExecutionContext,
-    ) -> RuntimeResult<Value> {
-        self.eval_expression(expr, context).await
     }
 
     // 以下、組み込み関数の実装
@@ -418,24 +403,25 @@ impl BasicExpressionEvaluator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::StateAccessPath;
+
+    use super::*;
     use std::time::Duration;
 
     // テスト用のヘルパー関数
-    async fn setup_context() -> ExecutionContext {
-        ExecutionContext::new()
+    async fn setup_context() -> Arc<ExecutionContext> {
+        Arc::new(ExecutionContext::new())
     }
 
     #[tokio::test]
     async fn test_literal_evaluation() {
-        let evaluator = BasicExpressionEvaluator::new();
-        let mut context = setup_context().await;
+        let evaluator = ExpressionEvaluator::new();
+        let context = setup_context().await;
 
         // Integer
         let expr = Expression::Literal(Literal::Integer(42));
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Integer(42)));
@@ -443,7 +429,7 @@ mod tests {
         // Float
         let expr = Expression::Literal(Literal::Float(3.14));
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Float(f) if (f - 3.14).abs() < f64::EPSILON));
@@ -451,7 +437,7 @@ mod tests {
         // String
         let expr = Expression::Literal(Literal::String("hello".to_string()));
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::String(s) if s == "hello"));
@@ -459,7 +445,7 @@ mod tests {
         // Boolean
         let expr = Expression::Literal(Literal::Boolean(true));
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Boolean(true)));
@@ -467,7 +453,7 @@ mod tests {
         // Duration
         let expr = Expression::Literal(Literal::Duration(Duration::from_secs(60)));
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Duration(d) if d == Duration::from_secs(60)));
@@ -475,87 +461,90 @@ mod tests {
         // Null
         let expr = Expression::Literal(Literal::Null);
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Null));
     }
-    /*
-        #[tokio::test]
-            async fn test_variable_evaluation() {
-                let evaluator = BasicExpressionEvaluator::new();
-                let mut context = setup_context().await;
 
-                // 変数をコンテキストに設定
-                let access = VariableAccess::Local("x".to_string());
-                context.update_variable(access, Value::Integer(42));
-                context.update_variable(access, Value::String("Alice".to_string());
+    #[tokio::test]
+    async fn test_variable_evaluation() {
+        let evaluator = ExpressionEvaluator::new();
+        let context = setup_context().await;
 
-                // 存在する変数の評価
-                let expr = Expression::Variable("x".to_string());
-                let result = evaluator
-                    .eval_expression(&expr, &mut context)
-                    .await
-                    .unwrap();
-                assert!(matches!(result, Value::Integer(42)));
+        let access = VariableAccess::Local("x".to_string());
+        context.set(access, Value::Integer(42)).await.unwrap();
+        let access = VariableAccess::Local("name".to_string());
+        context
+            .set(access, Value::String("Alice".to_string()))
+            .await
+            .unwrap();
 
-                let expr = Expression::Variable("name".to_string());
-                let result = evaluator
-                    .eval_expression(&expr, &mut context)
-                    .await
-                    .unwrap();
-                assert!(matches!(result, Value::String(s) if s == "Alice"));
+        let expr = Expression::Variable("x".to_string());
+        let result = evaluator
+            .eval_expression(&expr, context.clone())
+            .await
+            .unwrap();
+        assert!(matches!(result, Value::Integer(42)));
 
-                // 存在しない変数の評価
-                let expr = Expression::Variable("undefined".to_string());
-                let result = evaluator.eval_expression(&expr, &mut context).await;
-                assert!(result.is_err());
-            }
+        let expr = Expression::Variable("name".to_string());
+        let result = evaluator
+            .eval_expression(&expr, context.clone())
+            .await
+            .unwrap();
+        assert!(matches!(result, Value::String(s) if s == "Alice"));
 
+        // 存在しない変数の評価
+        let expr = Expression::Variable("undefined".to_string());
+        let result = evaluator.eval_expression(&expr, context.clone()).await;
+        assert!(result.is_err());
+    }
 
-        #[tokio::test]
-        async fn test_state_access() {
-            let evaluator = BasicExpressionEvaluator::new();
-            let mut context = setup_context().await;
+    #[tokio::test]
+    async fn test_state_access() {
+        let evaluator = ExpressionEvaluator::new();
+        let context = setup_context().await;
 
-            // 状態を設定
-            {
-                context
-                    .state
-                    .insert("counter".to_string(), Value::Integer(10));
-                context
-                    .state
-                    .insert("settings.enabled".to_string(), Value::Boolean(true));
-            }
-
-            // 状態アクセスのテスト
-            let expr = Expression::StateAccess(StateAccessPath(vec!["counter".to_string()]));
-            let result = evaluator
-                .eval_expression(&expr, &mut context)
+        // 状態を設定
+        {
+            context
+                .set_state("counter", Value::Integer(10))
                 .await
                 .unwrap();
-            assert!(matches!(result, Value::Integer(10)));
-
-            let expr = Expression::StateAccess(StateAccessPath(vec![
-                "settings".to_string(),
-                "enabled".to_string(),
-            ]));
-            let result = evaluator
-                .eval_expression(&expr, &mut context)
+            context
+                .set_state("settings.enabled", Value::Boolean(true))
                 .await
                 .unwrap();
-            assert!(matches!(result, Value::Boolean(true)));
-
-            // 存在しない状態へのアクセス
-            let expr = Expression::StateAccess(StateAccessPath(vec!["nonexistent".to_string()]));
-            let result = evaluator.eval_expression(&expr, &mut context).await;
-            assert!(result.is_err());
         }
-    */
+
+        // 状態アクセスのテスト
+        let expr = Expression::StateAccess(StateAccessPath(vec!["counter".to_string()]));
+        let result = evaluator
+            .eval_expression(&expr, context.clone())
+            .await
+            .unwrap();
+        assert!(matches!(result, Value::Integer(10)));
+
+        let expr = Expression::StateAccess(StateAccessPath(vec![
+            "settings".to_string(),
+            "enabled".to_string(),
+        ]));
+        let result = evaluator
+            .eval_expression(&expr, context.clone())
+            .await
+            .unwrap();
+        assert!(matches!(result, Value::Boolean(true)));
+
+        // 存在しない状態へのアクセス
+        let expr = Expression::StateAccess(StateAccessPath(vec!["nonexistent".to_string()]));
+        let result = evaluator.eval_expression(&expr, context.clone()).await;
+        assert!(result.is_err());
+    }
+
     #[tokio::test]
     async fn test_binary_operations() {
-        let evaluator = BasicExpressionEvaluator::new();
-        let mut context = setup_context().await;
+        let evaluator = ExpressionEvaluator::new();
+        let context = setup_context().await;
 
         // Addition
         let expr = Expression::BinaryOp {
@@ -564,7 +553,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Integer(3))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Integer(8)));
@@ -576,7 +565,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Float(3.5))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Float(f) if (f - 8.5).abs() < f64::EPSILON));
@@ -588,7 +577,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::String("World".to_string()))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::String(s) if s == "Hello World"));
@@ -599,14 +588,14 @@ mod tests {
             left: Box::new(Expression::Literal(Literal::Integer(10))),
             right: Box::new(Expression::Literal(Literal::Integer(0))),
         };
-        let result = evaluator.eval_expression(&expr, &mut context).await;
+        let result = evaluator.eval_expression(&expr, context.clone()).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_function_calls() {
-        let evaluator = BasicExpressionEvaluator::new();
-        let mut context = setup_context().await;
+        let evaluator = ExpressionEvaluator::new();
+        let context = setup_context().await;
 
         // len function
         let expr = Expression::FunctionCall {
@@ -614,7 +603,7 @@ mod tests {
             arguments: vec![Expression::Literal(Literal::String("hello".to_string()))],
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Integer(5)));
@@ -629,7 +618,7 @@ mod tests {
             ]))],
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Integer(6)));
@@ -645,7 +634,7 @@ mod tests {
             ]))],
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Float(f) if (f - 4.0).abs() < f64::EPSILON));
@@ -655,14 +644,14 @@ mod tests {
             function: "nonexistent".to_string(),
             arguments: vec![],
         };
-        let result = evaluator.eval_expression(&expr, &mut context).await;
+        let result = evaluator.eval_expression(&expr, context.clone()).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_comparison_operations() {
-        let evaluator = BasicExpressionEvaluator::new();
-        let mut context = setup_context().await;
+        let evaluator = ExpressionEvaluator::new();
+        let context = setup_context().await;
 
         // Equal
         let expr = Expression::BinaryOp {
@@ -671,7 +660,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Integer(5))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Boolean(true)));
@@ -683,7 +672,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Float(3.15))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Boolean(true)));
@@ -695,7 +684,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Integer(5))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Boolean(true)));
@@ -703,8 +692,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_logical_operations() {
-        let evaluator = BasicExpressionEvaluator::new();
-        let mut context = setup_context().await;
+        let evaluator = ExpressionEvaluator::new();
+        let context = setup_context().await;
 
         // AND
         let expr = Expression::BinaryOp {
@@ -713,7 +702,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Boolean(false))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Boolean(false)));
@@ -725,7 +714,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Boolean(false))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Boolean(true)));
@@ -736,14 +725,14 @@ mod tests {
             left: Box::new(Expression::Literal(Literal::Boolean(true))),
             right: Box::new(Expression::Literal(Literal::Integer(1))),
         };
-        let result = evaluator.eval_expression(&expr, &mut context).await;
+        let result = evaluator.eval_expression(&expr, context.clone()).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_complex_expressions() {
-        let evaluator = BasicExpressionEvaluator::new();
-        let mut context = setup_context().await;
+        let evaluator = ExpressionEvaluator::new();
+        let context = setup_context().await;
 
         // ネストされた式
         let expr = Expression::BinaryOp {
@@ -756,7 +745,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Integer(3))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Integer(13)));
@@ -771,7 +760,7 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Integer(5))),
         };
         let result = evaluator
-            .eval_expression(&expr, &mut context)
+            .eval_expression(&expr, context.clone())
             .await
             .unwrap();
         assert!(matches!(result, Value::Boolean(true)));

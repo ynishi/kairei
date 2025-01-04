@@ -92,6 +92,7 @@ pub enum VariableAccess {
 }
 
 /// 実行コンテキスト
+#[derive(Clone)]
 pub struct ExecutionContext {
     shared: SharedContext,
     current_scope: DashMap<String, Arc<SafeRwLock<Value>>>,
@@ -365,10 +366,17 @@ impl ExecutionContext {
     }
 
     // 統一された変数アクセスインターフェース
-    pub async fn access_variable(&self, access: VariableAccess) -> Result<Value, ContextError> {
+    pub async fn get(&self, access: VariableAccess) -> Result<Value, ContextError> {
         match access {
             VariableAccess::State(key) => self.get_state(&key).await,
-            VariableAccess::Local(name) => self.get_state(&name).await,
+            VariableAccess::Local(name) => self.get_variable(&name).await,
+        }
+    }
+
+    pub async fn set(&self, access: VariableAccess, value: Value) -> Result<(), ContextError> {
+        match access {
+            VariableAccess::State(key) => self.set_state(&key, value).await,
+            VariableAccess::Local(name) => self.set_variable(&name, value).await,
         }
     }
     /// 新しいスコープフレームの作成
