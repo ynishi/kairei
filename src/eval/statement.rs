@@ -7,12 +7,12 @@ use uuid::Uuid;
 
 use crate::{
     event_bus::{self, Event},
-    event_registry, Argument, AwaitType, EventType, ExecutionError, Expression, RequestOptions,
-    RequestType, RuntimeError, RuntimeResult, Statement,
+    event_registry, Argument, AwaitType, ErrorHandlerBlock, EventType, ExecutionError, Expression,
+    RequestOptions, RequestType, RuntimeError, RuntimeResult, Statement,
 };
 
 use super::{
-    context::{ExecutionContext, VariableAccess},
+    context::{ExecutionContext, StateAccessMode, VariableAccess},
     expression::{ExpressionEvaluator, Value},
 };
 
@@ -83,6 +83,13 @@ impl StatementEvaluator {
                     .await
             }
             Statement::Await(await_type) => self.eval_await(await_type, context).await,
+            Statement::WithError {
+                statement,
+                error_handler_block,
+            } => {
+                self.eval_with_error(statement, error_handler_block, context)
+                    .await
+            }
         }
     }
 }
@@ -321,6 +328,43 @@ impl StatementEvaluator {
             AwaitType::Single(statement) => {
                 // 単一のStatementを実行して完了を待つ
                 self.eval_statement(statement, context).await
+            }
+        }
+    }
+
+    async fn eval_with_error(
+        &self,
+        statement: &Statement,
+        error_handler_block: &ErrorHandlerBlock,
+        context: Arc<ExecutionContext>,
+    ) -> RuntimeResult<StatementResult> {
+        match self.eval_statement(statement, context.clone()).await {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                // Create new scope for error handler
+                let error_context = Arc::new(context.fork(Some(StateAccessMode::ReadOnly)).await);
+
+                // Bind error if binding name is provided
+                if let Some(binding) = &error_handler_block.error_binding {
+                    error_context
+                        .set_variable(binding.as_str(), Value::Error(error.to_string()))
+                        .await
+                        .map_err(|e| {
+                            RuntimeError::Execution(ExecutionError::EvalError(format!(
+                                "Error Binding Failed: {}",
+                                e
+                            )))
+                        })?;
+                }
+
+                // Execute error handler block
+                let result = self
+                    .eval_block(&error_handler_block.error_handler_statements, error_context)
+                    .await;
+
+                // Return Unit or propagate error
+                // TODO: check return type compile(parse) time.
+                result.map(|_| StatementResult::Value(Value::Unit))
             }
         }
     }

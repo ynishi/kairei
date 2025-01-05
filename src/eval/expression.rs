@@ -17,7 +17,8 @@ pub enum Value {
     Map(HashMap<String, Value>),
     Duration(std::time::Duration),
     Tuple(Vec<Value>),
-    Unit, // Return value for statements
+    Unit,          // Return value for statements
+    Error(String), // Error name for handling.
     Null,
 }
 

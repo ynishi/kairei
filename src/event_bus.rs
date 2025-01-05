@@ -78,6 +78,7 @@ impl From<expression::Value> for Value {
                     .map(|(k, v)| (k, Value::from(v)))
                     .collect::<HashMap<String, Value>>(),
             ),
+            expression::Value::Error(s) => Value::String(s),
         }
     }
 }

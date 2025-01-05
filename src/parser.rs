@@ -458,7 +458,7 @@ fn parse_statements(input: &str) -> IResult<&str, Vec<Statement>> {
 }
 
 fn parse_statement(input: &str) -> IResult<&str, Statement> {
-    alt((
+    let (input, base_statement) = alt((
         parse_await,
         parse_await_block,
         parse_assignment,
@@ -466,7 +466,8 @@ fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_request_statement,
         parse_if_statement,
         parse_return_statement,
-    ))(input)
+    ))(input)?;
+    parse_optional_error_handler(input, base_statement)
 }
 
 fn parse_await(input: &str) -> IResult<&str, Statement> {
@@ -479,6 +480,35 @@ fn parse_await_block(input: &str) -> IResult<&str, Statement> {
     map(preceded(ws(tag("await")), parse_statements), |statements| {
         Statement::Await(AwaitType::Block(statements))
     })(input)
+}
+
+fn parse_optional_error_handler(
+    input: &str,
+    base_statement: Statement,
+) -> IResult<&str, Statement> {
+    // onFail部分はオプショナル
+    let (input, error_handler) = opt(tuple((
+        ws(tag("onFail")),
+        // エラーバインディングは括弧付きの識別子としてオプショナル
+        opt(delimited(ws(tag("(")), identifier, ws(tag(")")))),
+        // エラーハンドラブロック
+        parse_block,
+    )))(input)?;
+
+    // エラーハンドラが存在する場合は WithErrorHandler を生成
+    match error_handler {
+        Some((_, error_binding, handler_block)) => Ok((
+            input,
+            Statement::WithError {
+                statement: Box::new(base_statement),
+                error_handler_block: ErrorHandlerBlock {
+                    error_binding: error_binding.map(String::from),
+                    error_handler_statements: handler_block.statements,
+                },
+            },
+        )),
+        None => Ok((input, base_statement)),
+    }
 }
 
 fn parse_assignment(input: &str) -> IResult<&str, Statement> {
@@ -1055,6 +1085,12 @@ mod tests {
                 count1 = count1 + 1
                 count2 = count2 + 2
             }"#,
+            r#"emit SearchFlights(...).onFail(err) {
+                emit Error(message: err.message)"
+            }"#,
+            r#"emit Test() onFail { emit Error() }"#,
+            r#"emit Test() onFail(err) { emit Error() }"#,
+            r#"emit Test()"#,
         ];
 
         for input in cases {
