@@ -6,13 +6,13 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use tokio::sync::{oneshot, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use uuid::Uuid;
+use tracing::{debug, warn};
 
-use crate::event_bus::{self, Event, EventBus};
+use crate::event_bus::{self, Event, EventBus, ToEventType};
 use crate::event_registry::EventType;
-use crate::{EventError, StateError};
+use crate::{EventError, RuntimeError, StateError};
 
-use super::expression::{self, Value};
+use super::expression::Value;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -149,6 +149,23 @@ pub enum ContextError {
     StateNotFound(String),
 }
 
+impl ToEventType for ContextError {
+    fn to_event_type(&self) -> String {
+        match self {
+            ContextError::StateError(_) => "StateError".to_string(),
+            ContextError::EventError(_) => "EventError".to_string(),
+            ContextError::AccessError(_) => "AccessError".to_string(),
+            ContextError::LockTimeout(_) => "LockTimeout".to_string(),
+            ContextError::Deadlock(_) => "Deadlock".to_string(),
+            ContextError::VariableNotFound(_) => "VariableNotFound".to_string(),
+            ContextError::ReadOnlyViolation => "ReadOnlyViolation".to_string(),
+            ContextError::NoParentScope => "NoParentScope".to_string(),
+            ContextError::EventSendFailed(_) => "EventSendFailed".to_string(),
+            ContextError::StateNotFound(_) => "StateNotFound".to_string(),
+        }
+    }
+}
+
 impl ExecutionContext {
     pub async fn fork(&self, access_mode: Option<StateAccessMode>) -> Self {
         // 現在のスコープの内容を新しいスコープにコピー
@@ -251,9 +268,10 @@ impl ExecutionContext {
         match self.access_mode {
             StateAccessMode::ReadOnly => Err(ContextError::ReadOnlyViolation),
             StateAccessMode::ReadWrite => {
+                let value_ref = value.clone();
                 let safe_value = Arc::new(SafeRwLock::new(value));
                 self.shared.state.insert(name.to_string(), safe_value);
-                self.notify_state_update(name, &Value::Unit)
+                self.notify_state_update(name, &value_ref)
             }
         }
     }
@@ -330,6 +348,7 @@ impl ExecutionContext {
         agent_info: AgentInfo,
         access_mode: StateAccessMode,
     ) -> Self {
+        let name = agent_info.agent_name.clone();
         let (mut event_rx, _) = event_bus.subscribe();
         let new_self = Self {
             shared: SharedContext {
@@ -346,8 +365,15 @@ impl ExecutionContext {
         let self_ref = new_self.clone();
         tokio::spawn(async move {
             while let Ok(event) = event_rx.recv().await {
-                if let EventType::Response { request_id, .. } = &event.event_type.clone() {
-                    self_ref.handle_response(request_id, event).await;
+                debug!("Received Event in context: {:?}", event);
+                if event.event_type.is_for_me(&name) {
+                    if let Some(request_id) = event.event_type.clone().request_id() {
+                        debug!(
+                            "Received response in cotext: I'm {}, {}, {:?}",
+                            name, request_id, event
+                        );
+                        self_ref.handle_response(request_id, event).await;
+                    }
                 }
             }
         });
@@ -401,10 +427,40 @@ impl ExecutionContext {
             .map_err(|e| ContextError::EventSendFailed(e.to_string()))
     }
 
+    // onFail などのエラーイベントの発行
+    pub async fn emit_failure(&self, error: ContextError) -> Result<(), ContextError> {
+        let error_event = Event {
+            event_type: EventType::Failure {
+                error_type: error.to_event_type(),
+            },
+            parameters: {
+                let mut parameters = HashMap::new();
+                parameters.insert(
+                    "agent_name".to_string(),
+                    event_bus::Value::from(self.agent_name()),
+                );
+                parameters.insert(
+                    "error".to_string(),
+                    event_bus::Value::from(error.to_string()),
+                );
+                parameters
+            },
+        };
+        self.shared
+            .event_bus
+            .publish(error_event)
+            .await
+            .map_err(|e| {
+                ContextError::EventError(EventError::SendFailed {
+                    message: e.to_string(),
+                })
+            })
+    }
+
     pub async fn send_response(
         &self,
         request: EventType,
-        response: expression::Value,
+        result: Result<Value, RuntimeError>,
     ) -> Result<(), ContextError> {
         if let EventType::Request {
             request_type,
@@ -413,18 +469,34 @@ impl ExecutionContext {
             request_id,
         } = request
         {
-            let response_event = Event {
-                event_type: EventType::Response {
-                    request_id,
-                    request_type,
-                    requester,
-                    responder,
+            let event = match result {
+                Ok(value) => Event {
+                    event_type: EventType::ResponseSuccess {
+                        request_id,
+                        request_type,
+                        requester,
+                        responder,
+                    },
+                    parameters: vec![("response".to_string(), event_bus::Value::from(value))]
+                        .into_iter()
+                        .collect::<HashMap<String, event_bus::Value>>(),
                 },
-                parameters: vec![("response".to_string(), event_bus::Value::from(response))]
+                Err(error) => Event {
+                    event_type: EventType::ResponseFailure {
+                        request_id,
+                        request_type,
+                        requester,
+                        responder,
+                    },
+                    parameters: vec![(
+                        "error".to_string(),
+                        event_bus::Value::from(error.to_string()),
+                    )]
                     .into_iter()
                     .collect::<HashMap<String, event_bus::Value>>(),
+                },
             };
-            self.emit_event(response_event).await?
+            self.emit_event(event).await?
         } else {
             return Err(ContextError::EventError(EventError::UnsupportedType {
                 event_type: request.to_string(),
@@ -450,11 +522,19 @@ impl ExecutionContext {
     }
 
     pub async fn send_request(&self, request: Event) -> Result<Event, ContextError> {
+        debug!("Send Request, I'm {}", self.agent_name());
         let (tx, rx) = oneshot::channel();
-        let request_id = Uuid::new_v4().to_string();
+        let request_id = request
+            .event_type
+            .request_id()
+            .ok_or(ContextError::EventSendFailed(
+                "EventType is not Specified RequestId".to_string(),
+            ))?;
 
         // 内部でリクエスト管理
-        self.shared.pending_requests.insert(request_id, tx);
+        self.shared
+            .pending_requests
+            .insert(request_id.to_string(), tx);
 
         // リクエストイベントの発行
         self.shared.event_bus.publish(request).await.map_err(|e| {
@@ -464,11 +544,13 @@ impl ExecutionContext {
         })?;
 
         // レスポンス待機
-        rx.await.map_err(|e| {
+        let ret = rx.await.map_err(|e| {
             ContextError::EventError(EventError::SendFailed {
                 message: e.to_string(),
             })
-        })
+        });
+        debug!("Got in send_requst: {:?}", ret);
+        ret
     }
 
     pub async fn cancel_pending_requests(&self) -> Result<(), ContextError> {
@@ -478,7 +560,7 @@ impl ExecutionContext {
                 ContextError::EventError(EventError::NotFound(request_id.to_string()))
             })?;
             let error_response = Event {
-                event_type: EventType::Response {
+                event_type: EventType::ResponseFailure {
                     request_type: "cancelled".to_string(),
                     requester: "unknown".to_string(),
                     responder: self.shared.agent_info.agent_name.clone(),
@@ -501,8 +583,22 @@ impl ExecutionContext {
 
     // レスポンスの処理（内部メソッド）
     async fn handle_response(&self, request_id: &str, response: Event) {
+        debug!(
+            "Handsle Response: {:?}",
+            self.shared
+                .pending_requests
+                .iter()
+                .map(|e| e.key().clone())
+                .collect::<Vec<_>>()
+        );
         if let Some((_, tx)) = self.shared.pending_requests.remove(request_id) {
             let _ = tx.send(response);
+        } else {
+            warn!(
+                "handle_response in {}, {} is not found",
+                self.agent_name(),
+                request_id
+            );
         }
     }
 }
@@ -755,7 +851,6 @@ mod tests {
         // デッドロック検出のテスト
         tokio::time::sleep(Duration::from_secs(7)).await;
         let result = lock.write_with_timeout(Duration::from_secs(1)).await;
-        println!("{:?}", result);
         assert!(matches!(result, Err(LockError::Deadlock)));
 
         handle.await.unwrap();

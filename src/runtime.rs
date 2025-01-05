@@ -35,7 +35,10 @@ pub trait RuntimeAgent: Send + Sync {
     async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()>;
     async fn shutdown(&self) -> RuntimeResult<()> {
         // simply cleanup
-        self.cleanup().await?;
+        if let Err(e) = self.cleanup().await {
+            self.handle_runtime_error(e).await;
+            return Ok(());
+        }
         Ok(())
     }
     async fn cleanup(&self) -> RuntimeResult<()> {
@@ -44,6 +47,8 @@ pub trait RuntimeAgent: Send + Sync {
         Ok(())
     }
     async fn handle_lifecycle_event(&self, event: &LifecycleEvent) -> RuntimeResult<()>;
+
+    async fn handle_runtime_error(&self, error: RuntimeError);
 }
 
 // MicroAgentの実行時表現
@@ -258,6 +263,10 @@ impl RuntimeAgent for RuntimeAgentData {
             return handler().await;
         }
         Ok(())
+    }
+
+    async fn handle_runtime_error(&self, _error: RuntimeError) {
+        todo!()
     }
 }
 
@@ -519,7 +528,7 @@ impl RuntimeAgentData {
 
     // イベントの処理
     async fn handle_event(&self, event: &Event) -> RuntimeResult<()> {
-        debug!("Event received: {:?}", event);
+        debug!("Handle event in Runtime: {:?}", event);
         match &event.event_type {
             EventType::Request {
                 request_type,
@@ -541,8 +550,8 @@ impl RuntimeAgentData {
                 }
             }
 
-            // 通常のメッセージとカスタムイベント
-            EventType::Message { .. } | EventType::Custom(_) => {
+            // 通常のメッセージ(Ok, Err)とカスタムイベント
+            EventType::Message { .. } | EventType::Failure { .. } | EventType::Custom(_) => {
                 self.handle_normal_event(event).await
             }
 
@@ -561,7 +570,9 @@ impl RuntimeAgentData {
             | EventType::SystemStopping
             | EventType::SystemStopped => self.handle_system_event(event).await,
             // レスポンスは直接evaluatorで処理する
-            EventType::Response { .. } => Ok(()),
+            EventType::ResponseSuccess { .. } => Ok(()),
+            EventType::ResponseFailure { .. } => Ok(()),
+            // 確実にバリアントを処理するため _ => Ok(()) は使用しない
         }
     }
 
@@ -728,11 +739,11 @@ mod tests {
         fn get_response(&self, request_id: &str) -> Value {
             let want_request_id = request_id.to_string();
             let lock = self.responses.lock().unwrap();
-            let filtered = lock.iter().filter(|e| match &e.event_type {
-                EventType::Response { request_id, .. } => request_id == &want_request_id,
-                _ => false,
-            });
+            let filtered = lock
+                .iter()
+                .filter(|e| e.event_type.request_id() == Some(&want_request_id));
             let res = filtered.last().unwrap();
+            // failure will be handled by unwrap
             res.parameters.get("response").unwrap().clone()
         }
     }
@@ -832,7 +843,7 @@ mod tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
         let state = context.get_state("self.x").await.unwrap();
         assert_eq!(state, expression::Value::Integer(2));
         let response = sender_agent.get_response(&request_id);

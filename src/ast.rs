@@ -125,6 +125,12 @@ pub enum RequestType {
     Custom(String), // 拡張性のために残す
 }
 
+impl From<&str> for RequestType {
+    fn from(value: &str) -> Self {
+        Self::Custom(value.to_string())
+    }
+}
+
 impl fmt::Display for RequestType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -193,6 +199,12 @@ pub enum TypeInfo {
         name: String,
         constraints: HashMap<String, Expression>,
     },
+}
+
+impl From<&str> for TypeInfo {
+    fn from(value: &str) -> Self {
+        Self::Simple(value.to_string())
+    }
 }
 
 // コードブロック

@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_recursion::async_recursion;
 
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::{
@@ -221,9 +222,11 @@ impl StatementEvaluator {
             },
             parameters: evaluated_params,
         };
+        debug!("Create Request: {:?}", request);
         let response_event = context.send_request(request).await.map_err(|e| {
             RuntimeError::Execution(ExecutionError::EvaluationFailed(e.to_string()))
         })?;
+        debug!("Got Reponse: {:?}", response_event);
         let response = response_event
             .parameters
             .get("response")
@@ -453,7 +456,6 @@ mod tests {
             .eval_statement(&stmt, context.clone())
             .await
             .unwrap();
-        println!("{:?}", result);
         assert!(matches!(result, StatementResult::Value(Value::Integer(1))));
 
         // false条件のIf文

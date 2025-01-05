@@ -17,8 +17,14 @@ pub enum EventType {
         agent_name: String,
         state_name: String,
     },
+    // メッセージイベント
+    // emit something で Publish する際に使用する。
     Message {
         content_type: String,
+    },
+    // something.onFail などで停止した際にこのイベントを使用する。
+    Failure {
+        error_type: String,
     },
     // Request/Response
     Request {
@@ -27,7 +33,14 @@ pub enum EventType {
         responder: String,  // 期待される応答者
         request_id: String, // Globally unique request ID like UUID
     },
-    Response {
+    // Response は、Ok(ResponseSuccess)/Err(ResponseFailure) を使用する。
+    ResponseSuccess {
+        request_type: String,
+        requester: String,  // 元のリクエストの送信者
+        responder: String,  // 応答者
+        request_id: String, // Globally unique request ID like UUID
+    },
+    ResponseFailure {
         request_type: String,
         requester: String,  // 元のリクエストの送信者
         responder: String,  // 応答者
@@ -49,6 +62,52 @@ pub enum EventType {
     Custom(String), // 拡張性のために残す
 }
 
+impl EventType {
+    /// リクエストイベントかどうか
+    pub fn is_request(&self) -> bool {
+        matches!(self, EventType::Request { .. })
+    }
+
+    pub fn is_response(&self) -> bool {
+        matches!(
+            self,
+            EventType::ResponseSuccess { .. } | EventType::ResponseFailure { .. }
+        )
+    }
+
+    pub fn is_for_me(&self, agent_name: &str) -> bool {
+        match self {
+            EventType::ResponseSuccess { requester, .. }
+            | EventType::ResponseFailure { requester, .. } => requester == agent_name,
+            _ => false,
+        }
+    }
+
+    pub fn request_id(&self) -> Option<&str> {
+        match self {
+            EventType::Request { request_id, .. } => Some(request_id),
+            EventType::ResponseSuccess { request_id, .. } => Some(request_id),
+            EventType::ResponseFailure { request_id, .. } => Some(request_id),
+            _ => None,
+        }
+    }
+
+    /// 成功イベントかどうか
+    pub fn is_success(&self) -> bool {
+        matches!(
+            self,
+            EventType::Message { .. } | EventType::ResponseSuccess { .. }
+        )
+    }
+
+    pub fn is_failure(&self) -> bool {
+        matches!(
+            self,
+            EventType::Failure { .. } | EventType::ResponseFailure { .. }
+        )
+    }
+}
+
 impl std::fmt::Display for EventType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -58,8 +117,10 @@ impl std::fmt::Display for EventType {
                 state_name,
             } => write!(f, "StateUpdated({}.{})", agent_name, state_name),
             EventType::Message { content_type } => write!(f, "{}", content_type),
+            EventType::Failure { error_type } => write!(f, "{}", error_type),
             EventType::Request { request_type, .. } => write!(f, "{}", request_type),
-            EventType::Response { request_type, .. } => write!(f, "{}", request_type),
+            EventType::ResponseSuccess { request_type, .. } => write!(f, "{}", request_type),
+            EventType::ResponseFailure { request_type, .. } => write!(f, "{}", request_type),
             EventType::AgentCreated => write!(f, "AgentCreated"),
             EventType::AgentAdded => write!(f, "AgentAdded"),
             EventType::AgentRemoved => write!(f, "AgentRemoved"),

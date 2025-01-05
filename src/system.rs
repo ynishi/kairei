@@ -13,10 +13,10 @@ use tokio::{
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::eval::expression;
 use crate::{
     agent_registry::AgentRegistry,
     ast_registry::AstRegistry,
+    eval::expression,
     event_bus::{Event, EventBus, EventReceiver, LastStatus, Value},
     event_registry::{EventInfo, EventRegistry, EventType, ParameterType},
     runtime::RuntimeAgentData,
@@ -56,11 +56,13 @@ impl System {
         let mut event_rx = event_bus.subscribe().0;
         let filtered_subscriptions = Arc::new(DashMap::new());
 
+        // Receive response.
         tokio::spawn(async move {
             while let Ok(event) = event_rx.recv().await {
                 debug!("event: {:?}", event);
-                if let EventType::Response { request_id, .. } = event.event_type {
-                    if let Some((_, sender)) = pending_requests_ref.remove(&request_id) {
+                if let Some(request_id) = event.event_type.request_id() {
+                    debug!("request_id: {}", request_id);
+                    if let Some((_, sender)) = pending_requests_ref.remove(request_id) {
                         if let Some(value) = event.parameters.get("response") {
                             let _ = sender.send(value.clone());
                         } else {
@@ -280,6 +282,17 @@ impl System {
     }
 
     /// Agent management
+    pub async fn register_agent(&self, agent_name: &str) -> RuntimeResult<()> {
+        let ast_registry = self.ast_registry.read().await;
+        let agent_def = ast_registry.get_agent_ast(agent_name).await?;
+        drop(ast_registry);
+        let runtime = Arc::new(RuntimeAgentData::new(&agent_def, &self.event_bus).await?);
+        let agent_registry = self.agent_registry.write().await;
+        agent_registry
+            .register_agent(agent_name, runtime, &self.event_bus)
+            .await?;
+        Ok(())
+    }
     pub async fn start_agent(&self, agent_name: &str) -> RuntimeResult<()> {
         let registry = self.agent_registry.read().await;
         registry.run_agent(agent_name, self.event_bus.clone()).await
@@ -477,10 +490,10 @@ mod tests {
     use std::time::Duration;
 
     use crate::{
-        event_bus,
+        ast, event_bus,
         event_registry::{self, EventType},
-        AnswerDef, EventHandler, Expression, HandlerBlock, Literal, ObserveDef, RequestHandler,
-        StateDef, StateVarDef, Statement, TypeInfo,
+        AnswerDef, EventHandler, Expression, HandlerBlock, Literal, ObserveDef, ReactDef,
+        RequestHandler, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
     };
 
     use super::*;
@@ -524,29 +537,29 @@ mod tests {
                     vars
                 },
             }),
-            observe: Some(ObserveDef {
-                handlers: alloc::__rust_force_expr!(<[_]>::into_vec(
-                    #[rustc_box]
-                    alloc::boxed::Box::new([(EventHandler {
-                        event_type: EventType::Messages("Start".into()),
-                        parameters: vec![],
-                        block: HandlerBlock {
-                            statements: vec![
-                                Statement::Request {
-                                    agent: "pong".to_string(),
-                                    request_type: "ping".to_string(),
-                                    parameters: vec![],
-                                },
-                                Statement::Assignment {
-                                    target: Expression::StateAccess(StateAccessPath(vec![
-                                        "received_pong".to_string(),
-                                    ])),
-                                    value: Expression::Literal(Literal::Boolean(true)),
-                                },
-                            ],
-                        },
-                    })])
-                )),
+            react: Some(ReactDef {
+                handlers: vec![EventHandler {
+                    event_type: ast::EventType::Message {
+                        content_type: "Start".into(),
+                    },
+                    parameters: vec![],
+                    block: HandlerBlock {
+                        statements: vec![
+                            Statement::Request {
+                                agent: "pong".to_string(),
+                                request_type: "ping".into(),
+                                parameters: vec![],
+                                options: None,
+                            },
+                            Statement::Assignment {
+                                target: Expression::StateAccess(StateAccessPath(vec![
+                                    "received_pong".to_string(),
+                                ])),
+                                value: Expression::Literal(Literal::Boolean(true)),
+                            },
+                        ],
+                    },
+                }],
             }),
             ..Default::default()
         };
@@ -555,9 +568,9 @@ mod tests {
             name: "pong".to_string(),
             answer: Some(AnswerDef {
                 handlers: vec![RequestHandler {
-                    request_type: "ping".to_string(),
+                    request_type: "ping".into(),
                     parameters: vec![],
-                    return_type: TypeInfo::Simple("bool".to_string()),
+                    return_type: "bool".into(),
                     constraints: None,
                     block: HandlerBlock {
                         statements: vec![Statement::Return(Expression::Literal(Literal::Boolean(
@@ -585,12 +598,8 @@ mod tests {
 
         // エージェントのスケールアップ（各1インスタンス）
         let ping_instances = system.scale_up("ping", 1, HashMap::new()).await.unwrap();
-        let pong_instances = system.scale_up("pong", 1, HashMap::new()).await.unwrap();
-
-        // エージェントの起動
-        for instance in ping_instances.iter().chain(pong_instances.iter()) {
-            system.start_agent(instance).await.unwrap();
-        }
+        system.register_agent("pong").await.unwrap();
+        system.start_agent("pong").await.unwrap();
 
         // 起動待機
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -607,10 +616,13 @@ mod tests {
             .unwrap();
 
         // 結果の確認（適切な待機時間を入れる）
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
 
         // 最初のPingインスタンスの状態を確認
-        let state = system.get_agent_state(&ping_instances[0]).await.unwrap();
-        assert_eq!(state.get("received_pong"), Some(&Value::Boolean(true)));
+        let state = system
+            .get_agent_state(&ping_instances[0], "received_pong")
+            .await
+            .unwrap();
+        assert_eq!(state, Value::Boolean(true).into());
     }
 }

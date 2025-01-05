@@ -1067,7 +1067,6 @@ mod tests {
     async fn test_parse_await_single() {
         let input = "await count = 0";
         let result = parse_await(input);
-        println!("{:?}", result);
         assert!(result.is_ok());
         let (_, await_statement) = result.unwrap();
 
@@ -1084,7 +1083,6 @@ mod tests {
                count2 = 1
            }";
         let result = parse_await_block(input);
-        println!("{:?}", result);
         assert!(result.is_ok());
         let (_, await_statement) = result.unwrap();
 
