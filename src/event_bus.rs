@@ -21,11 +21,25 @@ impl Event {
     }
 }
 
+// eum などを event_type string に変換する
+pub trait ToEventType {
+    fn to_event_type(&self) -> String;
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ErrorEvent {
     pub error_type: String,
     pub message: String,
+    pub severity: ErrorSeverity,
     pub parameters: HashMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum ErrorSeverity {
+    #[default]
+    Warning, // 通知のみ
+    Error,    // 処理中断
+    Critical, // システム停止
 }
 
 // 値の型
@@ -39,6 +53,12 @@ pub enum Value {
     Duration(Duration),
     Map(HashMap<String, Value>),
     Null,
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Self {
+        Value::String(value)
+    }
 }
 
 impl From<expression::Value> for Value {

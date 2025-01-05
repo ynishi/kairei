@@ -119,6 +119,7 @@ async fn test_error_handling() -> RuntimeResult<()> {
         Err(RuntimeError::Execution(ExecutionError::ASTNotFound(_)))
     ));
 
+    panic!("abc");
     Ok(())
 }
 
@@ -136,7 +137,6 @@ async fn test_request_response() -> RuntimeResult<()> {
         }
     "#;
     let test_ast = parse_micro_agent(test_agent_dsl).unwrap().1;
-    println!("{:?}", test_ast);
 
     system.register_agent_ast("Responder", &test_ast).await?;
 

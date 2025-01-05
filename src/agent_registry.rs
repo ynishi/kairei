@@ -6,7 +6,7 @@ use tokio::sync::broadcast;
 use tokio::time::timeout;
 
 use crate::eval::expression;
-use crate::event_bus::{ErrorEvent, Event, EventBus, LastStatus, Value};
+use crate::event_bus::{ErrorEvent, ErrorSeverity, Event, EventBus, LastStatus, Value};
 use crate::event_registry::EventType;
 use crate::runtime::RuntimeAgent;
 use crate::{ExecutionError, RuntimeError, RuntimeResult};
@@ -167,6 +167,7 @@ impl AgentRegistry {
                     .publish_error(ErrorEvent {
                         error_type: "AgentError".to_string(),
                         message: e.to_string(),
+                        severity: ErrorSeverity::Error,
                         parameters: {
                             let mut params = HashMap::new();
                             params.insert("agent_id".to_string(), Value::String(cloned_id));
@@ -306,8 +307,10 @@ mod tests {
     use std::{pin::Pin, sync::atomic::AtomicBool, time::Duration};
     use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
     use tokio_stream::{wrappers::BroadcastStream, StreamExt};
+    use tracing::debug;
 
     use crate::{
+        eval::expression,
         event_registry::{EventType, LifecycleEvent},
         runtime::StreamMessage,
     };
@@ -376,6 +379,12 @@ mod tests {
                 last_event_type: EventType::AgentStarted,
                 last_event_time: Utc::now(),
             }
+        }
+        async fn state(&self, _key: &str) -> Option<expression::Value> {
+            Some(expression::Value::Null)
+        }
+        async fn handle_runtime_error(&self, error: RuntimeError) {
+            debug!("{}", error.to_string());
         }
         async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()> {
             let (event_rx, _) = self.event_bus.subscribe();

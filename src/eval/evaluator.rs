@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::{event_registry::EventType, Expression, HandlerBlock, RuntimeError, RuntimeResult};
+use crate::{
+    event_registry::EventType, ExecutionError, Expression, HandlerBlock, RuntimeError,
+    RuntimeResult,
+};
 
 use super::{
     context::ExecutionContext,
@@ -35,27 +38,45 @@ impl Evaluator {
         context: Arc<ExecutionContext>,
         event: EventType,
     ) -> RuntimeResult<StatementResult> {
-        let res = self
+        let result = self
             .statement_evaluator
             .eval_block(&block.statements, context.clone())
-            .await?;
-        if let StatementResult::Control(ControlFlow::Return(value)) = res {
-            context.send_response(event, value).await.map_err(|e| {
-                RuntimeError::Execution(crate::ExecutionError::EvalError(format!(
-                    "Failed to send response: {}",
-                    e
-                )))
-            })?;
-        } else {
-            context
-                .send_response(event, Value::Unit)
-                .await
-                .map_err(|e| {
-                    RuntimeError::Execution(crate::ExecutionError::EvalError(format!(
+            .await;
+        match result {
+            Ok(StatementResult::Control(ControlFlow::Return(value))) => {
+                context.send_response(event, Ok(value)).await.map_err(|e| {
+                    RuntimeError::Execution(ExecutionError::EvalError(format!(
                         "Failed to send response: {}",
                         e
                     )))
                 })?;
+            }
+            Ok(StatementResult::Value(Value::Unit)) => {
+                context
+                    .send_response(event, Ok(Value::Unit))
+                    .await
+                    .map_err(|e| {
+                        RuntimeError::Execution(ExecutionError::EvalError(format!(
+                            "Failed to send response: {}",
+                            e
+                        )))
+                    })?;
+            }
+            Err(e) => {
+                context.send_response(event, Err(e)).await.map_err(|e| {
+                    RuntimeError::Execution(ExecutionError::EvalError(format!(
+                        "Failed to send response: {}",
+                        e
+                    )))
+                })?;
+            }
+            // その他の場合はエラーを返す
+            Ok(s) => {
+                return Err(RuntimeError::Execution(ExecutionError::EvalError(format!(
+                    "Unexpected statement result: {:?}",
+                    s
+                ))))
+            }
         }
         Ok(StatementResult::Value(Value::Unit))
     }
