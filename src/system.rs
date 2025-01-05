@@ -214,7 +214,7 @@ impl System {
         self.update_system_status(EventType::SystemStopping).await;
         let shutdown_sequence = AgentRegistry::agent_shutdown_sequence();
         let config = self.config.read().await;
-        let timeout = config.shutdown_timeout.clone();
+        let timeout = config.shutdown_timeout;
         drop(config);
         // シャットダウンシグナルを送信
         for agent_type in shutdown_sequence {
@@ -236,11 +236,11 @@ impl System {
                     break;
                 }
                 // shutdown 開始から 60 秒経過したら即終了する。
-                if self.check_shutdown_timeout(shutdown_started, timeout.clone()) {
+                if self.check_shutdown_timeout(shutdown_started, timeout) {
                     break;
                 }
             }
-            if self.check_shutdown_timeout(shutdown_started, timeout.clone()) {
+            if self.check_shutdown_timeout(shutdown_started, timeout) {
                 break;
             }
         }
