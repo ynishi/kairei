@@ -5,16 +5,19 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time::timeout;
 
+use crate::config::AgentConfig;
+use crate::eval::context::AgentType;
 use crate::eval::expression;
 use crate::event_bus::{ErrorEvent, ErrorSeverity, Event, EventBus, LastStatus, Value};
 use crate::event_registry::EventType;
 use crate::runtime::RuntimeAgent;
-use crate::{ExecutionError, RuntimeError, RuntimeResult};
+use crate::{ExecutionError, MicroAgentDef, RuntimeError, RuntimeResult};
 
 pub struct AgentRegistry {
     agents: Arc<DashMap<String, Arc<dyn RuntimeAgent>>>,
     running_agents: Arc<DashMap<String, tokio::task::JoinHandle<()>>>,
-    shutdown_tx: broadcast::Sender<()>, // Systemから渡される
+    shutdown_tx: broadcast::Sender<AgentType>, // Systemから渡される
+    config: AgentConfig,
 }
 
 impl Clone for AgentRegistry {
@@ -23,16 +26,18 @@ impl Clone for AgentRegistry {
             agents: self.agents.clone(),
             running_agents: self.running_agents.clone(),
             shutdown_tx: self.shutdown_tx.clone(),
+            config: self.config.clone(),
         }
     }
 }
 
 impl AgentRegistry {
-    pub fn new(shutdown_tx: &broadcast::Sender<()>) -> Self {
+    pub fn new(config: &AgentConfig, shutdown_tx: &broadcast::Sender<AgentType>) -> Self {
         Self {
             agents: Arc::new(DashMap::new()),
             running_agents: Arc::new(DashMap::new()),
             shutdown_tx: shutdown_tx.clone(), // Systemから渡される
+            config: config.clone(),
         }
     }
     pub async fn run(&self) -> RuntimeResult<()> {
@@ -290,12 +295,83 @@ impl AgentRegistry {
         }
     }
 
+    pub async fn agent_status_by_agent_type(&self, agent_type: &AgentType) -> Vec<LastStatus> {
+        let agent_names = self.agent_names_by_types(vec![agent_type.clone()]);
+        let mut res = vec![];
+        for agent_name in agent_names {
+            if let Some(status) = self.agent_status(&agent_name).await {
+                res.push(status);
+            }
+        }
+        res
+    }
+
     pub async fn agent_state(&self, id: &str, key: &str) -> Option<expression::Value> {
         if let Some(agent) = self.agents.get(id) {
             agent.value().state(key).await
         } else {
             None
         }
+    }
+
+    pub fn get_builtin_agent_names(&self) -> Vec<String> {
+        self.agent_names_by_types(AgentRegistry::builtin_agent_types())
+    }
+
+    pub fn agent_names_by_types(&self, agent_types: Vec<AgentType>) -> Vec<String> {
+        self.agents
+            .iter()
+            .filter(|entry| {
+                let entry_agent_type = entry.value().clone().agent_type();
+                agent_types
+                    .iter()
+                    .any(|agent_type| agent_type == &entry_agent_type)
+            })
+            .map(|entry| entry.key().clone())
+            .collect()
+    }
+
+    pub async fn get_builtin_agent_asts(&self) -> RuntimeResult<Vec<MicroAgentDef>> {
+        Ok(vec![])
+    }
+
+    pub fn builtin_agent_types() -> Vec<AgentType> {
+        vec![AgentType::ScaleManager, AgentType::Monitor]
+    }
+
+    pub fn get_enabled_builtin_agent_types(&self) -> Vec<AgentType> {
+        let scale_manager = self.config.scale_manager.clone();
+        let is_monitor_enabled = self.config.monitor.clone();
+        Self::builtin_agent_types()
+            .iter()
+            .filter(|b| match b {
+                AgentType::ScaleManager => {
+                    if let Some(config) = scale_manager.clone() {
+                        config.enabled
+                    } else {
+                        false
+                    }
+                }
+                AgentType::Monitor => {
+                    if let Some(config) = is_monitor_enabled.clone() {
+                        config.enabled
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    }
+
+    pub fn agent_shutdown_sequence() -> Vec<AgentType> {
+        vec![
+            AgentType::Custom("any".to_string()),
+            AgentType::ScaleManager,
+            AgentType::Monitor,
+            AgentType::World,
+        ]
     }
 }
 
@@ -310,7 +386,7 @@ mod tests {
     use tracing::debug;
 
     use crate::{
-        eval::expression,
+        eval::{context::AgentType, expression},
         event_registry::{EventType, LifecycleEvent},
         runtime::StreamMessage,
     };
@@ -374,6 +450,9 @@ mod tests {
         fn name(&self) -> String {
             self.name.clone()
         }
+        fn agent_type(&self) -> AgentType {
+            AgentType::Unknown
+        }
         async fn status(&self) -> LastStatus {
             LastStatus {
                 last_event_type: EventType::AgentStarted,
@@ -386,7 +465,7 @@ mod tests {
         async fn handle_runtime_error(&self, error: RuntimeError) {
             debug!("{}", error.to_string());
         }
-        async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()> {
+        async fn run(&self, shutdown_rx: broadcast::Receiver<AgentType>) -> RuntimeResult<()> {
             let (event_rx, _) = self.event_bus.subscribe();
             let private_shutdown_rx = self.private_shutdown_tx.subscribe();
 
@@ -469,7 +548,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_registration() {
-        let agent_registry = AgentRegistry::new(&broadcast::channel(1).0);
+        let agent_registry = AgentRegistry::new(&AgentConfig::default(), &broadcast::channel(1).0);
         let event_bus = Arc::new(EventBus::new(16));
         let collector = EventCollector::new(&event_bus);
 
@@ -504,7 +583,7 @@ mod tests {
         let event_bus = Arc::new(EventBus::new(16));
         let collector = EventCollector::new(&event_bus);
         let shutdown_tx = broadcast::channel(1);
-        let agent_registry = AgentRegistry::new(&shutdown_tx.0);
+        let agent_registry = AgentRegistry::new(&AgentConfig::default(), &shutdown_tx.0);
         let agent_registry_ref = Arc::new(agent_registry.clone());
         tokio::spawn(async move {
             agent_registry_ref.run().await.unwrap();
@@ -528,7 +607,7 @@ mod tests {
             .await
             .unwrap();
 
-        shutdown_tx.0.send(()).unwrap();
+        shutdown_tx.0.send(AgentType::World).unwrap();
 
         sleep(Duration::from_millis(100)).await;
 
@@ -544,7 +623,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_unregister_nonexistent_agent() {
-        let agent_registry = AgentRegistry::new(&broadcast::channel(1).0);
+        let agent_registry = AgentRegistry::new(&AgentConfig::default(), &broadcast::channel(1).0);
         let event_bus = Arc::new(EventBus::new(16));
         let result = agent_registry
             .unregister_agent("nonexistent", &event_bus)
@@ -561,7 +640,7 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_agents() {
         let shutdonw_tx = broadcast::channel(1);
-        let agent_registry = AgentRegistry::new(&shutdonw_tx.0);
+        let agent_registry = AgentRegistry::new(&AgentConfig::default(), &shutdonw_tx.0);
         let agent_registry_ref = Arc::new(agent_registry.clone());
         tokio::spawn(async move {
             agent_registry_ref.run().await.unwrap();
@@ -598,13 +677,13 @@ mod tests {
         assert_eq!(added_events, 3);
         assert_eq!(started_events, 3);
 
-        shutdonw_tx.0.send(()).unwrap();
+        shutdonw_tx.0.send(AgentType::World).unwrap();
     }
 
     #[test]
     async fn test_simple_agent() {
         let shutdown_tx = broadcast::channel(1);
-        let agent_registry = AgentRegistry::new(&shutdown_tx.0);
+        let agent_registry = AgentRegistry::new(&AgentConfig::default(), &shutdown_tx.0);
         let agent_registry_ref = Arc::new(agent_registry.clone());
         tokio::spawn(async move {
             agent_registry_ref.run().await.unwrap();
@@ -633,7 +712,7 @@ mod tests {
         // 非同期処理のテストなので、少し待機
         sleep(Duration::from_millis(100)).await;
 
-        shutdown_tx.0.send(()).unwrap();
+        shutdown_tx.0.send(AgentType::World).unwrap();
         sleep(Duration::from_millis(100)).await;
     }
 }

@@ -44,8 +44,8 @@ async fn test_concurrent_subscribers() {
 
     // 期待される総受信数: subscriber_count * event_count
     assert_eq!(
-        received_count.load(Ordering::SeqCst),
-        (subscriber_count * event_count).try_into().unwrap()
+        u64::try_from(received_count.load(Ordering::SeqCst)).unwrap(),
+        u64::try_from(subscriber_count * event_count).unwrap()
     );
 }
 

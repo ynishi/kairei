@@ -8,7 +8,7 @@ use std::{
 };
 use tokio::{
     sync::{broadcast, oneshot, RwLock},
-    time::timeout,
+    time::{sleep, timeout},
 };
 use tracing::debug;
 use uuid::Uuid;
@@ -16,11 +16,13 @@ use uuid::Uuid;
 use crate::{
     agent_registry::AgentRegistry,
     ast_registry::AstRegistry,
-    eval::expression,
+    config::{AgentConfig, SystemConfig},
+    eval::{context::AgentType, expression},
     event_bus::{Event, EventBus, EventReceiver, LastStatus, Value},
     event_registry::{EventInfo, EventRegistry, EventType, ParameterType},
     runtime::RuntimeAgentData,
-    EventError, ExecutionError, MicroAgentDef, RuntimeError, RuntimeResult,
+    CustomEventDef, EventError, EventsDef, ExecutionError, MicroAgentDef, RuntimeError,
+    RuntimeResult, WorldDef,
 };
 
 type AgentName = String;
@@ -30,8 +32,8 @@ pub struct System {
     event_bus: Arc<EventBus>,
     agent_registry: Arc<RwLock<AgentRegistry>>,
     ast_registry: Arc<RwLock<AstRegistry>>,
-    shutdown_tx: broadcast::Sender<()>, // Systemがシャットダウンシグナルを送信
-    _shutdown_rx: broadcast::Receiver<()>, // シャットダウンシグナルを受信
+    shutdown_tx: broadcast::Sender<AgentType>, // Systemがシャットダウンシグナルを送信
+    _shutdown_rx: broadcast::Receiver<AgentType>, // シャットダウンシグナルを受信
     // event request/response
     pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
     filtered_subscriptions: Arc<DashMap<Vec<EventType>, broadcast::Sender<Event>>>, // Vec<EventType>は Sorted　である必要がある
@@ -39,15 +41,20 @@ pub struct System {
     started_at: DateTime<Utc>,
     uptime_instant: Instant,
     last_status: Arc<RwLock<LastStatus>>,
+    config: Arc<RwLock<SystemConfig>>,
 }
 
 impl System {
     // System Lifecycles
-    pub async fn new(capacity: usize) -> Self {
-        let (shutdown_tx, _) = broadcast::channel(1); // 容量は1で十分
+    pub async fn new(config: &SystemConfig) -> Self {
+        let capacity = config.event_buffer_size;
+        let (shutdown_tx, _) = broadcast::channel::<AgentType>(1); // 容量は1で十分
         let event_registry = Arc::new(RwLock::new(EventRegistry::new()));
         let event_bus = Arc::new(EventBus::new(capacity));
-        let agent_registry = Arc::new(tokio::sync::RwLock::new(AgentRegistry::new(&shutdown_tx)));
+        let agent_registry = Arc::new(tokio::sync::RwLock::new(AgentRegistry::new(
+            &config.agent_config,
+            &shutdown_tx,
+        )));
         let ast_registry = Arc::new(RwLock::new(AstRegistry::default()));
         let _shutdown_rx = shutdown_tx.subscribe();
         let pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>> =
@@ -77,8 +84,8 @@ impl System {
         let uptime_instant = Instant::now();
 
         let last_status = Arc::new(RwLock::new(LastStatus {
-            last_event_type: EventType::SystemStarted,
-            last_event_time: started_at,
+            last_event_type: EventType::SystemCreated,
+            last_event_time: Utc::now(),
         }));
 
         Self {
@@ -93,44 +100,164 @@ impl System {
             started_at,
             uptime_instant,
             last_status,
+            config: Arc::new(RwLock::new(config.clone())),
         }
     }
 
-    // システムの初期化処理(builtin agent, eventの登録)
-    pub async fn setup_builtin(&self) -> RuntimeResult<()> {
-        todo!()
+    pub async fn register_world(&self, world_def: WorldDef) -> RuntimeResult<()> {
+        Self::check_start_transition(
+            self.last_status.read().await.last_event_type.clone(),
+            EventType::SystemWorldRegistered,
+        )?;
+
+        let (agent_def, event_defs): (MicroAgentDef, EventsDef) = world_def.into();
+        let name = AgentType::World.to_string();
+        self.register_agent_ast(&name, &agent_def).await?;
+        self.register_agent(&name).await?;
+
+        for event_def in event_defs.events {
+            self.register_event_ast(event_def).await?;
+        }
+
+        self.update_system_status(EventType::SystemWorldRegistered)
+            .await;
+        Ok(())
+    }
+
+    // ビルトインエージェントの登録処理
+    pub async fn register_builtin_agents(&self) -> RuntimeResult<()> {
+        Self::check_start_transition(
+            self.last_status.read().await.last_event_type.clone(),
+            EventType::SystemBuiltinAgentsRegistered,
+        )?;
+        let registry = self.agent_registry().read().await;
+        let builtin_defs = registry.get_builtin_agent_asts().await?;
+
+        for builtin in builtin_defs {
+            self.register_agent_ast(&builtin.name, &builtin).await?;
+            self.register_agent(&builtin.name).await?;
+        }
+
+        self.update_system_status(EventType::SystemBuiltinAgentsRegistered)
+            .await;
+        Ok(())
+    }
+
+    pub async fn register_initial_user_agents(
+        &self,
+        agent_asts: Vec<MicroAgentDef>,
+    ) -> RuntimeResult<()> {
+        Self::check_start_transition(
+            self.last_status.read().await.last_event_type.clone(),
+            EventType::SystemUserAgentsRegistered,
+        )?;
+
+        for agent_ast in agent_asts {
+            self.register_agent_ast(&agent_ast.name, &agent_ast).await?;
+            self.register_agent(&agent_ast.name).await?;
+        }
+        self.update_system_status(EventType::SystemUserAgentsRegistered)
+            .await;
+        Ok(())
     }
 
     pub async fn start(&self) -> RuntimeResult<()> {
-        let agent_names = {
-            let registry = self.agent_registry.read().await;
-            registry.agent_names().clone()
-        };
+        Self::check_start_transition(
+            self.last_status.read().await.last_event_type.clone(),
+            EventType::SystemStarting,
+        )?;
+        self.update_system_status(EventType::SystemStarting).await;
+
+        self.start_world().await?;
+        self.start_builtin_agents().await?;
+        self.start_users_agents().await?;
+
+        self.update_system_status(EventType::SystemStarted).await;
+        Ok(())
+    }
+
+    async fn start_world(&self) -> RuntimeResult<()> {
+        self.start_agent(&AgentType::World.to_string()).await?;
+        Ok(())
+    }
+
+    async fn start_builtin_agents(&self) -> RuntimeResult<()> {
+        let registry = self.agent_registry().read().await;
+        let agent_names = registry
+            .get_enabled_builtin_agent_types()
+            .iter()
+            .map(|e| e.clone().to_string())
+            .collect::<Vec<String>>();
+        drop(registry);
 
         for agent_name in agent_names {
-            let registry = self.agent_registry.write().await;
-            registry
-                .run_agent(&agent_name, self.event_bus.clone())
-                .await?;
+            self.start_agent(&agent_name).await?;
         }
+        Ok(())
+    }
+
+    async fn start_users_agents(&self) -> RuntimeResult<()> {
+        let registry = self.agent_registry().read().await;
+        let agent_names =
+            registry.agent_names_by_types(vec![AgentType::Custom("user".to_string())]);
+        drop(registry);
+
+        for agent_name in agent_names {
+            self.start_agent(&agent_name).await?;
+        }
+
         Ok(())
     }
 
     pub async fn shutdown(&self) -> RuntimeResult<()> {
+        let shutdown_started = Instant::now();
         self.update_system_status(EventType::SystemStopping).await;
+        let shutdown_sequence = AgentRegistry::agent_shutdown_sequence();
+        let config = self.config.read().await;
+        let timeout = config.shutdown_timeout.clone();
+        drop(config);
         // シャットダウンシグナルを送信
-        self.shutdown_tx
-            .send(())
-            .expect("Failed to send shutdown signal");
+        for agent_type in shutdown_sequence {
+            self.shutdown_tx
+                .send(agent_type.clone())
+                .expect("Failed to send shutdown signal");
+            loop {
+                sleep(Duration::from_secs(10)).await;
+                let registry = self.agent_registry.read().await;
+                let status = registry.agent_status_by_agent_type(&agent_type).await;
+                let not_stopped = status
+                    .iter()
+                    .filter(|e| {
+                        e.last_event_type != EventType::AgentStopped
+                            || e.last_event_type != EventType::AgentRemoved
+                    })
+                    .count();
+                if not_stopped == 0 {
+                    break;
+                }
+                // shutdown 開始から 60 秒経過したら即終了する。
+                if self.check_shutdown_timeout(shutdown_started, timeout.clone()) {
+                    break;
+                }
+            }
+            if self.check_shutdown_timeout(shutdown_started, timeout.clone()) {
+                break;
+            }
+        }
+
         // TODO: シャットダウン処理完了を受けて、システムを停止する
-        self.update_system_status(EventType::SystemStopping).await;
+        self.update_system_status(EventType::SystemStopped).await;
         Ok(())
+    }
+
+    fn check_shutdown_timeout(&self, shutdown_started: Instant, timeout: Duration) -> bool {
+        shutdown_started.elapsed() > timeout
     }
 
     pub async fn emergency_shutdown(&self) -> RuntimeResult<()> {
         // シャットダウンシグナルを送信
         self.shutdown_tx
-            .send(())
+            .send(AgentType::World)
             .expect("Failed to send shutdown signal");
         self.agent_registry.write().await.shutdown_all(1).await?;
         Ok(())
@@ -161,13 +288,15 @@ impl System {
         Ok(self.ast_registry.read().await.list_agent_asts().await)
     }
 
-    pub async fn register_event_ast(
-        &self,
-        name: &str,
-        parameters: HashMap<String, ParameterType>,
-    ) -> RuntimeResult<()> {
+    pub async fn register_event_ast(&self, event_def: CustomEventDef) -> RuntimeResult<()> {
+        let name = event_def.name.to_string();
+        let parameters: HashMap<String, ParameterType> = event_def
+            .parameters
+            .iter()
+            .map(|p| (p.name.clone(), ParameterType::from(p.type_info.clone())))
+            .collect();
         let mut registry = self.event_registry.write().await;
-        registry.register_custom_event(name.to_string(), parameters)
+        registry.register_custom_event(name, parameters)
     }
 
     pub async fn get_event(&self, name: &str) -> RuntimeResult<EventInfo> {
@@ -203,7 +332,10 @@ impl System {
             let agent_name = format!("{}-{}-{}", name, request_id, i);
             let agent_def = ast_def.clone();
 
-            let agent_data = Arc::new(RuntimeAgentData::new(&agent_def, &self.event_bus()).await?);
+            let agent_data = Arc::new(
+                RuntimeAgentData::new(&agent_def, &self.event_bus(), AgentConfig::default())
+                    .await?,
+            );
 
             let registry = self.agent_registry.write().await;
             registry
@@ -286,7 +418,9 @@ impl System {
         let ast_registry = self.ast_registry.read().await;
         let agent_def = ast_registry.get_agent_ast(agent_name).await?;
         drop(ast_registry);
-        let runtime = Arc::new(RuntimeAgentData::new(&agent_def, &self.event_bus).await?);
+        let runtime = Arc::new(
+            RuntimeAgentData::new(&agent_def, &self.event_bus, AgentConfig::default()).await?,
+        );
         let agent_registry = self.agent_registry.write().await;
         agent_registry
             .register_agent(agent_name, runtime, &self.event_bus)
@@ -455,6 +589,30 @@ impl System {
     pub fn agent_registry(&self) -> &Arc<RwLock<AgentRegistry>> {
         &self.agent_registry
     }
+
+    fn check_start_transition(currnt: EventType, next: EventType) -> RuntimeResult<()> {
+        let err = Err(RuntimeError::Execution(ExecutionError::InvalidOperation(
+            format!(
+                "Invalid System State Transition: Current: {}, Next: {}",
+                currnt, next
+            ),
+        )));
+        match (currnt.clone(), next.clone()) {
+            (EventType::SystemCreated, EventType::SystemWorldRegistered) => Ok(()),
+            (_, EventType::SystemWorldRegistered) => err,
+            (EventType::SystemWorldRegistered, EventType::SystemBuiltinAgentsRegistered) => Ok(()),
+            (_, EventType::SystemBuiltinAgentsRegistered) => err,
+            (EventType::SystemBuiltinAgentsRegistered, EventType::SystemUserAgentsRegistered) => {
+                Ok(())
+            }
+            (_, EventType::SystemUserAgentsRegistered) => err,
+            (EventType::SystemUserAgentsRegistered, EventType::SystemStarting) => Ok(()),
+            (_, EventType::SystemStarting) => err,
+            (EventType::SystemStarting, EventType::SystemStarted) => Ok(()),
+            (_, EventType::SystemStarted) => err,
+            _ => err,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -490,10 +648,8 @@ mod tests {
     use std::time::Duration;
 
     use crate::{
-        ast, event_bus,
-        event_registry::{self, EventType},
-        AnswerDef, EventHandler, Expression, HandlerBlock, Literal, ObserveDef, ReactDef,
-        RequestHandler, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
+        ast, event_registry::EventType, AnswerDef, EventHandler, Expression, HandlerBlock, Literal,
+        ReactDef, RequestHandler, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
     };
 
     use super::*;
@@ -501,12 +657,12 @@ mod tests {
 
     #[test]
     async fn test_system_creation() {
-        System::new(1000).await;
+        System::new(&SystemConfig::default()).await;
     }
 
     #[test]
     async fn test_system_shutdown() {
-        let system = System::new(1000).await;
+        let system = System::new(&SystemConfig::default()).await;
         let result = system.shutdown().await;
         sleep(Duration::from_secs(1)).await;
         assert!(result.is_ok());
@@ -514,7 +670,7 @@ mod tests {
 
     #[test]
     async fn test_system_emergency_shutdown() {
-        let system = System::new(1000).await;
+        let system = System::new(&SystemConfig::default()).await;
         let result = system.emergency_shutdown().await;
         sleep(Duration::from_secs(1)).await;
         assert!(result.is_ok());
@@ -587,7 +743,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_system_integration() {
-        let system = System::new(20).await;
+        let system = System::new(&SystemConfig::default()).await;
 
         // Ping-Pong AgentのAST作成
         let (ping_ast, pong_ast) = create_ping_pong_asts();
@@ -616,7 +772,7 @@ mod tests {
             .unwrap();
 
         // 結果の確認（適切な待機時間を入れる）
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
         // 最初のPingインスタンスの状態を確認
         let state = system

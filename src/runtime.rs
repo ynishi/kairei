@@ -10,7 +10,8 @@ use tokio::sync::{broadcast, RwLock};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tracing::debug;
 
-use crate::eval::context::{AgentInfo, ExecutionContext, StateAccessMode};
+use crate::config::AgentConfig;
+use crate::eval::context::{AgentInfo, AgentType, ExecutionContext, StateAccessMode};
 use crate::eval::evaluator::Evaluator;
 use crate::eval::expression;
 use crate::event_bus::{ErrorEvent, Event, EventBus, LastStatus, Value};
@@ -30,9 +31,10 @@ type LifecycleHandler = Box<dyn Fn() -> BoxFuture<'static, RuntimeResult<()>> + 
 #[async_trait]
 pub trait RuntimeAgent: Send + Sync {
     fn name(&self) -> String;
+    fn agent_type(&self) -> AgentType;
     async fn status(&self) -> LastStatus;
     async fn state(&self, key: &str) -> Option<expression::Value>;
-    async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()>;
+    async fn run(&self, shutdown_rx: broadcast::Receiver<AgentType>) -> RuntimeResult<()>;
     async fn shutdown(&self) -> RuntimeResult<()> {
         // simply cleanup
         if let Err(e) = self.cleanup().await {
@@ -80,6 +82,9 @@ impl RuntimeAgent for RuntimeAgentData {
     fn name(&self) -> String {
         self.name.clone()
     }
+    fn agent_type(&self) -> AgentType {
+        self.base_context.agent_info().agent_type.clone()
+    }
     async fn status(&self) -> LastStatus {
         self.last_status.read().await.clone()
     }
@@ -87,7 +92,7 @@ impl RuntimeAgent for RuntimeAgentData {
     async fn state(&self, key: &str) -> Option<expression::Value> {
         self.base_context.get_state(key).await.ok()
     }
-    async fn run(&self, shutdown_rx: broadcast::Receiver<()>) -> RuntimeResult<()> {
+    async fn run(&self, shutdown_rx: broadcast::Receiver<AgentType>) -> RuntimeResult<()> {
         self.update_last_status(EventType::AgentStarting).await?;
 
         // state blockを評価して初期値を設定
@@ -271,10 +276,15 @@ impl RuntimeAgent for RuntimeAgentData {
 }
 
 impl RuntimeAgentData {
-    pub async fn new(agent_def: &MicroAgentDef, event_bus: &Arc<EventBus>) -> RuntimeResult<Self> {
+    pub async fn new(
+        agent_def: &MicroAgentDef,
+        event_bus: &Arc<EventBus>,
+        config: AgentConfig,
+    ) -> RuntimeResult<Self> {
+        let agent_name = agent_def.name.clone();
         let agent_info = AgentInfo {
-            agent_name: agent_def.name.clone(),
-            agent_type: "".to_string(),
+            agent_name: agent_name.clone(),
+            agent_type: AgentType::Custom(agent_name),
             created_at: Utc::now(),
         };
 
@@ -284,6 +294,7 @@ impl RuntimeAgentData {
             event_bus.clone(),
             agent_info,
             StateAccessMode::ReadWrite,
+            config.context,
         ));
 
         let last_status = RwLock::new(LastStatus {
@@ -565,6 +576,10 @@ impl RuntimeAgentData {
             | EventType::AgentStarted
             | EventType::AgentStopping
             | EventType::AgentStopped
+            | EventType::SystemCreated
+            | EventType::SystemWorldRegistered
+            | EventType::SystemBuiltinAgentsRegistered
+            | EventType::SystemUserAgentsRegistered
             | EventType::SystemStarting
             | EventType::SystemStarted
             | EventType::SystemStopping
@@ -679,7 +694,7 @@ mod tests {
         };
 
         // RuntimeAgentを生成
-        let agent = RuntimeAgentData::new(&counter_def, &event_bus)
+        let agent = RuntimeAgentData::new(&counter_def, &event_bus, AgentConfig::default())
             .await
             .unwrap();
         let context = agent.base_context.clone();
@@ -715,7 +730,7 @@ mod tests {
     }
 
     struct TestAgent {
-        pub name: String,
+        pub _name: String,
         pub responses: Arc<Mutex<Vec<Event>>>,
     }
 
@@ -731,7 +746,7 @@ mod tests {
                 }
             });
             Self {
-                name: name.to_string(),
+                _name: name.to_string(),
                 responses,
             }
         }
@@ -811,7 +826,7 @@ mod tests {
             ..Default::default()
         };
 
-        let agent = RuntimeAgentData::new(&answer_def, &event_bus)
+        let agent = RuntimeAgentData::new(&answer_def, &event_bus, AgentConfig::default())
             .await
             .unwrap();
         let context = agent.base_context.clone();
@@ -913,7 +928,9 @@ mod tests {
             ..Default::default()
         };
 
-        let agent = RuntimeAgentData::new(&react_def, &event_bus).await.unwrap();
+        let agent = RuntimeAgentData::new(&react_def, &event_bus, AgentConfig::default())
+            .await
+            .unwrap();
         let context = agent.base_context.clone();
         let shutdown_rx = broadcast::channel(1).1;
 
