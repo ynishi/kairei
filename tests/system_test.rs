@@ -1,6 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use kairei::{
+    config::SystemConfig,
     error::RuntimeError,
     event_bus::{Event, Value},
     event_registry::EventType,
@@ -14,7 +15,7 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_system_lifecycle() -> RuntimeResult<()> {
     // システムの初期化
-    let system = System::new(100).await;
+    let system = System::new(&SystemConfig::default()).await;
 
     let agent_name = "test-agent";
 
@@ -72,7 +73,7 @@ async fn test_system_lifecycle() -> RuntimeResult<()> {
 
 #[tokio::test]
 async fn test_event_handling() -> RuntimeResult<()> {
-    let system = System::new(100).await;
+    let system = System::new(&SystemConfig::default()).await;
 
     // イベント送受信のテスト
     let test_event = Event {
@@ -101,7 +102,7 @@ async fn test_event_handling() -> RuntimeResult<()> {
 
 #[tokio::test]
 async fn test_error_handling() -> RuntimeResult<()> {
-    let system = System::new(100).await;
+    let system = System::new(&SystemConfig::default()).await;
 
     // 存在しないエージェントへのアクセス
     let result = system.get_agent_status("non-existent").await;
@@ -123,7 +124,7 @@ async fn test_error_handling() -> RuntimeResult<()> {
 
 #[tokio::test]
 async fn test_request_response() -> RuntimeResult<()> {
-    let system = System::new(100).await;
+    let system = System::new(&SystemConfig::default()).await;
 
     let test_agent_dsl = r#"
         micro Responder {

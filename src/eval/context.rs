@@ -8,13 +8,12 @@ use dashmap::DashMap;
 use tokio::sync::{oneshot, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use tracing::{debug, warn};
 
+use crate::config::ContextConfig;
 use crate::event_bus::{self, Event, EventBus, ToEventType};
 use crate::event_registry::EventType;
 use crate::{EventError, RuntimeError, StateError};
 
 use super::expression::Value;
-
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct SafeRwLock<T> {
     inner: RwLock<T>,
@@ -108,8 +107,42 @@ pub struct ExecutionContext {
 #[derive(Clone, Debug, Default)]
 pub struct AgentInfo {
     pub agent_name: String,
-    pub agent_type: String,
+    pub agent_type: AgentType,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum AgentType {
+    World,
+    ScaleManager,
+    Monitor,
+    Custom(String),
+    #[default]
+    Unknown,
+}
+
+impl AgentType {
+    pub fn same(&self, target: AgentType) -> bool {
+        match self {
+            AgentType::World
+            | AgentType::ScaleManager
+            | AgentType::Monitor
+            | AgentType::Unknown => self == &target,
+            AgentType::Custom(..) => matches!(target, AgentType::Custom(..)),
+        }
+    }
+}
+
+impl std::fmt::Display for AgentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::World => write!(f, "World"),
+            Self::ScaleManager => write!(f, "ScaleManager"),
+            Self::Monitor => write!(f, "Monitor"),
+            Self::Custom(name) => write!(f, "{}", name),
+            Self::Unknown => write!(f, "Unknown"),
+        }
+    }
 }
 
 type ParentScopes = Vec<Arc<DashMap<String, Arc<SafeRwLock<Value>>>>>;
@@ -208,7 +241,7 @@ impl ExecutionContext {
     pub async fn get_variable(&self, name: &str) -> Result<Value, ContextError> {
         // 現在のスコープをまず確認
         if let Some(value) = self.current_scope.get(name) {
-            return match value.read_with_timeout(DEFAULT_TIMEOUT).await {
+            return match value.read_with_timeout(self.timeout).await {
                 Ok(guard) => Ok(guard.clone()),
                 Err(LockError::Timeout) => Err(ContextError::LockTimeout(name.to_string())),
                 Err(LockError::Deadlock) => Err(ContextError::Deadlock(name.to_string())),
@@ -218,7 +251,7 @@ impl ExecutionContext {
         // 親スコープを順に確認
         for scope in self.shared.parent_scopes.iter().rev() {
             if let Some(value) = scope.get(name) {
-                return match value.read_with_timeout(DEFAULT_TIMEOUT).await {
+                return match value.read_with_timeout(self.timeout).await {
                     Ok(guard) => Ok(guard.clone()),
                     Err(LockError::Timeout) => Err(ContextError::LockTimeout(name.to_string())),
                     Err(LockError::Deadlock) => Err(ContextError::Deadlock(name.to_string())),
@@ -228,7 +261,7 @@ impl ExecutionContext {
 
         // 最後にグローバル状態を確認
         if let Some(value) = self.shared.state.get(name) {
-            return match value.read_with_timeout(DEFAULT_TIMEOUT).await {
+            return match value.read_with_timeout(self.timeout).await {
                 Ok(guard) => Ok(guard.clone()),
                 Err(LockError::Timeout) => Err(ContextError::LockTimeout(name.to_string())),
                 Err(LockError::Deadlock) => Err(ContextError::Deadlock(name.to_string())),
@@ -255,7 +288,7 @@ impl ExecutionContext {
     /// 状態変数の読み取り
     pub async fn get_state(&self, name: &str) -> Result<Value, ContextError> {
         if let Some(value) = self.shared.state.get(name) {
-            match value.read_with_timeout(DEFAULT_TIMEOUT).await {
+            match value.read_with_timeout(self.timeout).await {
                 Ok(guard) => Ok(guard.clone()),
                 Err(LockError::Timeout) => Err(ContextError::LockTimeout(name.to_string())),
                 Err(LockError::Deadlock) => Err(ContextError::Deadlock(name.to_string())),
@@ -287,7 +320,7 @@ impl ExecutionContext {
             StateAccessMode::ReadOnly => Err(ContextError::ReadOnlyViolation),
             StateAccessMode::ReadWrite => {
                 if let Some(value) = self.shared.state.get(name) {
-                    match value.write_with_timeout(DEFAULT_TIMEOUT).await {
+                    match value.write_with_timeout(self.timeout).await {
                         Ok(mut guard) => {
                             if f(&mut guard).is_ok() {
                                 drop(guard);
@@ -349,6 +382,7 @@ impl ExecutionContext {
         event_bus: Arc<EventBus>,
         agent_info: AgentInfo,
         access_mode: StateAccessMode,
+        config: ContextConfig,
     ) -> Self {
         let name = agent_info.agent_name.clone();
         let (mut event_rx, _) = event_bus.subscribe();
@@ -362,7 +396,7 @@ impl ExecutionContext {
             },
             current_scope: DashMap::new(),
             access_mode,
-            timeout: DEFAULT_TIMEOUT,
+            timeout: config.access_timeout,
         };
         let self_ref = new_self.clone();
         tokio::spawn(async move {
@@ -611,12 +645,22 @@ mod tests {
 
     async fn setup_readwrite_test_context() -> ExecutionContext {
         let event_bus = Arc::new(EventBus::new(10));
-        ExecutionContext::new(event_bus, AgentInfo::default(), StateAccessMode::ReadWrite)
+        ExecutionContext::new(
+            event_bus,
+            AgentInfo::default(),
+            StateAccessMode::ReadWrite,
+            ContextConfig::default(),
+        )
     }
 
     async fn setup_readonly_context() -> ExecutionContext {
         let event_bus = Arc::new(EventBus::new(10));
-        ExecutionContext::new(event_bus, AgentInfo::default(), StateAccessMode::ReadOnly)
+        ExecutionContext::new(
+            event_bus,
+            AgentInfo::default(),
+            StateAccessMode::ReadOnly,
+            ContextConfig::default(),
+        )
     }
 
     #[tokio::test]

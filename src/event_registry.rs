@@ -1,6 +1,6 @@
-use crate::{ast, EventError, RuntimeError, RuntimeResult};
+use crate::{ast, EventError, RuntimeError, RuntimeResult, TypeInfo};
 use dashmap::DashMap;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 /// イベントのメタデータ
 #[derive(Clone, Debug)]
@@ -55,6 +55,10 @@ pub enum EventType {
     AgentStopping,
     AgentStopped,
     // SystemLifecycle
+    SystemCreated,
+    SystemWorldRegistered,
+    SystemBuiltinAgentsRegistered,
+    SystemUserAgentsRegistered,
     SystemStarting,
     SystemStarted,
     SystemStopping,
@@ -128,6 +132,10 @@ impl std::fmt::Display for EventType {
             EventType::AgentStarted => write!(f, "AgentStarted"),
             EventType::AgentStopping => write!(f, "AgentStopping"),
             EventType::AgentStopped => write!(f, "AgentStopped"),
+            EventType::SystemCreated => write!(f, "SystemCreated"),
+            EventType::SystemWorldRegistered => write!(f, "SystemWorldRegistered"),
+            EventType::SystemBuiltinAgentsRegistered => write!(f, "SystemBuiltinAgentsRegistered"),
+            EventType::SystemUserAgentsRegistered => write!(f, "SystemUserAgentsRegistered"),
             EventType::SystemStarting => write!(f, "SystemStarting"),
             EventType::SystemStarted => write!(f, "SystemStarted"),
             EventType::SystemStopping => write!(f, "SystemStopping"),
@@ -165,8 +173,9 @@ pub enum LifecycleEvent {
 }
 
 /// イベントパラメータの型情報
-#[derive(Clone, Debug, PartialEq, strum::Display)]
+#[derive(Clone, Debug, PartialEq, strum::EnumString, strum::Display, Default)]
 pub enum ParameterType {
+    #[default]
     String,
     Int,
     Float,
@@ -177,6 +186,16 @@ pub enum ParameterType {
     Custom(String), // カスタム型
     List(Box<ParameterType>),
     Map(Box<ParameterType>, Box<ParameterType>),
+}
+
+impl From<TypeInfo> for ParameterType {
+    fn from(type_info: TypeInfo) -> Self {
+        match type_info {
+            TypeInfo::Simple(s) => ParameterType::from_str(s.as_str()).unwrap(),
+            TypeInfo::Custom { name, .. } => ParameterType::from_str(name.as_str()).unwrap(),
+            _ => todo!(),
+        }
+    }
 }
 
 /// イベントレジストリ

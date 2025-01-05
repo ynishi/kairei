@@ -375,6 +375,7 @@ mod tests {
     use event_bus::EventBus;
 
     use crate::{
+        config::ContextConfig,
         eval::context::{AgentInfo, StateAccessMode},
         BinaryOperator, Literal,
     };
@@ -389,6 +390,7 @@ mod tests {
             Arc::new(EventBus::new(16)),
             AgentInfo::default(),
             StateAccessMode::ReadWrite,
+            ContextConfig::default(),
         ))
     }
 
