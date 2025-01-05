@@ -147,6 +147,7 @@ pub enum ContextError {
     NoParentScope,
     EventSendFailed(String),
     StateNotFound(String),
+    Failure(String),
 }
 
 impl ToEventType for ContextError {
@@ -162,6 +163,7 @@ impl ToEventType for ContextError {
             ContextError::NoParentScope => "NoParentScope".to_string(),
             ContextError::EventSendFailed(_) => "EventSendFailed".to_string(),
             ContextError::StateNotFound(_) => "StateNotFound".to_string(),
+            ContextError::Failure(_) => "Failure".to_string(),
         }
     }
 }

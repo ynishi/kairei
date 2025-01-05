@@ -6,7 +6,7 @@ use crate::{
 };
 
 use super::{
-    context::ExecutionContext,
+    context::{ContextError, ExecutionContext},
     expression::Value,
     statement::{ControlFlow, StatementEvaluator, StatementResult},
 };
@@ -27,9 +27,22 @@ impl Evaluator {
         block: &HandlerBlock,
         context: Arc<ExecutionContext>,
     ) -> RuntimeResult<StatementResult> {
-        self.statement_evaluator
-            .eval_block(&block.statements, context)
-            .await
+        let result = self
+            .statement_evaluator
+            .eval_block(&block.statements, context.clone())
+            .await;
+        let res = match result {
+            Ok(StatementResult::Value(Value::Error(e))) => Err(ContextError::Failure(e)),
+            Err(e) => Err(ContextError::Failure(e.to_string())),
+            Ok(s) => Ok(s),
+        };
+        match res {
+            Ok(s) => Ok(s),
+            Err(e) => {
+                let _ = context.emit_failure(e).await;
+                Ok(StatementResult::Value(Value::Unit))
+            }
+        }
     }
 
     pub async fn eval_answer_handler_block(
