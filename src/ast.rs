@@ -215,6 +215,13 @@ pub struct HandlerBlock {
 
 type Statements = Vec<Statement>;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ErrorHandlerBlock {
+    // Error variable name to be bound in the handler scope
+    pub error_binding: Option<String>,
+    pub error_handler_statements: Statements,
+}
+
 // 文
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
@@ -240,12 +247,30 @@ pub enum Statement {
     // grouping
     Block(Statements),
     Await(AwaitType),
+    WithError {
+        statement: Box<Statement>,
+        error_handler_block: ErrorHandlerBlock,
+    },
     // control flow
     If {
         condition: Expression,
         then_block: Statements,
         else_block: Option<Statements>,
     },
+}
+
+// Extension trait for Statement building
+pub trait StatementExt {
+    fn on_fail(self, handler: ErrorHandlerBlock) -> Statement;
+}
+
+impl StatementExt for Statement {
+    fn on_fail(self, error_handler_block: ErrorHandlerBlock) -> Statement {
+        Statement::WithError {
+            statement: Box::new(self),
+            error_handler_block,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -555,5 +580,46 @@ mod tests {
         // イベント定義の検証
         assert_eq!(events.events.len(), 1);
         assert_eq!(events.events[0].name, "TestEvent");
+    }
+
+    #[test]
+    fn test_statement_error_handler() {
+        let emit_stmt = Statement::Emit {
+            event_type: EventType::Custom("TestEvent".into()),
+            parameters: vec![],
+            target: None,
+        };
+
+        let handler = ErrorHandlerBlock {
+            error_binding: None,
+            error_handler_statements: vec![Statement::Emit {
+                event_type: EventType::Custom("TestEvent".into()),
+                parameters: vec![],
+                target: None,
+            }],
+        };
+
+        let with_handler = emit_stmt.on_fail(handler);
+
+        match with_handler {
+            Statement::WithError {
+                statement,
+                error_handler_block,
+            } => {
+                assert!(matches!(*statement, Statement::Emit { .. }));
+                assert!(error_handler_block.error_binding.is_none());
+            }
+            _ => panic!("Expected WithErrorHandler variant"),
+        }
+    }
+
+    #[test]
+    fn test_error_handler_with_binding() {
+        let handler = ErrorHandlerBlock {
+            error_binding: Some("err".to_string()),
+            error_handler_statements: vec![],
+        };
+
+        assert_eq!(handler.error_binding.unwrap(), "err");
     }
 }

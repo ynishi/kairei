@@ -118,8 +118,6 @@ async fn test_error_handling() -> RuntimeResult<()> {
         result,
         Err(RuntimeError::Execution(ExecutionError::ASTNotFound(_)))
     ));
-
-    panic!("abc");
     Ok(())
 }
 

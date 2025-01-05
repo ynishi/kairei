@@ -287,6 +287,13 @@ impl CodeGen for Statement {
                     return #expr_tokens;
                 }
             }
+            // TODO: error handling not supported
+            Statement::WithError { statement, .. } => {
+                let statement = statement.generate_rust();
+                quote! {
+                    #statement;
+                }
+            }
         }
     }
 }
