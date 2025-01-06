@@ -49,6 +49,10 @@ pub trait NativeFeature: Send + Sync {
     async fn init(&self) -> RuntimeResult<()> {
         Ok(())
     }
+    /// Start is the method to begin the main processing.
+    /// This method must be non-blocking to ensure concurrent access after startup from the registry.
+    /// When the main processing is completed, a FeatureStatusUpdated event must be emitted to notify the new status.
+    /// Implement stop functionality by monitoring internal async variables or similar mechanisms to handle shutdown when stop is called.
     async fn start(&self) -> RuntimeResult<()>;
     async fn stop(&self) -> RuntimeResult<()>;
 

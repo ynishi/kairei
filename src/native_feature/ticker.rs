@@ -21,6 +21,7 @@ use tracing::debug;
 use super::types::{NativeFeature, NativeFeatureContext, NativeFeatureStatus, NativeFeatureType};
 
 // Tickerの実装
+#[derive(Clone)]
 pub struct Ticker {
     pub context: Arc<NativeFeatureContext>,
     pub status: Arc<RwLock<NativeFeatureStatus>>,
@@ -41,12 +42,36 @@ impl Ticker {
     }
 
     pub async fn set_status(&self, status: NativeFeatureStatus) {
-        println!("set_status: {:?} to {:?}", self.status.read().await, status);
+        debug!("set_status: {:?} to {:?}", self.status.read().await, status);
         if *self.status.read().await == status {
             return;
         }
         *self.status.write().await = status;
         let _ = self.emit_status().await;
+    }
+
+    async fn tick(
+        &self,
+        mut interval_timer: tokio::time::Interval,
+        event: Event,
+    ) -> RuntimeResult<()> {
+        while self.running.load(Ordering::SeqCst) {
+            interval_timer.tick().await;
+            if let Err(e) = self.context.event_bus.publish(event.clone()).await {
+                debug!("Tick published: {:?}", e);
+                self.set_status(NativeFeatureStatus::Error {
+                    message: format!("Tick publication failed: {}", e),
+                })
+                .await;
+
+                let _ = self
+                    .emit_failure(format!("Failed to publish tick: {}", e).as_str())
+                    .await;
+
+                return Ok(());
+            }
+        }
+        Ok(())
     }
 }
 
@@ -66,6 +91,10 @@ impl NativeFeature for Ticker {
 
     async fn start(&self) -> RuntimeResult<()> {
         debug!("Ticker started: {:?}", self.config);
+        if self.status().await == NativeFeatureStatus::Active {
+            debug!("Ticker already started: {:?}", self.config);
+            return Ok(());
+        }
         self.running.store(true, Ordering::SeqCst);
         // validate config
         if self.config.tick_interval.as_millis() == 0 {
@@ -77,8 +106,7 @@ impl NativeFeature for Ticker {
             self.emit_failure(&message).await?;
             return Ok(());
         }
-        let mut interval_timer = tokio::time::interval(self.config.tick_interval);
-        self.set_status(NativeFeatureStatus::Active).await;
+        let interval_timer = tokio::time::interval(self.config.tick_interval);
 
         let event = Event {
             event_type: event_registry::EventType::Tick,
@@ -96,24 +124,12 @@ impl NativeFeature for Ticker {
             },
         };
 
-        while self.running.load(Ordering::SeqCst) {
-            interval_timer.tick().await;
-            if let Err(e) = self.context.event_bus.publish(event.clone()).await {
-                debug!("Tick published: {:?}", e);
-                self.set_status(NativeFeatureStatus::Error {
-                    message: format!("Tick publication failed: {}", e),
-                })
-                .await;
-
-                let _ = self
-                    .emit_failure(format!("Failed to publish tick: {}", e).as_str())
-                    .await;
-
-                return Ok(());
-            }
-        }
-
-        self.set_status(NativeFeatureStatus::Inactive).await;
+        let self_clone = self.clone();
+        tokio::spawn(async move {
+            let _ = self_clone.tick(interval_timer, event).await;
+            self_clone.set_status(NativeFeatureStatus::Inactive).await;
+        });
+        self.set_status(NativeFeatureStatus::Active).await;
         Ok(())
     }
 
@@ -128,12 +144,9 @@ impl NativeFeature for Ticker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        event_bus::{Event, EventBus},
-        event_registry::EventType,
-    };
+    use crate::{event_bus::EventBus, event_registry::EventType};
     use tokio::time::sleep;
-    use tokio::{sync::broadcast, time::Duration};
+    use tokio::time::Duration;
 
     // テスト用のセットアップ関数
     async fn setup_test_context() -> Arc<NativeFeatureContext> {
@@ -192,9 +205,7 @@ mod tests {
 
         // 非同期タスクでTickerを開始
         let ticker_clone = ticker.clone();
-        let task = tokio::spawn(async move {
-            ticker_clone.start().await.unwrap();
-        });
+        ticker_clone.start().await.unwrap();
 
         // Tickイベントの受信を待機
         // StatusUpdatedイベントも受信するが、ここではTickイベントのみを検証
@@ -210,8 +221,7 @@ mod tests {
 
         ticker.stop().await.unwrap();
 
-        // Tickerが停止するまで待機
-        let _ = task.await;
+        sleep(Duration::from_millis(10)).await;
 
         // 受信したイベントの検証
         assert_eq!(received_event.event_type, EventType::Tick);
@@ -232,7 +242,7 @@ mod tests {
         // EventBusをサブスクライブして、FeatureStatusイベントを受信
         let (mut status_receiver, _) = context.event_bus.subscribe();
 
-        let mut received_statuses = Arc::new(RwLock::new(Vec::new()));
+        let received_statuses = Arc::new(RwLock::new(Vec::new()));
         let received_statuses_clone = received_statuses.clone();
         tokio::spawn(async move {
             loop {
@@ -248,10 +258,7 @@ mod tests {
         });
 
         // Tickerを開始
-        let ticker_clone = ticker.clone();
-        tokio::spawn(async move {
-            ticker_clone.start().await.unwrap();
-        });
+        ticker.start().await.unwrap();
 
         sleep(Duration::from_millis(101)).await;
 
@@ -277,8 +284,8 @@ mod tests {
         let ticker = Arc::new(Ticker::new(context.clone(), config));
 
         let (mut failure_receiver, _) = context.event_bus.subscribe();
-        let mut received_event = Arc::new(RwLock::new(vec![]));
-        let mut received_event_clone = received_event.clone();
+        let received_event = Arc::new(RwLock::new(vec![]));
+        let received_event_clone = received_event.clone();
         tokio::spawn(async move {
             loop {
                 let event = failure_receiver.recv().await.unwrap();
@@ -288,12 +295,7 @@ mod tests {
             }
         });
 
-        // 非同期タスクでTickerを開始
-        let ticker_clone = ticker.clone();
-        let task = tokio::spawn(async move {
-            ticker_clone.start().await.unwrap();
-        });
-
+        ticker.start().await.unwrap();
         sleep(Duration::from_millis(10)).await;
 
         assert!(matches!(
@@ -307,6 +309,5 @@ mod tests {
 
         // Tickerを停止
         ticker.stop().await.unwrap();
-        let _ = task.await; // エラーが起きてもタスクを停止
     }
 }

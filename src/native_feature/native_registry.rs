@@ -49,34 +49,25 @@ impl NativeFeatureRegistry {
 
         for feature_type in features {
             let feature_type_clone = feature_type.clone();
-            /*
-            let feature = self
-                .get_registered_feature(&feature_type_clone)
-                .await
-                .ok_or_else(|| {
-                    RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
-                        "Feature not found: {:?}",
-                        feature_type
-                    )))
-                })?.clone();
-             */
-            let feature = self
-                .get_registered_feature(&feature_type_clone)
-                .await
-                .ok_or_else(|| {
-                    RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
-                        "Feature not found: {:?}",
-                        feature_type
-                    )))
-                })?
-                .clone();
-            feature.init().await.map_err(|e| {
-                RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
-                    "Init Feature error: {}, {}",
-                    feature_type, e
-                )))
-            })?;
+            let self_clone = self.clone();
             tokio::spawn(async move {
+                let feature = self_clone
+                    .get_registered_feature(&feature_type_clone)
+                    .await
+                    .ok_or_else(|| {
+                        RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
+                            "Feature not found: {:?}",
+                            feature_type
+                        )))
+                    })?
+                    .clone();
+                feature.init().await.map_err(|e| {
+                    RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
+                        "Init Feature error: {}, {}",
+                        feature_type, e
+                    )))
+                })?;
+
                 feature.start().await.map_err(|e| {
                     RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
                         "Start Feature error: {}, {}",
@@ -85,8 +76,12 @@ impl NativeFeatureRegistry {
                 })
             })
             .await
-            .unwrap()
-            .expect("TODO: panic message");
+            .map_err(|e| {
+                RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
+                    "Feature run failed {}",
+                    e
+                )))
+            })??;
         }
         Ok(())
     }
@@ -96,7 +91,7 @@ impl NativeFeatureRegistry {
         feature_type: NativeFeatureType,
         feature: Arc<dyn NativeFeature>,
     ) -> RuntimeResult<()> {
-        println!("register_feature: {:?}", feature_type);
+        info!("register_feature: {}", feature_type);
         if self.features.read().await.contains_key(&feature_type) {
             return Err(RuntimeError::Execution(ExecutionError::NativeFeatureError(
                 format!("Native Feature already exists: {}", feature_type),
@@ -164,22 +159,16 @@ impl NativeFeatureRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eval::context::AgentType;
     use crate::{
-        config::{NativeFeatureConfig, SystemConfig, TickerConfig},
+        config::NativeFeatureConfig,
         event_bus::EventBus,
-        native_feature::types::{
-            NativeFeature, NativeFeatureContext, NativeFeatureStatus, NativeFeatureType,
-        },
+        native_feature::types::{NativeFeatureContext, NativeFeatureStatus, NativeFeatureType},
     };
     use std::time::Duration;
-    use tokio::sync::broadcast;
-    use tokio::time::sleep;
 
     // テスト用の共通セットアップ関数
     async fn setup_test_registry() -> NativeFeatureRegistry {
         let event_bus = Arc::new(EventBus::new(20));
-        let (shutdown_tx, _) = broadcast::channel::<AgentType>(1);
         let context = Arc::new(NativeFeatureContext::new(event_bus));
         let config = NativeFeatureConfig::default();
         NativeFeatureRegistry::new(context, config)
@@ -227,7 +216,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_initialize_native_features() {
-        let mut registry = setup_test_registry().await;
+        let registry = setup_test_registry().await;
         registry.register().await.unwrap();
 
         assert_eq!(
@@ -241,45 +230,40 @@ mod tests {
 
     #[tokio::test]
     async fn test_start_native_features() {
-        let mut registry = setup_test_registry().await;
+        let registry = setup_test_registry().await;
         registry.register().await.unwrap();
 
-        /*
-         let registry_clone = registry.clone();
-         tokio::spawn(async move {
-             registry_clone.start().await.unwrap();
-         }).await.unwrap();
+        registry.start().await.unwrap();
 
         let ticker = registry
-             .get_registered_feature(&NativeFeatureType::Ticker)
-             .await
-             .unwrap().clone();
+            .get_registered_feature(&NativeFeatureType::Ticker)
+            .await
+            .unwrap()
+            .clone();
 
         // 非同期タスクが開始されるのを少し待つ
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert_eq!(ticker.status().await, NativeFeatureStatus::Active);
-        */
     }
-    /*
-           #[tokio::test]
-           async fn test_shutdown_native_features() {
-               let mut registry = setup_test_registry().await;
-               registry.register().await.unwrap();
-               registry.start().await.unwrap();
-               registry.shutdown().await.unwrap();
 
-               /*
-               let ticker = registry
-                   .get_registered_feature(&NativeFeatureType::Ticker)
-                   .await
-                   .unwrap();
-                */
-               // 停止まで少し待つ
-               tokio::time::sleep(Duration::from_millis(50)).await;
-               // assert_eq!(ticker.status().await, NativeFeatureStatus::Inactive);
-           }
+    #[tokio::test]
+    async fn test_shutdown_native_features() {
+        let registry = setup_test_registry().await;
+        registry.register().await.unwrap();
+        registry.start().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        registry.shutdown().await.unwrap();
 
-    */
+        let ticker = registry
+            .get_registered_feature(&NativeFeatureType::Ticker)
+            .await
+            .unwrap();
+
+        // 停止まで少し待つ
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(ticker.status().await, NativeFeatureStatus::Inactive);
+    }
+
     #[tokio::test]
     async fn test_enabled_feature_types() {
         let registry = setup_test_registry().await;
