@@ -562,9 +562,10 @@ impl RuntimeAgentData {
             }
 
             // 通常のメッセージ(Ok, Err)とカスタムイベント
-            EventType::Message { .. } | EventType::Failure { .. } | EventType::Custom(_) => {
-                self.handle_normal_event(event).await
-            }
+            EventType::Message { .. }
+            | EventType::Failure { .. }
+            | EventType::Custom(_)
+            | EventType::FeatureFailure { .. } => self.handle_normal_event(event).await,
 
             // システムイベント
             EventType::Tick
@@ -577,13 +578,15 @@ impl RuntimeAgentData {
             | EventType::AgentStopping
             | EventType::AgentStopped
             | EventType::SystemCreated
+            | EventType::SystemNativeFeaturesRegistered
             | EventType::SystemWorldRegistered
             | EventType::SystemBuiltinAgentsRegistered
             | EventType::SystemUserAgentsRegistered
             | EventType::SystemStarting
             | EventType::SystemStarted
             | EventType::SystemStopping
-            | EventType::SystemStopped => self.handle_system_event(event).await,
+            | EventType::SystemStopped
+            | EventType::FeatureStatusUpdated { .. } => self.handle_system_event(event).await,
             // レスポンスは直接evaluatorで処理する
             EventType::ResponseSuccess { .. } => Ok(()),
             EventType::ResponseFailure { .. } => Ok(()),

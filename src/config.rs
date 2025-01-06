@@ -6,9 +6,6 @@ pub struct SystemConfig {
     #[serde(default = "default_event_buffer_size")]
     pub event_buffer_size: usize,
 
-    #[serde(default = "default_tick_interval", with = "duration_ms")]
-    pub tick_interval: Duration,
-
     #[serde(default = "default_max_agents")]
     pub max_agents: usize,
 
@@ -20,6 +17,9 @@ pub struct SystemConfig {
 
     #[serde(default)]
     pub agent_config: AgentConfig,
+
+    #[serde(default)]
+    pub native_feature_config: NativeFeatureConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -64,6 +64,42 @@ pub struct MonitorConfig {
     pub retention_period: Duration,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NativeFeatureConfig {
+    #[serde(default = "default_shutdown_timeout")]
+    pub shutdown_timeout: Duration,
+
+    #[serde(default = "default_ticker_config")]
+    pub ticker: Option<TickerConfig>,
+}
+
+impl Default for NativeFeatureConfig {
+    fn default() -> Self {
+        Self {
+            shutdown_timeout: default_shutdown_timeout(),
+            ticker: default_ticker_config(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TickerConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    #[serde(default = "default_tick_interval", with = "duration_ms")]
+    pub tick_interval: Duration,
+}
+
+impl Default for TickerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            tick_interval: default_tick_interval(),
+        }
+    }
+}
+
 // デフォルト値の定義
 fn default_event_buffer_size() -> usize {
     1000
@@ -100,6 +136,10 @@ fn default_access_timeout() -> Duration {
     Duration::from_secs(5)
 }
 
+fn default_ticker_config() -> Option<TickerConfig> {
+    Some(TickerConfig::default())
+}
+
 // Duration型のシリアライズ/デシリアライズヘルパー
 mod duration_ms {
     use serde::{Deserialize, Deserializer, Serializer};
@@ -125,11 +165,11 @@ impl Default for SystemConfig {
     fn default() -> Self {
         Self {
             event_buffer_size: default_event_buffer_size(),
-            tick_interval: default_tick_interval(),
             max_agents: default_max_agents(),
             init_timeout: default_init_timeout(),
             shutdown_timeout: default_shutdown_timeout(),
             agent_config: AgentConfig::default(),
+            native_feature_config: NativeFeatureConfig::default(),
         }
     }
 }
