@@ -8,6 +8,7 @@ pub mod eval;
 pub mod event_bus;
 pub mod event_registry;
 pub mod gen;
+pub mod native_feature;
 pub mod parser;
 pub mod prelude;
 pub mod runtime;

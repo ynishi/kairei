@@ -1,6 +1,10 @@
-use crate::{ast, EventError, RuntimeError, RuntimeResult, TypeInfo};
+use crate::{
+    ast, native_feature::types::NativeFeatureType, EventError, RuntimeError, RuntimeResult,
+    TypeInfo,
+};
 use dashmap::DashMap;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::str::FromStr;
+use std::{collections::HashMap, sync::Arc};
 
 /// イベントのメタデータ
 #[derive(Clone, Debug)]
@@ -56,6 +60,7 @@ pub enum EventType {
     AgentStopped,
     // SystemLifecycle
     SystemCreated,
+    SystemNativeFeaturesRegistered,
     SystemWorldRegistered,
     SystemBuiltinAgentsRegistered,
     SystemUserAgentsRegistered,
@@ -63,6 +68,13 @@ pub enum EventType {
     SystemStarted,
     SystemStopping,
     SystemStopped,
+    // Feature
+    FeatureStatusUpdated {
+        feature_type: NativeFeatureType,
+    },
+    FeatureFailure {
+        error: String,
+    },
     Custom(String), // 拡張性のために残す
 }
 
@@ -133,6 +145,9 @@ impl std::fmt::Display for EventType {
             EventType::AgentStopping => write!(f, "AgentStopping"),
             EventType::AgentStopped => write!(f, "AgentStopped"),
             EventType::SystemCreated => write!(f, "SystemCreated"),
+            EventType::SystemNativeFeaturesRegistered => {
+                write!(f, "SystemNativeFeaturesRegistered")
+            }
             EventType::SystemWorldRegistered => write!(f, "SystemWorldRegistered"),
             EventType::SystemBuiltinAgentsRegistered => write!(f, "SystemBuiltinAgentsRegistered"),
             EventType::SystemUserAgentsRegistered => write!(f, "SystemUserAgentsRegistered"),
@@ -140,6 +155,10 @@ impl std::fmt::Display for EventType {
             EventType::SystemStarted => write!(f, "SystemStarted"),
             EventType::SystemStopping => write!(f, "SystemStopping"),
             EventType::SystemStopped => write!(f, "SystemStopped"),
+
+            EventType::FeatureStatusUpdated { .. } => write!(f, "FeatureStatusUpdated"),
+            EventType::FeatureFailure { .. } => write!(f, "FeatureFailure"),
+
             EventType::Custom(name) => write!(f, "{}", name),
         }
     }

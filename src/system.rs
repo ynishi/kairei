@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use std::str::FromStr;
 use std::{
     collections::HashMap,
-    str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -20,6 +20,7 @@ use crate::{
     eval::{context::AgentType, expression},
     event_bus::{Event, EventBus, EventReceiver, LastStatus, Value},
     event_registry::{EventInfo, EventRegistry, EventType, ParameterType},
+    native_feature::{native_registry::NativeFeatureRegistry, types::NativeFeatureContext},
     runtime::RuntimeAgentData,
     CustomEventDef, EventError, EventsDef, ExecutionError, MicroAgentDef, RuntimeError,
     RuntimeResult, WorldDef,
@@ -32,6 +33,7 @@ pub struct System {
     event_bus: Arc<EventBus>,
     agent_registry: Arc<RwLock<AgentRegistry>>,
     ast_registry: Arc<RwLock<AstRegistry>>,
+    feature_registry: Arc<RwLock<NativeFeatureRegistry>>,
     shutdown_tx: broadcast::Sender<AgentType>, // Systemがシャットダウンシグナルを送信
     _shutdown_rx: broadcast::Receiver<AgentType>, // シャットダウンシグナルを受信
     // event request/response
@@ -56,6 +58,12 @@ impl System {
             &shutdown_tx,
         )));
         let ast_registry = Arc::new(RwLock::new(AstRegistry::default()));
+        let native_context = Arc::new(NativeFeatureContext::new(event_bus.clone()));
+
+        let feature_registry = Arc::new(RwLock::new(NativeFeatureRegistry::new(
+            native_context.clone(),
+            config.native_feature_config.clone(),
+        )));
         let _shutdown_rx = shutdown_tx.subscribe();
         let pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>> =
             Arc::new(DashMap::new());
@@ -93,6 +101,7 @@ impl System {
             event_bus,
             agent_registry,
             ast_registry,
+            feature_registry,
             shutdown_tx,
             _shutdown_rx,
             pending_requests,
@@ -104,10 +113,25 @@ impl System {
         }
     }
 
-    pub async fn register_world(&self, world_def: WorldDef) -> RuntimeResult<()> {
+    pub async fn register_native_features(&mut self) -> RuntimeResult<()> {
+        let complete_state = EventType::SystemNativeFeaturesRegistered;
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
-            EventType::SystemWorldRegistered,
+            complete_state.clone(),
+        )?;
+
+        let registry = self.feature_registry.write().await;
+        registry.register().await?;
+
+        self.update_system_status(complete_state).await;
+        Ok(())
+    }
+
+    pub async fn register_world(&self, world_def: WorldDef) -> RuntimeResult<()> {
+        let complete_state = EventType::SystemWorldRegistered;
+        Self::check_start_transition(
+            self.last_status.read().await.last_event_type.clone(),
+            complete_state.clone(),
         )?;
 
         let (agent_def, event_defs): (MicroAgentDef, EventsDef) = world_def.into();
@@ -119,16 +143,16 @@ impl System {
             self.register_event_ast(event_def).await?;
         }
 
-        self.update_system_status(EventType::SystemWorldRegistered)
-            .await;
+        self.update_system_status(complete_state).await;
         Ok(())
     }
 
     // ビルトインエージェントの登録処理
     pub async fn register_builtin_agents(&self) -> RuntimeResult<()> {
+        let complete_state = EventType::SystemBuiltinAgentsRegistered;
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
-            EventType::SystemBuiltinAgentsRegistered,
+            complete_state.clone(),
         )?;
         let registry = self.agent_registry().read().await;
         let builtin_defs = registry.get_builtin_agent_asts().await?;
@@ -138,8 +162,7 @@ impl System {
             self.register_agent(&builtin.name).await?;
         }
 
-        self.update_system_status(EventType::SystemBuiltinAgentsRegistered)
-            .await;
+        self.update_system_status(complete_state).await;
         Ok(())
     }
 
@@ -147,17 +170,17 @@ impl System {
         &self,
         agent_asts: Vec<MicroAgentDef>,
     ) -> RuntimeResult<()> {
+        let complete_state = EventType::SystemUserAgentsRegistered;
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
-            EventType::SystemUserAgentsRegistered,
+            complete_state.clone(),
         )?;
 
         for agent_ast in agent_asts {
             self.register_agent_ast(&agent_ast.name, &agent_ast).await?;
             self.register_agent(&agent_ast.name).await?;
         }
-        self.update_system_status(EventType::SystemUserAgentsRegistered)
-            .await;
+        self.update_system_status(complete_state).await;
         Ok(())
     }
 
@@ -168,11 +191,19 @@ impl System {
         )?;
         self.update_system_status(EventType::SystemStarting).await;
 
+        self.start_native_features().await?;
+
         self.start_world().await?;
         self.start_builtin_agents().await?;
         self.start_users_agents().await?;
 
         self.update_system_status(EventType::SystemStarted).await;
+        Ok(())
+    }
+
+    async fn start_native_features(&self) -> RuntimeResult<()> {
+        let registry = self.feature_registry.write().await;
+        registry.start().await?;
         Ok(())
     }
 
@@ -217,6 +248,11 @@ impl System {
         let timeout = config.shutdown_timeout;
         drop(config);
         // シャットダウンシグナルを送信
+        self.shutdown_tx
+            .send(AgentType::Custom("All".to_string()))
+            .expect("Failed to send shutdown signal");
+        let registry = self.feature_registry.write().await;
+        registry.shutdown().await?;
         for agent_type in shutdown_sequence {
             self.shutdown_tx
                 .send(agent_type.clone())
@@ -598,7 +634,9 @@ impl System {
             ),
         )));
         match (currnt.clone(), next.clone()) {
-            (EventType::SystemCreated, EventType::SystemWorldRegistered) => Ok(()),
+            (EventType::SystemCreated, EventType::SystemNativeFeaturesRegistered) => Ok(()),
+            (_, EventType::SystemNativeFeaturesRegistered) => err,
+            (EventType::SystemNativeFeaturesRegistered, EventType::SystemWorldRegistered) => Ok(()),
             (_, EventType::SystemWorldRegistered) => err,
             (EventType::SystemWorldRegistered, EventType::SystemBuiltinAgentsRegistered) => Ok(()),
             (_, EventType::SystemBuiltinAgentsRegistered) => err,

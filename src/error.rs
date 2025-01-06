@@ -205,6 +205,9 @@ pub enum ExecutionError {
     // eval error
     #[error("Eval error: {0}")]
     EvalError(String),
+
+    #[error("Eval error: {0}")]
+    NativeFeatureError(String),
 }
 
 // 便利な Result 型エイリアス
