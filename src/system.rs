@@ -361,7 +361,24 @@ impl System {
 
         let mut created_agents = Vec::with_capacity(count);
 
-        // TODO: ScaleManagerAgent へのリクエストを送信してオプションを取得する
+        // ScaleManagerAgent へのリクエストを送信
+        let count = if count == 0 {
+            let got = self
+                .agent_registry
+                .read()
+                .await
+                .agent_state("scale_manager", "max_instances_per_agent")
+                .await
+                .ok_or(RuntimeError::Execution(ExecutionError::AgentNotFound {
+                    id: "scale_manager".to_string(),
+                }))?;
+            match got {
+                expression::Value::Integer(i) => i as usize,
+                _ => 0,
+            }
+        } else {
+            count
+        };
 
         // 指定された数だけエージェントを作成
         for i in 0..count {
