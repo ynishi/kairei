@@ -10,8 +10,15 @@ use nom::{
 };
 use std::{collections::HashMap, time::Duration};
 
-/// MicroAgentの定義をパースする。
 /// Entry point of the parser.
+pub fn parse_root(input: &str) -> IResult<&str, Root> {
+    map(
+        pair(opt(ws(parse_world)), many0(ws(parse_micro_agent))),
+        |(world_def, micro_agent_defs)| Root::new(world_def, micro_agent_defs),
+    )(input)
+}
+
+/// MicroAgentの定義をパースする。
 pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
     let (input, _) = ws(tag("micro"))(input)?;
     let (input, name) = ws(identifier)(input)?;
@@ -91,12 +98,155 @@ fn parse_react(input: &str) -> IResult<&str, ReactDef> {
     })(input)
 }
 
+/// Worldの定義をパースする。
+pub fn parse_world(input: &str) -> IResult<&str, WorldDef> {
+    let (input, _) = ws(tag("world"))(input)?;
+    let (input, name) = ws(identifier)(input)?;
+    let (input, _) = ws(char('{'))(input)?;
+
+    let mut config = None;
+    let mut events = None;
+    let mut handlers = None;
+
+    let (input, _) = many0(alt((
+        map(parse_config, |c| config = Some(c)),
+        map(parse_events, |e| events = Some(e)),
+        map(parse_handlers, |h| handlers = Some(h)),
+    )))(input)?;
+
+    let (input, _) = ws(char('}'))(input)?;
+
+    Ok((
+        input,
+        WorldDef {
+            name: name.to_string(),
+            config,
+            events: events.unwrap_or_else(|| EventsDef { events: vec![] }),
+            handlers: handlers.unwrap_or_else(|| HandlersDef { handlers: vec![] }),
+        },
+    ))
+}
+
+/// configセクションのパース
+pub fn parse_config(input: &str) -> IResult<&str, ConfigDef> {
+    let (input, _) = ws(tag("config"))(input)?;
+    let (input, _) = ws(char('{'))(input)?;
+
+    let mut tick_interval = None;
+    let mut max_agents = None;
+    let mut event_buffer_size = None;
+
+    let (input, _) = many0(alt((
+        // Duration形式（例: 100ms, 1s)のパース
+        map(parse_duration_config("tick_interval"), |d| {
+            tick_interval = Some(d)
+        }),
+        // 整数値のパース
+        map(parse_int_config("max_agents"), |n| max_agents = Some(n)),
+        map(parse_int_config("event_buffer_size"), |n| {
+            event_buffer_size = Some(n)
+        }),
+    )))(input)?;
+
+    let (input, _) = ws(char('}'))(input)?;
+
+    let mut config_def = ConfigDef::default();
+    if let Some(tick_interval) = tick_interval {
+        config_def.tick_interval = tick_interval;
+    }
+    if let Some(max_agents) = max_agents {
+        config_def.max_agents = max_agents;
+    }
+    if let Some(event_buffer_size) = event_buffer_size {
+        config_def.event_buffer_size = event_buffer_size;
+    }
+
+    Ok((input, config_def))
+}
+
+/// eventsセクションのパース
+pub fn parse_events(input: &str) -> IResult<&str, EventsDef> {
+    let (input, _) = ws(tag("events"))(input)?;
+    let (input, _) = ws(char('{'))(input)?;
+
+    let (input, events) = many0(parse_event_def)(input)?;
+    let (input, _) = ws(char('}'))(input)?;
+
+    Ok((input, EventsDef { events }))
+}
+
+/// 個別のイベント定義のパース
+fn parse_event_def(input: &str) -> IResult<&str, CustomEventDef> {
+    let (input, name) = ws(identifier)(input)?;
+    let (input, parameters) = opt(delimited(
+        ws(char('(')),
+        separated_list0(ws(char(',')), parse_parameter),
+        ws(char(')')),
+    ))(input)?;
+
+    let var_name = CustomEventDef {
+        name: name.to_string(),
+        parameters: parameters.unwrap_or_default(),
+    };
+    Ok((input, var_name))
+}
+
+/// handlersセクションのパース
+pub fn parse_handlers(input: &str) -> IResult<&str, HandlersDef> {
+    let (input, _) = ws(tag("handlers"))(input)?;
+    let (input, _) = ws(char('{'))(input)?;
+
+    let (input, handlers) = many0(parse_handler)(input)?;
+    let (input, _) = ws(char('}'))(input)?;
+
+    Ok((input, HandlersDef { handlers }))
+}
+
+/// 個別のハンドラ定義のパース
+fn parse_handler(input: &str) -> IResult<&str, HandlerDef> {
+    map(
+        tuple((
+            preceded(ws(tag("on")), map(identifier, |id| id.to_string())),
+            opt(delimited(
+                ws(char('(')),
+                separated_list0(ws(char(',')), parse_parameter),
+                ws(char(')')),
+            )),
+            parse_block,
+        )),
+        |(event_name, parameters, block)| HandlerDef {
+            event_name,
+            parameters: parameters.unwrap_or_default(),
+            block,
+        },
+    )(input)
+}
+
+fn parse_duration_config(key: &'static str) -> impl Fn(&str) -> IResult<&str, Duration> {
+    move |input: &str| {
+        let (input, _) = ws(tag(key))(input)?;
+        let (input, _) = ws(char(':'))(input)?;
+        let (input, value) = ws(parse_duration)(input)?;
+        Ok((input, value))
+    }
+}
+
+/// 正の整数値設定のパース (例: max_agents: 1000)
+fn parse_int_config(key: &'static str) -> impl Fn(&str) -> IResult<&str, usize> {
+    move |input: &str| {
+        let (input, _) = ws(tag(key))(input)?;
+        let (input, _) = ws(char(':'))(input)?;
+        let (input, value) = ws(parse_usize)(input)?;
+        Ok((input, value))
+    }
+}
+
 // Block contents
-fn parse_init_handler(input: &str) -> IResult<&str, Block> {
+fn parse_init_handler(input: &str) -> IResult<&str, HandlerBlock> {
     preceded(tag("onInit"), parse_block)(input)
 }
 
-fn parse_destroy_handler(input: &str) -> IResult<&str, Block> {
+fn parse_destroy_handler(input: &str) -> IResult<&str, HandlerBlock> {
     preceded(ws(tag("onDestroy")), parse_block)(input)
 }
 
@@ -303,27 +453,75 @@ fn parse_constraint_item(input: &str) -> IResult<&str, (String, f64)> {
 }
 
 /// Block and Statement
-fn parse_block(input: &str) -> IResult<&str, Block> {
+fn parse_block(input: &str) -> IResult<&str, HandlerBlock> {
+    map(parse_statements, |statements| HandlerBlock { statements })(input)
+}
+
+fn parse_statements(input: &str) -> IResult<&str, Vec<Statement>> {
     map(
         delimited(ws(char('{')), many0(parse_statement), ws(char('}'))),
-        |statements| Block { statements },
+        |statements| statements,
     )(input)
 }
 
 fn parse_statement(input: &str) -> IResult<&str, Statement> {
-    alt((
+    let (input, base_statement) = alt((
+        parse_await,
+        parse_await_block,
         parse_assignment,
         parse_emit_statement,
         parse_request_statement,
         parse_if_statement,
         parse_return_statement,
-    ))(input)
+    ))(input)?;
+    parse_optional_error_handler(input, base_statement)
+}
+
+fn parse_await(input: &str) -> IResult<&str, Statement> {
+    map(preceded(ws(tag("await")), parse_statement), |s| {
+        Statement::Await(AwaitType::Single(Box::new(s)))
+    })(input)
+}
+
+fn parse_await_block(input: &str) -> IResult<&str, Statement> {
+    map(preceded(ws(tag("await")), parse_statements), |statements| {
+        Statement::Await(AwaitType::Block(statements))
+    })(input)
+}
+
+fn parse_optional_error_handler(
+    input: &str,
+    base_statement: Statement,
+) -> IResult<&str, Statement> {
+    // onFail部分はオプショナル
+    let (input, error_handler) = opt(tuple((
+        ws(tag("onFail")),
+        // エラーバインディングは括弧付きの識別子としてオプショナル
+        opt(delimited(ws(tag("(")), identifier, ws(tag(")")))),
+        // エラーハンドラブロック
+        parse_block,
+    )))(input)?;
+
+    // エラーハンドラが存在する場合は WithErrorHandler を生成
+    match error_handler {
+        Some((_, error_binding, handler_block)) => Ok((
+            input,
+            Statement::WithError {
+                statement: Box::new(base_statement),
+                error_handler_block: ErrorHandlerBlock {
+                    error_binding: error_binding.map(String::from),
+                    error_handler_statements: handler_block.statements,
+                },
+            },
+        )),
+        None => Ok((input, base_statement)),
+    }
 }
 
 fn parse_assignment(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((ws(parse_expression), char('='), parse_expression)),
-        |(value, _, target)| Statement::Assignment { target, value },
+        |(target, _, value)| Statement::Assignment { target, value },
     )(input)
 }
 
@@ -335,7 +533,7 @@ fn parse_emit_statement(input: &str) -> IResult<&str, Statement> {
             opt(preceded(ws(tag("to")), identifier)),
             opt(delimited(
                 ws(char('(')),
-                separated_list0(ws(char(',')), parse_expression),
+                separated_list0(ws(char(',')), parse_argument),
                 ws(char(')')),
             )),
         )),
@@ -353,14 +551,11 @@ fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
             ws(tag("request")),
             parse_request_type,
             opt(parse_request_options),
-            delimited(
-                ws(char('(')),
-                separated_list0(ws(char(',')), parse_expression),
-                ws(char(')')),
-            ),
+            preceded(ws(tag("to")), identifier),
+            parse_arguments,
         )),
-        |(_, request_type, options, parameters)| Statement::Request {
-            agent: "".to_string(), // TODO: Parse agent
+        |(_, request_type, options, target, parameters)| Statement::Request {
+            agent: target.to_string(),
             request_type,
             parameters,
             options,
@@ -368,13 +563,36 @@ fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
     )(input)
 }
 
+fn parse_arguments(input: &str) -> IResult<&str, Vec<Argument>> {
+    delimited(
+        ws(char('(')),
+        separated_list0(ws(char(',')), parse_argument),
+        ws(char(')')),
+    )(input)
+}
+
+fn parse_argument(input: &str) -> IResult<&str, Argument> {
+    alt((
+        // キーワード付き引数のパース
+        map(
+            tuple((identifier, ws(char(':')), parse_expression)),
+            |(name, _, value)| Argument::Named {
+                name: name.to_string(),
+                value: value.clone(),
+            },
+        ),
+        // キーワードなし引数のパース
+        map(parse_expression, Argument::Positional),
+    ))(input)
+}
+
 fn parse_if_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
             ws(tag("if")),
             delimited(ws(char('(')), parse_expression, ws(char(')'))),
-            parse_block,
-            opt(preceded(ws(tag("else")), parse_block)),
+            parse_statements,
+            opt(preceded(ws(tag("else")), parse_statements)),
         )),
         |(_, condition, then_block, else_block)| Statement::If {
             condition,
@@ -393,22 +611,7 @@ fn parse_return_statement(input: &str) -> IResult<&str, Statement> {
 
 // Expressions
 fn parse_expression(input: &str) -> IResult<&str, Expression> {
-    parse_await(input)
-}
-
-fn parse_await(input: &str) -> IResult<&str, Expression> {
-    alt((
-        // await式
-        map(
-            tuple((
-                ws(tag("await")),
-                parse_logical_or, // または適切な優先順位の式パーサー
-            )),
-            |(_, expr)| Expression::Await(Box::new(expr)),
-        ),
-        // await以外の式
-        parse_logical_or,
-    ))(input)
+    parse_logical_or(input)
 }
 
 // 論理OR (||)
@@ -631,7 +834,7 @@ fn parse_type_info(input: &str) -> IResult<&str, TypeInfo> {
 fn parse_literal(input: &str) -> IResult<&str, Literal> {
     alt((
         // 整数
-        map(parse_integer, Literal::Integer),
+        map(parse_i64, Literal::Integer),
         // 文字列
         map(
             delimited(char('"'), take_while(|c| c != '"'), char('"')),
@@ -640,6 +843,15 @@ fn parse_literal(input: &str) -> IResult<&str, Literal> {
         // 真偽値
         map(tag("true"), |_| Literal::Boolean(true)),
         map(tag("false"), |_| Literal::Boolean(false)),
+        // List型(要素はLiteralのみ)
+        map(
+            delimited(
+                char('['),
+                separated_list0(ws(char(',')), parse_literal),
+                char(']'),
+            ),
+            Literal::List,
+        ),
         // null
         map(tag("null"), |_| Literal::Null),
     ))(input)
@@ -691,7 +903,11 @@ fn parse_float(input: &str) -> IResult<&str, f64> {
     )(input)
 }
 
-fn parse_integer(input: &str) -> IResult<&str, i64> {
+fn parse_usize(input: &str) -> IResult<&str, usize> {
+    map_res(digit1, |s: &str| s.parse::<usize>())(input)
+}
+
+fn parse_i64(input: &str) -> IResult<&str, i64> {
     map_res(digit1, |s: &str| s.parse::<i64>())(input)
 }
 
@@ -729,6 +945,79 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_root_with_world_and_agents() {
+        let input = r#"
+               world TestWorld {
+                   config { }
+               }
+
+               micro Agent1 {
+                   state { }
+               }
+
+               micro Agent2 {
+                   state { }
+               }
+           "#;
+
+        let result = parse_root(input);
+        assert!(result.is_ok());
+
+        let (_, root) = result.unwrap();
+        assert!(root.world_def.is_some());
+        assert_eq!(root.micro_agent_defs.len(), 2);
+        assert_eq!(root.micro_agent_defs[0].name, "Agent1");
+        assert_eq!(root.micro_agent_defs[1].name, "Agent2");
+    }
+
+    #[test]
+    fn test_parse_root_with_only_agents() {
+        let input = r#"
+               micro Agent1 {
+                   state { }
+               }
+
+               micro Agent2 {
+                   state { }
+               }
+           "#;
+
+        let result = parse_root(input);
+        assert!(result.is_ok());
+
+        let (_, root) = result.unwrap();
+        assert!(root.world_def.is_none());
+        assert_eq!(root.micro_agent_defs.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_root_with_only_world() {
+        let input = r#"
+               world TestWorld {
+                   config { }
+               }
+           "#;
+
+        let result = parse_root(input);
+        assert!(result.is_ok());
+
+        let (_, root) = result.unwrap();
+        assert!(root.world_def.is_some());
+        assert_eq!(root.micro_agent_defs.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_empty() {
+        let input = "   ";
+        let result = parse_root(input);
+        assert!(result.is_ok());
+
+        let (_, root) = result.unwrap();
+        assert!(root.world_def.is_none());
+        assert_eq!(root.micro_agent_defs.len(), 0);
+    }
 
     #[test]
     fn test_parse_micro_agent() {
@@ -859,9 +1148,64 @@ mod tests {
             if (count > 10) {
                 return count
             }
+            await count = count + 2
         }"#;
         let result = parse_block(input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_statement() {
+        let cases = [
+            "count = count + 1",
+            "emit Updated to manager",
+            "if (count > 10) { return count }",
+            "await count = count + 2",
+            r#"await {
+                count1 = count1 + 1
+                count2 = count2 + 2
+            }"#,
+            r#"emit SearchFlights(...).onFail(err) {
+                emit Error(message: err.message)"
+            }"#,
+            r#"emit Test() onFail { emit Error() }"#,
+            r#"emit Test() onFail(err) { emit Error() }"#,
+            r#"emit Test()"#,
+        ];
+
+        for input in cases {
+            let result = parse_statement(input);
+            assert!(result.is_ok(), "Failed to parse: {}", input);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_single() {
+        let input = "await count = 0";
+        let result = parse_await(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+
+        assert!(matches!(
+            await_statement,
+            Statement::Await(AwaitType::Single(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block() {
+        let input = "await {
+               count1 = 0
+               count2 = 1
+           }";
+        let result = parse_await_block(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+
+        assert!(matches!(
+            await_statement,
+            Statement::Await(AwaitType::Block(_))
+        ));
     }
 
     #[test]
@@ -911,6 +1255,23 @@ mod tests {
 
         for input in inputs {
             let result = parse_request_options(input);
+            assert!(result.is_ok(), "Failed to parse: {}", input);
+        }
+    }
+
+    #[test]
+    fn test_parse_arguments() {
+        let inputs = [
+            "(name: \"test\")",
+            "( count: 10)",
+            "(flag:true )",
+            "(value)",
+            "(count: count + 1)",
+            "(name: \"test\", count: 10, flag: true)",
+        ];
+
+        for input in inputs {
+            let result = parse_arguments(input);
             assert!(result.is_ok(), "Failed to parse: {}", input);
         }
     }
@@ -1005,7 +1366,6 @@ mod tests {
                 "1 + 2 * 3 == 4 && a || b",
                 "((((1 + (2 * 3)) == 4) && a) || b)",
             ),
-            ("await someFunc(x + y)", "await(someFunc((x + y)))"),
         ];
 
         for (input, expected) in cases {
@@ -1025,6 +1385,25 @@ mod tests {
                 Literal::Boolean(b) => b.to_string(),
                 Literal::Null => "null".to_string(),
                 Literal::Float(f) => f.to_string(),
+                Literal::List(l) => format!(
+                    "[{}]",
+                    l.iter()
+                        .map(|item| format_expression(&Expression::Literal(item.clone())))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                Literal::Map(m) => format!(
+                    "{{{}}}",
+                    m.iter()
+                        .map(|(k, v)| format!(
+                            "{}: {}",
+                            k,
+                            format_expression(&Expression::Literal(v.clone()))
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                Literal::Duration(d) => format!("{:?}", d),
             },
             Expression::Variable(name) => name.clone(),
             Expression::StateAccess(path) => path.0.join("."),
@@ -1064,7 +1443,179 @@ mod tests {
                     format_expression(right)
                 )
             }
-            Expression::Await(expr) => format!("await({})", format_expression(expr)),
         }
+    }
+    #[test]
+    fn test_parse_config() {
+        let input = r#"
+            config {
+                tick_interval: 100ms
+                max_agents: 1000
+                event_buffer_size: 500
+            }
+        "#;
+        let (_, config) = parse_config(input).unwrap();
+        assert_eq!(config.tick_interval, Duration::from_millis(100));
+        assert_eq!(config.max_agents, 1000);
+        assert_eq!(config.event_buffer_size, 500);
+
+        // デフォルト値のテスト
+        let input = r#"
+            config {
+                tick_interval: 1s
+            }
+        "#;
+        let (_, config) = parse_config(input).unwrap();
+        assert_eq!(config.tick_interval, Duration::from_secs(1));
+        assert_eq!(config.max_agents, 1000); // デフォルト値
+        assert_eq!(config.event_buffer_size, 1000); // デフォルト値
+    }
+
+    #[test]
+    fn test_parse_events() {
+        let input = r#"
+            events {
+                PlayerJoined(player_id: String)
+                GameStarted
+                PlayerMoved(player_id: String, x: Float, y: Float)
+                ScoreUpdated(player_id: String, score: Int)
+            }
+        "#;
+        let (_, events) = parse_events(input).unwrap();
+        assert_eq!(events.events.len(), 4);
+
+        // 詳細なイベント定義の検証
+        let player_joined = &events.events[0];
+        assert_eq!(player_joined.name, "PlayerJoined");
+        assert_eq!(player_joined.parameters.len(), 1);
+        assert_eq!(player_joined.parameters[0].name, "player_id");
+        assert_eq!(
+            player_joined.parameters[0].type_info,
+            TypeInfo::Custom {
+                name: "String".to_string(),
+                constraints: HashMap::new()
+            }
+        );
+
+        let game_started = &events.events[1];
+        assert_eq!(game_started.name, "GameStarted");
+        assert_eq!(game_started.parameters.len(), 0);
+
+        let player_moved = &events.events[2];
+        assert_eq!(player_moved.parameters.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_handlers() {
+        let input = r#"
+            handlers {
+                on Tick(delta_time: Float) {
+                }
+
+                on PlayerJoined(player_id: String) {
+                    emit GameStarted()
+                }
+            }
+        "#;
+        let (_, handlers) = parse_handlers(input).unwrap();
+        assert_eq!(handlers.handlers.len(), 2);
+
+        let tick_handler = &handlers.handlers[0];
+        assert_eq!(tick_handler.event_name, "Tick");
+        assert_eq!(tick_handler.parameters.len(), 1);
+        assert_eq!(tick_handler.parameters[0].name, "delta_time");
+        assert_eq!(
+            tick_handler.parameters[0].type_info,
+            TypeInfo::Custom {
+                name: "Float".to_string(),
+                constraints: Default::default(),
+            }
+        );
+
+        let join_handler = &handlers.handlers[1];
+        assert_eq!(join_handler.event_name, "PlayerJoined");
+        assert_eq!(join_handler.parameters.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_world() {
+        let input = r#"
+            world GameWorld {
+                config {
+                    tick_interval: 16ms
+                    max_agents: 100
+                    event_buffer_size: 1000
+                }
+
+                events {
+                    PlayerJoined(player_id: String)
+                    GameStarted
+                    PlayerMoved(player_id: String, x: Float, y: Float)
+                }
+
+                handlers {
+                    on Tick(delta_time: Float) {
+                        emit NextTick(delta_time)
+                    }
+
+                    on PlayerJoined(player_id: String) {
+                        emit GameStarted()
+                    }
+                }
+            }
+        "#;
+
+        let (_, world) = parse_world(input).unwrap();
+
+        // 基本構造の検証
+        assert_eq!(world.name, "GameWorld");
+
+        // Config検証
+        let config = world.config.unwrap();
+        assert_eq!(config.tick_interval, Duration::from_millis(16));
+        assert_eq!(config.max_agents, 100);
+        assert_eq!(config.event_buffer_size, 1000);
+
+        // Events検証
+        assert_eq!(world.events.events.len(), 3);
+        assert_eq!(world.events.events[0].name, "PlayerJoined");
+        assert_eq!(world.events.events[1].name, "GameStarted");
+        assert_eq!(world.events.events[2].name, "PlayerMoved");
+
+        // Handlers検証
+        assert_eq!(world.handlers.handlers.len(), 2);
+        assert_eq!(world.handlers.handlers[0].event_name, "Tick");
+        assert_eq!(world.handlers.handlers[1].event_name, "PlayerJoined");
+    }
+
+    #[test]
+    fn test_parse_world_minimal() {
+        let input = r#"
+            world MinimalWorld {
+                config {
+                    tick_interval: 100ms
+                }
+            }
+        "#;
+
+        let (_, world) = parse_world(input).unwrap();
+        let config = world.config.unwrap();
+        assert_eq!(world.name, "MinimalWorld");
+        assert_eq!(config.tick_interval, Duration::from_millis(100));
+        assert_eq!(world.events.events.len(), 0);
+        assert!(world.handlers.handlers.is_empty());
+    }
+
+    #[test]
+    fn test_parse_world_errors() {
+        // Invalid duration format
+        let input = r#"
+            world ErrorWorld {
+                config {
+                    tick_interval: invalid
+                }
+            }
+        "#;
+        assert!(parse_world(input).is_err());
     }
 }

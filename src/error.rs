@@ -1,21 +1,40 @@
-use nom::error::ErrorKind;
 use thiserror::Error;
 
+use crate::context::ContextError;
+use crate::evaluator::EvalError;
+use crate::native_feature::types::FeatureError;
+use crate::runtime::RuntimeError;
+use crate::system::SystemError;
+
 #[derive(Error, Debug)]
-pub enum KaireiError {
-    #[error("Parse error: {message} at line {line}, column {column}, kind: {kind:?}")]
-    Parse {
-        message: String,
-        line: usize,
-        column: usize,
-        kind: ErrorKind,
-    },
+pub enum Error {
+    #[error("System error: {0}")]
+    System(#[from] SystemError),
+    #[error("Runtime error: {0}")]
+    Runtime(#[from] RuntimeError),
+    // context
+    #[error("Context error: {0}")]
+    Context(#[from] ContextError),
+    // eval error
+    #[error("Eval error: {0}")]
+    Eval(#[from] EvalError),
+    #[error("Feature error: {0}")]
+    Feature(#[from] FeatureError),
+    #[error("Agent error: {0}")]
+    Agent(#[from] crate::agent_registry::AgentError),
+    #[error("AST error: {0}")]
+    AST(#[from] crate::ast::ASTError),
+    // event error
+    #[error("Event error: {0}")]
+    Event(#[from] crate::event_bus::EventError),
 
-    #[error("Type error: {0}")]
-    Type(String),
-
-    #[error("Validation error: {0}")]
-    Validation(String),
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
 
-pub type Result<T> = std::result::Result<T, KaireiError>;
+// エラー作成用のヘルパー関数
+impl Error {
+    pub fn internal<S: Into<String>>(message: S) -> Self {
+        Error::Internal(message.into())
+    }
+}
