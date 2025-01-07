@@ -1,6 +1,11 @@
 use core::fmt;
 use std::collections::HashMap;
 
+pub enum Ast {
+    MicroAgent(MicroAgentDef),
+    World(WorldDef),
+}
+
 // MicroAgentのトップレベル構造
 #[derive(Debug, Clone, Default)]
 pub struct MicroAgentDef {
