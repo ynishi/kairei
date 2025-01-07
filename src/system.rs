@@ -122,6 +122,7 @@ impl System {
             .await
     }
 
+    #[tracing::instrument(skip(self, root))]
     pub async fn initialize(&mut self, root: ast::Root) -> RuntimeResult<()> {
         // call all registration methods
         self.register_native_features().await?;
@@ -132,8 +133,9 @@ impl System {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn register_native_features(&mut self) -> RuntimeResult<()> {
-        debug!("register_native_features started");
+        debug!("started");
 
         let complete_state = EventType::SystemNativeFeaturesRegistered;
         Self::check_start_transition(
@@ -144,12 +146,13 @@ impl System {
         let registry = self.feature_registry.write().await;
         registry.register().await?;
         self.update_system_status(complete_state).await;
-        debug!("register_native_features ended");
+        debug!("ended");
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, world_def))]
     pub async fn register_world(&self, world_def: &Option<WorldDef>) -> RuntimeResult<()> {
-        debug!("register_world started");
+        debug!("started");
         let complete_state = EventType::SystemWorldRegistered;
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
@@ -175,13 +178,14 @@ impl System {
         }
 
         self.update_system_status(complete_state).await;
-        debug!("register_world ended");
+        debug!("ended");
         Ok(())
     }
 
     // ビルトインエージェントの登録処理
+    #[tracing::instrument(skip(self))]
     pub async fn register_builtin_agents(&self) -> RuntimeResult<()> {
-        debug!("register_builtin_agents started");
+        debug!("started");
 
         let complete_state = EventType::SystemBuiltinAgentsRegistered;
         Self::check_start_transition(
@@ -195,22 +199,23 @@ impl System {
         drop(registry);
 
         for builtin in builtin_defs {
-            debug!("register_builtin_agents builtin started: {}", builtin.name);
+            debug!("builtin started: {}", builtin.name);
             self.register_agent_ast(&builtin.name, &builtin).await?;
             self.register_agent(&builtin.name).await?;
-            debug!("register_builtin_agents builtin ended: {}", builtin.name);
+            debug!("builtin ended: {}", builtin.name);
         }
 
         self.update_system_status(complete_state).await;
-        debug!("register_builtin_agents ended");
+        debug!("ended");
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn register_initial_user_agents(
         &self,
         agent_asts: Vec<MicroAgentDef>,
     ) -> RuntimeResult<()> {
-        debug!("register_initial_user_agents started");
+        debug!("started");
         let complete_state = EventType::SystemUserAgentsRegistered;
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
@@ -222,10 +227,11 @@ impl System {
             self.register_agent(&agent_ast.name).await?;
         }
         self.update_system_status(complete_state).await;
-        debug!("register_initial_user_agents ended");
+        debug!("ended");
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn start(&self) -> RuntimeResult<()> {
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
@@ -243,17 +249,20 @@ impl System {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn start_native_features(&self) -> RuntimeResult<()> {
         let registry = self.feature_registry.write().await;
         registry.start().await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn start_world(&self) -> RuntimeResult<()> {
         self.start_agent(&AgentType::World.to_string()).await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn start_builtin_agents(&self) -> RuntimeResult<()> {
         let registry = self.agent_registry().read().await;
         let agent_names = registry
@@ -269,6 +278,7 @@ impl System {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn start_users_agents(&self) -> RuntimeResult<()> {
         let registry = self.agent_registry().read().await;
         let agent_names =
@@ -282,6 +292,7 @@ impl System {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn shutdown(&self) -> RuntimeResult<()> {
         let shutdown_started = Instant::now();
         self.update_system_status(EventType::SystemStopping).await;
@@ -323,7 +334,6 @@ impl System {
             }
         }
 
-        // TODO: シャットダウン処理完了を受けて、システムを停止する
         self.update_system_status(EventType::SystemStopped).await;
         Ok(())
     }
