@@ -3,23 +3,20 @@ use std::{collections::HashMap, sync::Arc};
 use dashmap::DashMap;
 
 use crate::{
-    ast, config::AgentConfig, parse_root, AnswerDef, EventsDef, Expression, HandlerBlock,
-    HandlersDef, Literal, MicroAgentDef, RequestHandler, RequestType, RuntimeError, RuntimeResult,
+    ast, config::AgentConfig, parse_root, ASTError, ASTResult, AnswerDef, EventsDef, Expression,
+    HandlerBlock, HandlersDef, Literal, MicroAgentDef, RequestHandler, RequestType,
     StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo, WorldDef,
 };
-
 #[derive(Debug, Clone, Default)]
 pub struct AstRegistry {
     asts: Arc<DashMap<String, Arc<MicroAgentDef>>>,
 }
 
 impl AstRegistry {
-    pub async fn create_ast_from_dsl(&self, dsl: &str) -> RuntimeResult<ast::Root> {
-        let (_, root) = parse_root(dsl).map_err(|e| {
-            RuntimeError::Execution(crate::ExecutionError::ASTError(format!(
-                "Failed to parse DSL: {}",
-                e
-            )))
+    pub async fn create_ast_from_dsl(&self, dsl: &str) -> ASTResult<ast::Root> {
+        let (_, root) = parse_root(dsl).map_err(|e| ASTError::ParseError {
+            message: format!("failed to parse DSL {}", e),
+            target: "root".to_string(),
         })?;
         Ok(root)
     }
@@ -27,16 +24,17 @@ impl AstRegistry {
         &mut self,
         _agent_name: &str,
         _ast: &MicroAgentDef,
-    ) -> RuntimeResult<()> {
+    ) -> ASTResult<()> {
         self.asts
             .insert(_agent_name.to_string(), Arc::new(_ast.clone()));
         Ok(())
     }
 
-    pub async fn get_agent_ast(&self, agent_name: &str) -> RuntimeResult<Arc<MicroAgentDef>> {
-        let ast = self.asts.get(agent_name).ok_or(RuntimeError::Execution(
-            crate::ExecutionError::ASTNotFound(agent_name.to_string()),
-        ))?;
+    pub async fn get_agent_ast(&self, agent_name: &str) -> ASTResult<Arc<MicroAgentDef>> {
+        let ast = self
+            .asts
+            .get(agent_name)
+            .ok_or(ASTError::ASTNotFound(agent_name.to_string()))?;
         Ok(ast.value().clone())
     }
 
@@ -57,7 +55,7 @@ impl AstRegistry {
     pub async fn create_builtin_agent_asts(
         &self,
         config: &AgentConfig,
-    ) -> RuntimeResult<Vec<MicroAgentDef>> {
+    ) -> ASTResult<Vec<MicroAgentDef>> {
         let config = config.clone().scale_manager.unwrap_or_default();
         let scale_manager_def = MicroAgentDef {
             name: "scale_manager".to_string(),

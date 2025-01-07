@@ -3,13 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     event_bus::{self, Event},
     event_registry::{self, EventType},
-    RuntimeError,
 };
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::{event_bus::EventBus, RuntimeResult};
-
+use crate::event_bus::EventBus;
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, strum::EnumString, strum::Display, PartialOrd, Ord, Default,
 )]
@@ -28,6 +26,8 @@ pub enum NativeFeatureStatus {
 
 #[derive(Debug, Error)]
 pub enum FeatureError {
+    #[error("Event error: {0}")]
+    Event(#[from] event_bus::EventError),
     #[error("Event publish failed: {message}")]
     EventPublishError { message: String },
     #[error("Feature operation failed: {operation} - {message}")]
@@ -37,27 +37,48 @@ pub enum FeatureError {
     },
     #[error("Status update failed: {message}")]
     StatusError { message: String },
+    #[error("Feature not found: {0}")]
+    FeatureNotFound(NativeFeatureType),
+    #[error("Feature already exists: {0}")]
+    FeatureAlreadyExists(NativeFeatureType),
+    #[error("Feature initialization failed: feature: {feature}, message: {message}")]
+    InitError {
+        feature: NativeFeatureType,
+        message: String,
+    },
+    #[error("Feature start failed: feature: {feature}, message: {message}")]
+    StartError {
+        feature: NativeFeatureType,
+        message: String,
+    },
+    #[error("Feature run failed: feature: {feature}, message: {message}")]
+    RunError {
+        feature: NativeFeatureType,
+        message: String,
+    },
 }
+pub type FeatureResult<T> = Result<T, FeatureError>;
+
 #[async_trait]
 pub trait NativeFeature: Send + Sync {
     fn feature_type(&self) -> NativeFeatureType;
 
     async fn status(&self) -> NativeFeatureStatus;
 
-    fn publish(&self, event: Event) -> RuntimeResult<()>;
+    fn publish(&self, event: Event) -> FeatureResult<()>;
 
-    async fn init(&self) -> RuntimeResult<()> {
+    async fn init(&self) -> FeatureResult<()> {
         Ok(())
     }
     /// Start is the method to begin the main processing.
     /// This method must be non-blocking to ensure concurrent access after startup from the registry.
     /// When the main processing is completed, a FeatureStatusUpdated event must be emitted to notify the new status.
     /// Implement stop functionality by monitoring internal async variables or similar mechanisms to handle shutdown when stop is called.
-    async fn start(&self) -> RuntimeResult<()>;
-    async fn stop(&self) -> RuntimeResult<()>;
+    async fn start(&self) -> FeatureResult<()>;
+    async fn stop(&self) -> FeatureResult<()>;
 
     // ヘルパー機能
-    async fn emit_status(&self) -> RuntimeResult<()> {
+    async fn emit_status(&self) -> FeatureResult<()> {
         let status_event = Event {
             event_type: event_registry::EventType::FeatureStatusUpdated {
                 feature_type: self.feature_type(),
@@ -74,7 +95,7 @@ pub trait NativeFeature: Send + Sync {
         self.publish(status_event)
     }
 
-    async fn emit_failure(&self, message: &str) -> Result<(), RuntimeError> {
+    async fn emit_failure(&self, message: &str) -> FeatureResult<()> {
         let failure = Event {
             event_type: EventType::FeatureFailure {
                 error: message.to_string(),

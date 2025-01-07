@@ -1,5 +1,5 @@
 use clap::{command, Parser};
-use kairei::{config::SystemConfig, system::System, KaireiError};
+use kairei::{config::SystemConfig, system::System, Error};
 use std::path::PathBuf;
 use tracing::{debug, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -19,14 +19,14 @@ struct Cli {
     verbose: bool,
 }
 
-async fn run(cli: &Cli) -> Result<(), KaireiError> {
+async fn run(cli: &Cli) -> Result<(), Error> {
     // Load config
     let config_path = cli.config.clone();
     let config: SystemConfig = if config_path.clone().exists() {
         let content = std::fs::read_to_string(config_path)
-            .map_err(|e| KaireiError::Internal(format!("Failed to read config file: {}", e)))?;
+            .map_err(|e| Error::Internal(format!("Failed to read config file: {}", e)))?;
         serde_json::from_str(&content)
-            .map_err(|e| KaireiError::Internal(format!("Failed to parse config file: {}", e)))?
+            .map_err(|e| Error::Internal(format!("Failed to parse config file: {}", e)))?
     } else {
         // Default config
         SystemConfig::default()
@@ -41,7 +41,7 @@ async fn run(cli: &Cli) -> Result<(), KaireiError> {
 
     // Load and parse DSL
     let dsl = std::fs::read_to_string(&cli.dsl)
-        .map_err(|e| KaireiError::Internal(format!("Failed to read DSL file: {}", e)))?;
+        .map_err(|e| Error::Internal(format!("Failed to read DSL file: {}", e)))?;
 
     debug!("Parsing DSL file: {:?}", cli.dsl);
 
@@ -63,7 +63,7 @@ async fn run(cli: &Cli) -> Result<(), KaireiError> {
     // Wait for shutdown signal
     tokio::signal::ctrl_c()
         .await
-        .map_err(|e| KaireiError::Internal(format!("Failed to wait for Ctrl+C: {}", e)))?;
+        .map_err(|e| Error::Internal(format!("Failed to wait for Ctrl+C: {}", e)))?;
 
     println!("Shutdown signal received, performing clean shutdown...");
 
@@ -80,7 +80,7 @@ async fn run(cli: &Cli) -> Result<(), KaireiError> {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "debug".into()))
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .with(fmt::layer())
         .init();
 

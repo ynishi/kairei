@@ -9,7 +9,7 @@ use std::{
 use crate::{
     config::TickerConfig,
     event_bus::{self, Event},
-    event_registry, RuntimeResult,
+    event_registry,
 };
 use async_trait::async_trait;
 use tokio::{
@@ -18,7 +18,10 @@ use tokio::{
 };
 use tracing::debug;
 
-use super::types::{NativeFeature, NativeFeatureContext, NativeFeatureStatus, NativeFeatureType};
+use super::types::{
+    FeatureError, FeatureResult, NativeFeature, NativeFeatureContext, NativeFeatureStatus,
+    NativeFeatureType,
+};
 
 // Tickerの実装
 #[derive(Clone)]
@@ -54,7 +57,7 @@ impl Ticker {
         &self,
         mut interval_timer: tokio::time::Interval,
         event: Event,
-    ) -> RuntimeResult<()> {
+    ) -> FeatureResult<()> {
         while self.running.load(Ordering::SeqCst) {
             interval_timer.tick().await;
             if let Err(e) = self.context.event_bus.publish(event.clone()).await {
@@ -85,11 +88,14 @@ impl NativeFeature for Ticker {
         self.status.read().await.clone()
     }
 
-    fn publish(&self, event: Event) -> RuntimeResult<()> {
-        self.context.event_bus.sync_publish(event)
+    fn publish(&self, event: Event) -> FeatureResult<()> {
+        self.context
+            .event_bus
+            .sync_publish(event)
+            .map_err(FeatureError::from)
     }
 
-    async fn start(&self) -> RuntimeResult<()> {
+    async fn start(&self) -> FeatureResult<()> {
         debug!("Ticker started: {:?}", self.config);
         if self.status().await == NativeFeatureStatus::Active {
             debug!("Ticker already started: {:?}", self.config);
@@ -103,7 +109,12 @@ impl NativeFeature for Ticker {
                 message: message.clone(),
             })
             .await;
-            self.emit_failure(&message).await?;
+            self.emit_failure(&message)
+                .await
+                .map_err(|e| FeatureError::StartError {
+                    feature: self.feature_type(),
+                    message: format!("Failed to emit failure: {:?}", e),
+                })?;
             return Ok(());
         }
         let interval_timer = tokio::time::interval(self.config.tick_interval);
@@ -133,7 +144,7 @@ impl NativeFeature for Ticker {
         Ok(())
     }
 
-    async fn stop(&self) -> RuntimeResult<()> {
+    async fn stop(&self) -> FeatureResult<()> {
         debug!("Ticker stopping");
         self.running.store(false, Ordering::SeqCst);
         self.set_status(NativeFeatureStatus::Inactive).await;

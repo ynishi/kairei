@@ -3,12 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::{sync::RwLock, time::timeout};
 use tracing::{error, info};
 
-use crate::{
-    config::NativeFeatureConfig, native_feature::ticker::Ticker, ExecutionError, RuntimeError,
-    RuntimeResult,
+use super::types::{
+    FeatureError, FeatureResult, NativeFeature, NativeFeatureContext, NativeFeatureType,
 };
-
-use super::types::{NativeFeature, NativeFeatureContext, NativeFeatureType};
+use crate::native_feature::types::FeatureError::{FeatureNotFound, RunError};
+use crate::{config::NativeFeatureConfig, native_feature::ticker::Ticker};
 
 #[derive(Clone)]
 pub struct NativeFeatureRegistry {
@@ -30,7 +29,7 @@ impl NativeFeatureRegistry {
         }
     }
 
-    pub async fn register(&self) -> RuntimeResult<()> {
+    pub async fn register(&self) -> FeatureResult<()> {
         let config = self.config.read().await;
 
         if let Some(config) = config.ticker.clone() {
@@ -44,7 +43,7 @@ impl NativeFeatureRegistry {
         Ok(())
     }
 
-    pub async fn start(&self) -> RuntimeResult<()> {
+    pub async fn start(&self) -> FeatureResult<()> {
         let features = self.enabled_feature_type().await.clone();
 
         for feature_type in features {
@@ -54,33 +53,16 @@ impl NativeFeatureRegistry {
                 let feature = self_clone
                     .get_registered_feature(&feature_type_clone)
                     .await
-                    .ok_or_else(|| {
-                        RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
-                            "Feature not found: {:?}",
-                            feature_type
-                        )))
-                    })?
+                    .ok_or_else(|| FeatureNotFound(feature_type_clone.clone()))?
                     .clone();
-                feature.init().await.map_err(|e| {
-                    RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
-                        "Init Feature error: {}, {}",
-                        feature_type, e
-                    )))
-                })?;
+                feature.init().await?;
 
-                feature.start().await.map_err(|e| {
-                    RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
-                        "Start Feature error: {}, {}",
-                        feature_type, e
-                    )))
-                })
+                feature.start().await
             })
             .await
-            .map_err(|e| {
-                RuntimeError::Execution(ExecutionError::NativeFeatureError(format!(
-                    "Feature run failed {}",
-                    e
-                )))
+            .map_err(|e| RunError {
+                feature: feature_type.clone(),
+                message: format!("Error starting feature: {:?}", e),
             })??;
         }
         Ok(())
@@ -90,19 +72,17 @@ impl NativeFeatureRegistry {
         &self,
         feature_type: NativeFeatureType,
         feature: Arc<dyn NativeFeature>,
-    ) -> RuntimeResult<()> {
+    ) -> FeatureResult<()> {
         info!("register_feature: {}", feature_type);
         if self.features.read().await.contains_key(&feature_type) {
-            return Err(RuntimeError::Execution(ExecutionError::NativeFeatureError(
-                format!("Native Feature already exists: {}", feature_type),
-            )));
+            return Err(FeatureError::FeatureAlreadyExists(feature_type));
         }
 
         self.features.write().await.insert(feature_type, feature);
         Ok(())
     }
 
-    pub async fn shutdown(&self) -> RuntimeResult<()> {
+    pub async fn shutdown(&self) -> FeatureResult<()> {
         info!("Starting NativeFeatureRegistry shutdown");
 
         let features = self.features.read().await;
@@ -211,7 +191,7 @@ mod tests {
         let result = registry
             .register_feature(NativeFeatureType::Ticker, ticker)
             .await;
-        assert!(matches!(result, Err(RuntimeError::Execution(_))));
+        assert!(result.is_err());
     }
 
     #[tokio::test]

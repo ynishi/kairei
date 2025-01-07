@@ -1,10 +1,10 @@
 use std::{collections::HashMap, time::Duration};
 
+use crate::{eval::expression, event_registry::EventType};
 use chrono::{DateTime, Utc};
+use thiserror::Error;
 use tokio::sync::broadcast;
 use tracing::debug;
-
-use crate::{eval::expression, event_registry::EventType, EventError, RuntimeError, RuntimeResult};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Event {
@@ -32,6 +32,9 @@ pub struct ErrorEvent {
     pub message: String,
     pub severity: ErrorSeverity,
     pub parameters: HashMap<String, Value>,
+    // pub agent_id: Option<String>,      // エラー発生元のエージェント
+    // pub component: String,             // エラー発生元のコンポーネント
+    // pub timestamp: SystemTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -157,32 +160,32 @@ impl EventBus {
         (EventReceiver::new(event_rx), ErrorReceiver::new(error_rx))
     }
 
-    pub async fn publish(&self, event: Event) -> RuntimeResult<()> {
+    pub async fn publish(&self, event: Event) -> EventResult<()> {
         debug!("Publishing event: {:?}", event);
-        self.event_sender.send(event).map_err(|e| {
-            RuntimeError::Event(EventError::SendFailed {
+        self.event_sender
+            .send(event)
+            .map_err(|e| EventError::SendFailed {
                 message: e.to_string(),
-            })
-        })?;
+            })?;
         Ok(())
     }
 
-    pub fn sync_publish(&self, event: Event) -> RuntimeResult<()> {
+    pub fn sync_publish(&self, event: Event) -> EventResult<()> {
         debug!("Publishing event: {:?}", event);
-        self.event_sender.send(event).map_err(|e| {
-            RuntimeError::Event(EventError::SendFailed {
+        self.event_sender
+            .send(event)
+            .map_err(|e| EventError::SendFailed {
                 message: e.to_string(),
-            })
-        })?;
+            })?;
         Ok(())
     }
 
-    pub async fn publish_error(&self, error: ErrorEvent) -> RuntimeResult<()> {
-        self.error_sender.send(error).map_err(|e| {
-            RuntimeError::Event(EventError::SendFailed {
+    pub async fn publish_error(&self, error: ErrorEvent) -> EventResult<()> {
+        self.error_sender
+            .send(error)
+            .map_err(|e| EventError::SendFailed {
                 message: e.to_string(),
-            })
-        })?;
+            })?;
         Ok(())
     }
 
@@ -218,17 +221,17 @@ impl EventReceiver {
 
     /// イベントを受信する。Laggedエラーが発生した場合はresubscribeを試みて、エラーを返す。
     /// 利用側で、Laggedなどが発生しないようできるだけすぐに次のrecvを呼ぶようにする。
-    pub async fn recv(&mut self) -> RuntimeResult<Event> {
+    pub async fn recv(&mut self) -> EventResult<Event> {
         match self.receiver.recv().await {
             Ok(event) => Ok(event),
             Err(broadcast::error::RecvError::Lagged(n)) => {
                 // n個のメッセージをスキップ
                 self.receiver = self.receiver.resubscribe();
-                Err(RuntimeError::Event(EventError::Lagged { count: n }))
+                Err(EventError::Lagged { count: n })
             }
-            Err(e) => Err(RuntimeError::Event(EventError::RecieveFailed {
+            Err(e) => Err(EventError::ReceiveFailed {
                 message: e.to_string(),
-            })),
+            }),
         }
     }
 }
@@ -242,14 +245,71 @@ impl ErrorReceiver {
         Self { receiver }
     }
 
-    pub async fn recv(&mut self) -> RuntimeResult<ErrorEvent> {
-        self.receiver.recv().await.map_err(|e| {
-            RuntimeError::Event(EventError::RecieveFailed {
+    pub async fn recv(&mut self) -> EventResult<ErrorEvent> {
+        self.receiver
+            .recv()
+            .await
+            .map_err(|e| EventError::ReceiveFailed {
                 message: e.to_string(),
             })
-        })
     }
 }
+
+#[derive(Error, Debug)]
+pub enum EventError {
+    #[error("Event type not supported: {event_type}")]
+    UnsupportedType { event_type: String },
+
+    #[error("Unsupported request event: {request_type}")]
+    UnsupportedRequest { request_type: String },
+
+    #[error("Invalid event parameters: {message}")]
+    InvalidParameters { message: String },
+
+    #[error("Event parameters length not matched: {event_type}, expected {expected}, got {got}")]
+    ParametersLengthNotMatched {
+        event_type: String,
+        expected: usize,
+        got: usize,
+    },
+
+    #[error("Event parameter type mismatch: {event_type}, expected {expected}, got {got}")]
+    TypeMismatch {
+        event_type: String,
+        expected: String,
+        got: String,
+    },
+
+    #[error("Event Send failed: {message}")]
+    SendFailed { message: String },
+
+    #[error("Event Receive failed: {message}")]
+    ReceiveFailed { message: String },
+
+    #[error("Event Receive response failed: {message}")]
+    ReceiveResponseFailed { request_id: String, message: String },
+
+    #[error("Event Receive response timeout: {request_id}")]
+    ReceiveResponseTimeout {
+        request_id: String,
+        timeout_secs: u64,
+        message: String,
+    },
+
+    #[error("Event lagged: {count}")]
+    Lagged { count: u64 },
+
+    #[error("Event already registered: {event_type}")]
+    AlreadyRegistered { event_type: String },
+
+    #[error("Built-in event already registered")]
+    BuiltInAlreadyRegistered,
+
+    #[error("Event not found: {0}")]
+    NotFound(String),
+}
+
+pub type EventResult<T> = Result<T, EventError>;
 
 #[cfg(test)]
 mod tests {

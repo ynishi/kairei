@@ -1,3 +1,12 @@
+use crate::agent_registry::AgentError;
+use crate::config::AgentConfig;
+use crate::eval::context::{AgentInfo, AgentType, ExecutionContext, StateAccessMode};
+use crate::eval::evaluator::Evaluator;
+use crate::eval::expression;
+use crate::evaluator::EvalError;
+use crate::event_bus::{ErrorEvent, Event, EventBus, EventError, LastStatus, Value};
+use crate::event_registry::{EventType, LifecycleEvent};
+use crate::{EventHandler, HandlerBlock, MicroAgentDef, RequestHandler};
 use async_trait::async_trait;
 use chrono::Utc;
 use dashmap::DashMap;
@@ -6,20 +15,10 @@ use futures::{stream::SelectAll, Stream};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::{broadcast, RwLock};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tracing::debug;
-
-use crate::config::AgentConfig;
-use crate::eval::context::{AgentInfo, AgentType, ExecutionContext, StateAccessMode};
-use crate::eval::evaluator::Evaluator;
-use crate::eval::expression;
-use crate::event_bus::{ErrorEvent, Event, EventBus, LastStatus, Value};
-use crate::event_registry::{EventType, LifecycleEvent};
-use crate::{
-    EventHandler, ExecutionError, HandlerBlock, HandlerError, MicroAgentDef, RequestHandler,
-    RuntimeError, RuntimeResult,
-};
 
 // ハンドラの型
 type ObserveHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, RuntimeResult<()>> + Send + Sync>;
@@ -104,18 +103,18 @@ impl RuntimeAgent for RuntimeAgentData {
                         .eval_expression(initial, self.base_context.clone())
                         .await
                         .map_err(|e| {
-                            RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                            RuntimeError::EvaluationFailed(format!(
                                 "Failed to evaluate initial value for variable {}: {}",
                                 name, e
-                            )))
+                            ))
                         })?;
                     self.base_context
                         .set_state(name.as_str(), value)
                         .map_err(|e| {
-                            RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                            RuntimeError::EvaluationFailed(format!(
                                 "Failed to set initial value for variable {}: {}",
                                 name, e
-                            )))
+                            ))
                         })?;
                 }
             }
@@ -128,7 +127,7 @@ impl RuntimeAgent for RuntimeAgentData {
 
         // イベントストリームの変換
         let event_stream = BroadcastStream::new(event_rx.receiver).map(|e| {
-            tracing::debug!("Event received");
+            debug!("Event received");
             match e {
                 Ok(event) => Ok(StreamMessage::Event(event)),
                 Err(_) => Err(()),
@@ -137,7 +136,7 @@ impl RuntimeAgent for RuntimeAgentData {
 
         // エラーストリームの変換
         let error_stream = BroadcastStream::new(error_rx.receiver).map(|e| {
-            tracing::debug!("Error event received");
+            debug!("Error event received");
             match e {
                 Ok(error) => Ok(StreamMessage::ErrorEvent(error)),
                 Err(_) => Err(()),
@@ -146,7 +145,7 @@ impl RuntimeAgent for RuntimeAgentData {
 
         // システムシャットダウンストリームの変換
         let system_shutdown_stream = BroadcastStream::new(shutdown_rx).map(|e| {
-            tracing::debug!("System shutdown received");
+            debug!("System shutdown received");
             match e {
                 Ok(_) => Ok(StreamMessage::SystemShutdown),
                 Err(_) => Err(()),
@@ -155,7 +154,7 @@ impl RuntimeAgent for RuntimeAgentData {
 
         // プライベートシャットダウンストリームの変換
         let private_shutdown_stream = BroadcastStream::new(private_shutdown_rx).map(|e| {
-            tracing::debug!("Private shutdown received");
+            debug!("Private shutdown received");
             match e {
                 Ok(_) => Ok(StreamMessage::PrivateShutdown),
                 Err(_) => Err(()),
@@ -198,12 +197,12 @@ impl RuntimeAgent for RuntimeAgentData {
         // クリーンアップ処理
         self.cleanup().await?;
 
-        self.private_shutdown_end_tx.send(()).map_err(|e| {
-            RuntimeError::Execution(ExecutionError::ShutdownFailed {
+        self.private_shutdown_end_tx
+            .send(())
+            .map_err(|e| RuntimeError::ShutdownFailed {
                 agent_name: self.name.clone(),
                 message: e.to_string(),
-            })
-        })?;
+            })?;
 
         // AgentStoppedイベントを発行
         self.event_bus
@@ -221,21 +220,19 @@ impl RuntimeAgent for RuntimeAgentData {
     }
 
     async fn shutdown(&self) -> RuntimeResult<()> {
-        self.private_shutdown_start_tx.send(()).map_err(|e| {
-            RuntimeError::Execution(ExecutionError::ShutdownFailed {
+        self.private_shutdown_start_tx
+            .send(())
+            .map_err(|e| RuntimeError::ShutdownFailed {
                 agent_name: self.name.clone(),
                 message: e.to_string(),
-            })
-        })?;
+            })?;
         self.private_shutdown_end_tx
             .subscribe()
             .recv()
             .await
-            .map_err(|e| {
-                RuntimeError::Execution(ExecutionError::ShutdownFailed {
-                    agent_name: self.name.clone(),
-                    message: e.to_string(),
-                })
+            .map_err(|e| RuntimeError::ShutdownFailed {
+                agent_name: self.name.clone(),
+                message: e.to_string(),
             })?;
         Ok(())
     }
@@ -250,11 +247,9 @@ impl RuntimeAgent for RuntimeAgentData {
         self.base_context
             .cancel_pending_requests()
             .await
-            .map_err(|e| {
-                RuntimeError::Execution(ExecutionError::CleanUpFailed {
-                    agent_name: self.name.clone(),
-                    message: e.to_string(),
-                })
+            .map_err(|e| RuntimeError::CleanUpFailed {
+                agent_name: self.name.clone(),
+                message: e.to_string(),
             })?;
 
         // 3. 状態の保存や他のリソースのクリーンアップ
@@ -408,10 +403,10 @@ impl RuntimeAgentData {
                     .await
                     .map(|_| ())
                     .map_err(|e| {
-                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                        RuntimeError::EvaluationFailed(format!(
                             "Failed to evaluate observe handler: {}",
                             e
-                        )))
+                        ))
                     })
             })
         })
@@ -453,10 +448,10 @@ impl RuntimeAgentData {
                     .await
                     .map(|_| ())
                     .map_err(|e| {
-                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                        RuntimeError::EvaluationFailed(format!(
                             "Failed to evaluate answer handler: {}",
                             e
-                        )))
+                        ))
                     })
             })
         })
@@ -496,10 +491,10 @@ impl RuntimeAgentData {
                     .await
                     .map(|_| ())
                     .map_err(|e| {
-                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                        RuntimeError::EvaluationFailed(format!(
                             "Failed to evaluate react handler: {}",
                             e
-                        )))
+                        ))
                     })
             })
         })
@@ -528,10 +523,10 @@ impl RuntimeAgentData {
                     .await
                     .map(|_| ())
                     .map_err(|e| {
-                        RuntimeError::Execution(ExecutionError::EvaluationFailed(format!(
+                        RuntimeError::EvaluationFailed(format!(
                             "Failed to evaluate lifecycle handler {}",
                             e
-                        )))
+                        ))
                     })
             })
         })
@@ -550,10 +545,10 @@ impl RuntimeAgentData {
                     if let Some(handler) = self.answer_handlers.get(request_type) {
                         handler(event).await
                     } else {
-                        Err(RuntimeError::Handler(HandlerError::NotFound {
+                        Err(RuntimeError::HandlerNotFound {
                             handler_type: "answer".to_string(),
                             name: request_type.clone(),
-                        }))
+                        })
                     }
                 } else {
                     // not for me
@@ -639,6 +634,35 @@ impl RuntimeAgentData {
         Ok(())
     }
 }
+
+pub type RuntimeResult<T> = Result<T, RuntimeError>;
+
+// ランタイムのエラー
+#[derive(Error, Debug)]
+pub enum RuntimeError {
+    #[error("Agent error: {0}")]
+    Agent(#[from] AgentError),
+
+    #[error("Event error: {0}")]
+    Event(#[from] EventError),
+
+    #[error("Expression evaluation failed: {0}")]
+    EvaluationFailed(String),
+
+    #[error("Shutdown failed: {agent_name}, {message}")]
+    ShutdownFailed { agent_name: String, message: String },
+
+    #[error("Clean up failed: {agent_name}, {message}")]
+    CleanUpFailed { agent_name: String, message: String },
+
+    // eval
+    #[error("Evaluation error: {0}")]
+    Eval(#[from] EvalError),
+
+    #[error("Handler not found for {handler_type}: {name}")]
+    HandlerNotFound { handler_type: String, name: String },
+}
+
 #[cfg(test)]
 mod tests {
     use std::{sync::Mutex, time::Duration};

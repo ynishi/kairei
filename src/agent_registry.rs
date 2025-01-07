@@ -1,21 +1,17 @@
-use dashmap::DashMap;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::broadcast;
-use tokio::time::timeout;
-
 use crate::config::AgentConfig;
 use crate::eval::context::AgentType;
 use crate::eval::expression;
 use crate::event_bus::{ErrorEvent, ErrorSeverity, Event, EventBus, LastStatus, Value};
 use crate::event_registry::EventType;
 use crate::runtime::RuntimeAgent;
-use crate::{
-    AnswerDef, ExecutionError, Expression, HandlerBlock, Literal, MicroAgentDef, RequestHandler,
-    RequestType, RuntimeError, RuntimeResult, StateAccessPath, StateDef, StateVarDef, Statement,
-    TypeInfo,
-};
+use dashmap::DashMap;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+use thiserror::Error;
+use tokio::sync::broadcast;
+use tokio::time::timeout;
+use tracing::{info, warn};
 
 pub struct AgentRegistry {
     agents: Arc<DashMap<String, Arc<dyn RuntimeAgent>>>,
@@ -44,7 +40,7 @@ impl AgentRegistry {
             config: config.clone(),
         }
     }
-    pub async fn run(&self) -> RuntimeResult<()> {
+    pub async fn run(&self) -> AgentResult<()> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         loop {
             tokio::select! {
@@ -87,11 +83,11 @@ impl AgentRegistry {
         id: &str,
         agent: Arc<dyn RuntimeAgent>,
         event_bus: &EventBus,
-    ) -> RuntimeResult<()> {
+    ) -> AgentResult<()> {
         if self.agents.contains_key(id) {
-            return Err(RuntimeError::Execution(
-                ExecutionError::AgentAlreadyExists { id: id.to_string() },
-            ));
+            return Err(AgentError::AgentAlreadyExists {
+                agent_id: id.to_string(),
+            });
         }
 
         let agent_name = agent.name();
@@ -114,16 +110,16 @@ impl AgentRegistry {
         Ok(())
     }
 
-    pub async fn unregister_agent(&self, id: &str, event_bus: &EventBus) -> RuntimeResult<()> {
+    pub async fn unregister_agent(&self, id: &str, event_bus: &EventBus) -> AgentResult<()> {
         // まず実行を停止
         if self.is_agent_running(id) {
             self.shutdown_agent(id, None).await?;
         }
 
         if self.agents.remove(id).is_none() {
-            return Err(RuntimeError::Execution(ExecutionError::AgentNotFound {
-                id: id.to_string(),
-            }));
+            return Err(AgentError::AgentNotFound {
+                agent_id: id.to_string(),
+            });
         }
 
         // AgentRemovedイベントの発行
@@ -141,12 +137,12 @@ impl AgentRegistry {
         Ok(())
     }
 
-    pub async fn run_agent(&self, id: &str, event_bus: Arc<EventBus>) -> RuntimeResult<()> {
+    pub async fn run_agent(&self, id: &str, event_bus: Arc<EventBus>) -> AgentResult<()> {
         let agent = self
             .agents
             .get(id)
-            .ok_or_else(|| {
-                RuntimeError::Execution(ExecutionError::AgentNotFound { id: id.to_string() })
+            .ok_or_else(|| AgentError::AgentNotFound {
+                agent_id: id.to_string(),
             })?
             .clone();
 
@@ -191,26 +187,29 @@ impl AgentRegistry {
         Ok(())
     }
 
-    pub async fn shutdown_agent(&self, id: &str, timeout_secs: Option<u64>) -> RuntimeResult<()> {
+    pub async fn shutdown_agent(&self, id: &str, timeout_secs: Option<u64>) -> AgentResult<()> {
         let timeout_secs = timeout_secs.unwrap_or(30);
-        let agent = self.agents.get(id).ok_or_else(|| {
-            RuntimeError::Execution(ExecutionError::AgentNotFound { id: id.to_string() })
-        })?;
+        let agent = self
+            .agents
+            .get(id)
+            .ok_or_else(|| AgentError::AgentNotFound {
+                agent_id: id.to_string(),
+            })?;
 
         // シャットダウンの開始をログ
-        tracing::info!("Initiating shutdown for agent: {}", id);
+        info!("Initiating shutdown for agent: {}", id);
 
         match timeout(Duration::from_secs(timeout_secs), agent.shutdown()).await {
             Ok(_) => {
-                tracing::info!("Agent {} shutdown completed", id);
+                info!("Agent {} shutdown completed", id);
                 self.running_agents.remove(id);
             }
             Err(_) => {
-                tracing::warn!("Agent {} shutdown timed out", id);
-                return Err(RuntimeError::Execution(ExecutionError::ShutdownTimeout {
+                warn!("Agent {} shutdown timed out", id);
+                return Err(AgentError::ShutdownTimeout {
                     agent_id: id.to_string(),
                     timeout_secs,
-                }));
+                });
             }
         }
 
@@ -218,18 +217,18 @@ impl AgentRegistry {
     }
 
     // エージェントの強制停止
-    pub async fn kill_agent(&self, id: &str) -> RuntimeResult<()> {
+    pub async fn kill_agent(&self, id: &str) -> AgentResult<()> {
         if let Some((_, handle)) = self.running_agents.remove(id) {
             handle.abort();
-            tracing::info!("Agent {} forcefully killed", id);
+            info!("Agent {} forcefully killed", id);
             self.agents.remove(id);
         }
         Ok(())
     }
 
     // 全エージェントのシャットダウン
-    pub async fn shutdown_all(&self, timeout_secs: u64) -> RuntimeResult<()> {
-        tracing::info!("Initiating shutdown for all agents");
+    pub async fn shutdown_all(&self, timeout_secs: u64) -> AgentResult<()> {
+        info!("Initiating shutdown for all agents");
 
         let running_agent_ids: Vec<_> = self
             .running_agents
@@ -250,12 +249,12 @@ impl AgentRegistry {
                 .await
                 {
                     Ok(_) => {
-                        tracing::info!("Agent {} shutdown completed", id);
-                        let ok: RuntimeResult<()> = Ok(());
+                        info!("Agent {} shutdown completed", id);
+                        let ok: AgentResult<()> = Ok(());
                         ok
                     }
                     Err(_) => {
-                        tracing::warn!("Agent {} shutdown timed out, executing kill", id);
+                        warn!("Agent {} shutdown timed out, executing kill", id);
                         self_ref.kill_agent(id).await?;
                         Ok(())
                     }
@@ -270,7 +269,7 @@ impl AgentRegistry {
         self.running_agents.clear();
         self.agents.clear();
 
-        tracing::info!("All agents shutdown completed");
+        info!("All agents shutdown completed");
         Ok(())
     }
 
@@ -335,55 +334,6 @@ impl AgentRegistry {
             .collect()
     }
 
-    pub async fn get_builtin_agent_asts(&self) -> RuntimeResult<Vec<MicroAgentDef>> {
-        let config = self.config.scale_manager.clone().unwrap_or_default();
-        let scale_manager_def = MicroAgentDef {
-            name: "scale_manager".to_string(),
-            state: Some(StateDef {
-                variables: {
-                    let mut vars = HashMap::new();
-                    vars.insert(
-                        "enabled".to_string(),
-                        StateVarDef {
-                            name: "enabled".to_string(),
-                            type_info: TypeInfo::Simple("boolean".to_string()),
-                            initial_value: Some(Expression::Literal(Literal::Boolean(
-                                config.enabled,
-                            ))),
-                        },
-                    );
-                    vars.insert(
-                        "max_instances_per_agent".to_string(),
-                        StateVarDef {
-                            name: "self.max_instances_per_agent".to_string(),
-                            type_info: TypeInfo::Simple("i64".to_string()),
-                            initial_value: Some(Expression::Literal(Literal::Integer(
-                                config.max_instances_per_agent as i64,
-                            ))),
-                        },
-                    );
-                    vars
-                },
-            }),
-            // simply return the value of max_instances_per_agent for agent request event.
-            answer: Some(AnswerDef {
-                handlers: vec![RequestHandler {
-                    request_type: RequestType::Custom("get_max_instances_per_agent".to_string()),
-                    parameters: vec![],
-                    return_type: TypeInfo::Simple("i64".to_string()),
-                    constraints: None,
-                    block: HandlerBlock {
-                        statements: vec![Statement::Return(Expression::StateAccess(
-                            StateAccessPath(vec!["self".into(), "max_instances_per_agent".into()]),
-                        ))],
-                    },
-                }],
-            }),
-            ..Default::default()
-        };
-        Ok(vec![scale_manager_def])
-    }
-
     pub fn builtin_agent_types() -> Vec<AgentType> {
         vec![AgentType::ScaleManager, AgentType::Monitor]
     }
@@ -424,9 +374,27 @@ impl AgentRegistry {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum AgentError {
+    #[error("Agent already exists: {agent_id}")]
+    AgentAlreadyExists { agent_id: String },
+    #[error("Agent not found: {agent_id}")]
+    AgentNotFound { agent_id: String },
+    #[error("Shutdown timeout for agent {agent_id} exceeded: {timeout_secs}")]
+    ShutdownTimeout { agent_id: String, timeout_secs: u64 },
+    #[error("Failed to send shutdown message for agent {agent_name}: {message}")]
+    SendShutdownFailed { agent_name: String, message: String },
+    // event error
+    #[error("Event error: {0}")]
+    EventError(#[from] crate::event_bus::EventError),
+}
+
+pub type AgentResult<T> = Result<T, AgentError>;
+
 // テスト用のヘルパー関数
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
     use chrono::Utc;
     use futures::{stream::SelectAll, Stream};
     use std::{pin::Pin, sync::atomic::AtomicBool, time::Duration};
@@ -437,10 +405,11 @@ mod tests {
     use crate::{
         eval::{context::AgentType, expression},
         event_registry::{EventType, LifecycleEvent},
-        runtime::StreamMessage,
+        runtime::{RuntimeResult, StreamMessage},
     };
 
     use super::*;
+    use crate::runtime::RuntimeError;
     use tokio::test;
 
     // イベントを収集するヘルパー構造体
@@ -494,7 +463,7 @@ mod tests {
         }
     }
 
-    #[async_trait::async_trait]
+    #[async_trait]
     impl RuntimeAgent for MockAgent {
         fn name(&self) -> String {
             self.name.clone()
@@ -520,7 +489,7 @@ mod tests {
 
             // イベントストリームの変換
             let event_stream = BroadcastStream::new(event_rx.receiver).map(|e| {
-                tracing::debug!("Event received");
+                debug!("Event received");
                 match e {
                     Ok(event) => Ok(StreamMessage::Event(event)),
                     Err(_) => Err(()),
@@ -529,7 +498,7 @@ mod tests {
 
             // システムシャットダウンストリームの変換
             let system_shutdown_stream = BroadcastStream::new(shutdown_rx).map(|e| {
-                tracing::debug!("System shutdown received");
+                debug!("System shutdown received");
                 match e {
                     Ok(_) => Ok(StreamMessage::SystemShutdown),
                     Err(_) => Err(()),
@@ -538,7 +507,7 @@ mod tests {
 
             // プライベートシャットダウンストリームの変換
             let private_shutdown_stream = BroadcastStream::new(private_shutdown_rx).map(|e| {
-                tracing::debug!("Private shutdown received");
+                debug!("Private shutdown received");
                 match e {
                     Ok(_) => Ok(StreamMessage::PrivateShutdown),
                     Err(_) => Err(()),
@@ -580,12 +549,12 @@ mod tests {
             Ok(())
         }
         async fn shutdown(&self) -> RuntimeResult<()> {
-            self.private_shutdown_tx.send(()).map_err(|e| {
-                RuntimeError::Execution(ExecutionError::SendShutdownFailed {
+            self.private_shutdown_tx
+                .send(())
+                .map_err(|e| AgentError::SendShutdownFailed {
                     agent_name: self.name.clone(),
                     message: e.to_string(),
-                })
-            })?;
+                })?;
             tokio::time::sleep(Duration::from_secs(2)).await; // 終了処理をシミュレート
 
             Ok(())
@@ -678,12 +647,7 @@ mod tests {
             .unregister_agent("nonexistent", &event_bus)
             .await;
 
-        assert!(matches!(
-            result,
-            Err(RuntimeError::Execution(
-                ExecutionError::AgentNotFound { .. }
-            ))
-        ));
+        assert!(result.is_err());
     }
 
     #[tokio::test]

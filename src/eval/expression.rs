@@ -2,9 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_recursion::async_recursion;
 
-use crate::{BinaryOperator, ExecutionError, Expression, Literal, RuntimeError, RuntimeResult};
-
 use super::context::{ExecutionContext, VariableAccess};
+use crate::eval::evaluator::{EvalError, EvalResult};
+use crate::{BinaryOperator, Expression, Literal};
 
 // 値の型システム
 #[derive(Clone, Debug, PartialEq)]
@@ -36,7 +36,7 @@ impl ExpressionEvaluator {
         &self,
         expr: &Expression,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         match expr {
             Expression::Literal(lit) => Self::eval_literal(lit),
             Expression::Variable(name) => self.eval_variable(name, context).await,
@@ -58,7 +58,7 @@ impl ExpressionEvaluator {
         Self
     }
 
-    fn eval_literal(lit: &Literal) -> RuntimeResult<Value> {
+    fn eval_literal(lit: &Literal) -> EvalResult<Value> {
         Ok(match lit {
             Literal::Integer(i) => Value::Integer(*i),
             Literal::Float(f) => Value::Float(*f),
@@ -84,18 +84,9 @@ impl ExpressionEvaluator {
     }
 
     // 変数の評価
-    async fn eval_variable(
-        &self,
-        name: &str,
-        context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    async fn eval_variable(&self, name: &str, context: Arc<ExecutionContext>) -> EvalResult<Value> {
         let access = VariableAccess::Local(name.to_string());
-        context.get(access).await.map_err(|e| {
-            RuntimeError::Execution(ExecutionError::EventError(format!(
-                "Variable not found: {}, {}",
-                name, e
-            )))
-        })
+        context.get(access).await.map_err(EvalError::from)
     }
 
     // 状態アクセスの評価
@@ -103,14 +94,9 @@ impl ExpressionEvaluator {
         &self,
         path: &str,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         let access = VariableAccess::State(path.to_string());
-        context.get(access).await.map_err(|e| {
-            RuntimeError::Execution(ExecutionError::EventError(format!(
-                "State not found: {}, {}",
-                path, e
-            )))
-        })
+        context.get(access).await.map_err(EvalError::from)
     }
 
     // 関数呼び出しの評価
@@ -119,7 +105,7 @@ impl ExpressionEvaluator {
         function: &str,
         arguments: &[Expression],
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         // 引数を評価
         let mut evaluated_args = Vec::with_capacity(arguments.len());
         for arg in arguments {
@@ -136,9 +122,7 @@ impl ExpressionEvaluator {
             //"min" => self.eval_min_function(&evaluated_args),
             //"now" => self.eval_now_function(),
             //"log" => self.eval_log_function(&evaluated_args),
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!("Unknown function: {}", function),
-            ))),
+            _ => Err(EvalError::Eval(format!("Unknown function: {}", function))),
         }
     }
 
@@ -149,7 +133,7 @@ impl ExpressionEvaluator {
         left: &Expression,
         right: &Expression,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         let left_val = self.eval_expression(left, context.clone()).await?;
         let right_val = self.eval_expression(right, context).await?;
 
@@ -171,31 +155,29 @@ impl ExpressionEvaluator {
 
     // 以下、組み込み関数の実装
 
-    fn eval_len_function(&self, args: &[Value]) -> RuntimeResult<Value> {
+    fn eval_len_function(&self, args: &[Value]) -> EvalResult<Value> {
         if args.len() != 1 {
-            return Err(RuntimeError::Execution(ExecutionError::EventError(
+            return Err(EvalError::Eval(
                 "len function requires exactly one argument".to_string(),
-            )));
+            ));
         }
 
         match &args[0] {
             Value::String(s) => Ok(Value::Integer(s.len() as i64)),
             Value::List(l) => Ok(Value::Integer(l.len() as i64)),
             Value::Map(m) => Ok(Value::Integer(m.len() as i64)),
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!(
-                    "len function requires string, list, or map, but got {:?}",
-                    args[0]
-                ),
+            _ => Err(EvalError::Eval(format!(
+                "len function requires string, list, or map, but got {:?}",
+                args[0]
             ))),
         }
     }
 
-    fn eval_sum_function(&self, args: &[Value]) -> RuntimeResult<Value> {
+    fn eval_sum_function(&self, args: &[Value]) -> EvalResult<Value> {
         if args.len() != 1 {
-            return Err(RuntimeError::Execution(ExecutionError::EventError(
+            return Err(EvalError::Eval(
                 "sum function requires exactly one argument".to_string(),
-            )));
+            ));
         }
 
         match &args[0] {
@@ -221,11 +203,9 @@ impl ExpressionEvaluator {
                             sum_float += f;
                         }
                         _ => {
-                            return Err(RuntimeError::Execution(ExecutionError::EventError(
-                                format!(
-                                    "sum function requires list of numbers, but got {:?}",
-                                    value
-                                ),
+                            return Err(EvalError::Eval(format!(
+                                "sum function requires list of numbers, but got {:?}",
+                                value
                             )));
                         }
                     }
@@ -237,28 +217,26 @@ impl ExpressionEvaluator {
                     Ok(Value::Integer(sum_int))
                 }
             }
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!(
-                    "sum function requires list of numbers, but got {:?}",
-                    args[0]
-                ),
+            _ => Err(EvalError::Eval(format!(
+                "sum function requires list of numbers, but got {:?}",
+                args[0]
             ))),
         }
     }
 
-    fn eval_avg_function(&self, args: &[Value]) -> RuntimeResult<Value> {
+    fn eval_avg_function(&self, args: &[Value]) -> EvalResult<Value> {
         if args.len() != 1 {
-            return Err(RuntimeError::Execution(ExecutionError::EventError(
+            return Err(EvalError::Eval(
                 "avg function requires exactly one argument".to_string(),
-            )));
+            ));
         }
 
         match &args[0] {
             Value::List(list) => {
                 if list.is_empty() {
-                    return Err(RuntimeError::Execution(ExecutionError::EventError(
+                    return Err(EvalError::Eval(
                         "cannot calculate average of empty list".to_string(),
-                    )));
+                    ));
                 }
 
                 let sum = self.eval_sum_function(args)?;
@@ -268,118 +246,102 @@ impl ExpressionEvaluator {
                     _ => unreachable!(),
                 }
             }
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!(
-                    "avg function requires list of numbers, but got {:?}",
-                    args[0]
-                ),
+            _ => Err(EvalError::Eval(format!(
+                "avg function requires list of numbers, but got {:?}",
+                args[0]
             ))),
         }
     }
 
     // 二項演算子の実装
 
-    fn eval_add(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_add(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         match (left, right) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l + r)),
             (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l + r)),
             (Value::Integer(l), Value::Float(r)) => Ok(Value::Float(*l as f64 + r)),
             (Value::Float(l), Value::Integer(r)) => Ok(Value::Float(l + *r as f64)),
             (Value::String(l), Value::String(r)) => Ok(Value::String(l.clone() + r)),
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!("{:?} + {:?}", left, right),
-            ))),
+            _ => Err(EvalError::Eval(format!("{:?} + {:?}", left, right))),
         }
     }
 
-    fn eval_subtract(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_subtract(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         match (left, right) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l - r)),
             (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l - r)),
             (Value::Integer(l), Value::Float(r)) => Ok(Value::Float(*l as f64 - r)),
             (Value::Float(l), Value::Integer(r)) => Ok(Value::Float(l - *r as f64)),
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!("{:?} - {:?}", left, right),
-            ))),
+            _ => Err(EvalError::Eval(format!("{:?} - {:?}", left, right))),
         }
     }
 
-    fn eval_multiply(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_multiply(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         match (left, right) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l * r)),
             (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l * r)),
             (Value::Integer(l), Value::Float(r)) => Ok(Value::Float(*l as f64 * r)),
             (Value::Float(l), Value::Integer(r)) => Ok(Value::Float(l * *r as f64)),
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!("{:?} * {:?}", left, right),
-            ))),
+            _ => Err(EvalError::Eval(format!("{:?} * {:?}", left, right))),
         }
     }
 
-    fn eval_divide(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_divide(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         match (left, right) {
             (Value::Integer(l), Value::Integer(r)) => {
                 if *r == 0 {
-                    return Err(RuntimeError::Execution(ExecutionError::EventError(
-                        "division by zero".to_string(),
-                    )));
+                    return Err(EvalError::Eval("division by zero".to_string()));
                 }
                 Ok(Value::Float(*l as f64 / *r as f64))
             }
             (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l / r)),
             (Value::Integer(l), Value::Float(r)) => Ok(Value::Float(*l as f64 / r)),
             (Value::Float(l), Value::Integer(r)) => Ok(Value::Float(l / *r as f64)),
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!("{:?} / {:?}", left, right),
-            ))),
+            _ => Err(EvalError::Eval(format!("{:?} / {:?}", left, right))),
         }
     }
 
-    fn eval_equal(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_equal(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         Ok(Value::Boolean(left == right))
     }
 
-    fn eval_not_equal(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_not_equal(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         Ok(Value::Boolean(left != right))
     }
 
-    fn eval_less_than(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_less_than(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         self.compare_values(left, right, |ordering| ordering.is_lt())
     }
 
-    fn eval_greater_than(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_greater_than(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         self.compare_values(left, right, |ordering| ordering.is_gt())
     }
 
-    fn eval_less_than_equal(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_less_than_equal(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         self.compare_values(left, right, |ordering| ordering.is_le())
     }
 
-    fn eval_greater_than_equal(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_greater_than_equal(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         self.compare_values(left, right, |ordering| ordering.is_ge())
     }
 
-    fn eval_and(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_and(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         match (left, right) {
             (Value::Boolean(l), Value::Boolean(r)) => Ok(Value::Boolean(*l && *r)),
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!("{:?} && {:?}", left, right),
-            ))),
+            _ => Err(EvalError::Eval(format!("{:?} && {:?}", left, right))),
         }
     }
 
-    fn eval_or(&self, left: &Value, right: &Value) -> RuntimeResult<Value> {
+    fn eval_or(&self, left: &Value, right: &Value) -> EvalResult<Value> {
         match (left, right) {
             (Value::Boolean(l), Value::Boolean(r)) => Ok(Value::Boolean(*l || *r)),
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!("{:?} || {:?}", left, right),
-            ))),
+            _ => Err(EvalError::Eval(format!("{:?} || {:?}", left, right))),
         }
     }
 
     // ヘルパーメソッド
 
-    fn compare_values<F>(&self, left: &Value, right: &Value, compare: F) -> RuntimeResult<Value>
+    fn compare_values<F>(&self, left: &Value, right: &Value, compare: F) -> EvalResult<Value>
     where
         F: Fn(std::cmp::Ordering) -> bool,
     {
@@ -395,9 +357,7 @@ impl ExpressionEvaluator {
                 l.partial_cmp(&(*r as f64)).unwrap(),
             ))),
             (Value::String(l), Value::String(r)) => Ok(Value::Boolean(compare(l.cmp(r)))),
-            _ => Err(RuntimeError::Execution(ExecutionError::EventError(
-                format!("{:?} <=> {:?}", left, right),
-            ))),
+            _ => Err(EvalError::Eval(format!("{:?} <=> {:?}", left, right))),
         }
     }
 }
