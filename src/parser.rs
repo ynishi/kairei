@@ -10,8 +10,15 @@ use nom::{
 };
 use std::{collections::HashMap, time::Duration};
 
-/// MicroAgentの定義をパースする。
 /// Entry point of the parser.
+pub fn parse_root(input: &str) -> IResult<&str, Root> {
+    map(
+        pair(opt(ws(parse_world)), many0(ws(parse_micro_agent))),
+        |(world_def, micro_agent_defs)| Root::new(world_def, micro_agent_defs),
+    )(input)
+}
+
+/// MicroAgentの定義をパースする。
 pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
     let (input, _) = ws(tag("micro"))(input)?;
     let (input, name) = ws(identifier)(input)?;
@@ -938,6 +945,79 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_root_with_world_and_agents() {
+        let input = r#"
+               world TestWorld {
+                   config { }
+               }
+
+               micro Agent1 {
+                   state { }
+               }
+
+               micro Agent2 {
+                   state { }
+               }
+           "#;
+
+        let result = parse_root(input);
+        assert!(result.is_ok());
+
+        let (_, root) = result.unwrap();
+        assert!(root.world_def.is_some());
+        assert_eq!(root.micro_agent_defs.len(), 2);
+        assert_eq!(root.micro_agent_defs[0].name, "Agent1");
+        assert_eq!(root.micro_agent_defs[1].name, "Agent2");
+    }
+
+    #[test]
+    fn test_parse_root_with_only_agents() {
+        let input = r#"
+               micro Agent1 {
+                   state { }
+               }
+
+               micro Agent2 {
+                   state { }
+               }
+           "#;
+
+        let result = parse_root(input);
+        assert!(result.is_ok());
+
+        let (_, root) = result.unwrap();
+        assert!(root.world_def.is_none());
+        assert_eq!(root.micro_agent_defs.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_root_with_only_world() {
+        let input = r#"
+               world TestWorld {
+                   config { }
+               }
+           "#;
+
+        let result = parse_root(input);
+        assert!(result.is_ok());
+
+        let (_, root) = result.unwrap();
+        assert!(root.world_def.is_some());
+        assert_eq!(root.micro_agent_defs.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_empty() {
+        let input = "   ";
+        let result = parse_root(input);
+        assert!(result.is_ok());
+
+        let (_, root) = result.unwrap();
+        assert!(root.world_def.is_none());
+        assert_eq!(root.micro_agent_defs.len(), 0);
+    }
 
     #[test]
     fn test_parse_micro_agent() {

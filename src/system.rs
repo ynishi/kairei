@@ -25,7 +25,7 @@ use crate::{
     CustomEventDef, EventError, EventsDef, ExecutionError, MicroAgentDef, RuntimeError,
     RuntimeResult,
 };
-use crate::{Ast, WorldDef};
+use crate::{ast, WorldDef};
 
 type AgentName = String;
 
@@ -114,37 +114,21 @@ impl System {
         }
     }
 
-    pub async fn parse_dsl(&self, dsl: &str) -> RuntimeResult<Vec<Ast>> {
+    pub async fn parse_dsl(&self, dsl: &str) -> RuntimeResult<ast::Root> {
         self.ast_registry
             .read()
             .await
-            .create_asts_from_dsl(dsl)
+            .create_ast_from_dsl(dsl)
             .await
     }
 
-    pub async fn initialize(&mut self, asts: Vec<Ast>) -> RuntimeResult<()> {
+    pub async fn initialize(&mut self, root: ast::Root) -> RuntimeResult<()> {
         // call all registration methods
         self.register_native_features().await?;
-        let world_def = asts
-            .iter()
-            .filter_map(|ast| match ast {
-                Ast::World(world) => Some(world),
-                _ => None,
-            })
-            .collect::<Vec<&WorldDef>>()
-            .first()
-            .cloned();
-        self.register_world(world_def).await?;
+        self.register_world(&root.world_def).await?;
         self.register_builtin_agents().await?;
-        let agents = asts
-            .iter()
-            .filter_map(|ast| match ast {
-                Ast::MicroAgent(agent) => Some(agent),
-                _ => None,
-            })
-            .cloned()
-            .collect::<Vec<MicroAgentDef>>();
-        self.register_initial_user_agents(agents).await?;
+        self.register_initial_user_agents(root.micro_agent_defs)
+            .await?;
         Ok(())
     }
 
@@ -164,7 +148,7 @@ impl System {
         Ok(())
     }
 
-    pub async fn register_world(&self, world_def: Option<&WorldDef>) -> RuntimeResult<()> {
+    pub async fn register_world(&self, world_def: &Option<WorldDef>) -> RuntimeResult<()> {
         debug!("register_world started");
         let complete_state = EventType::SystemWorldRegistered;
         Self::check_start_transition(
@@ -209,7 +193,7 @@ impl System {
 
         for builtin in builtin_defs {
             self.register_agent_ast(&builtin.name, &builtin).await?;
-            todo!();
+            // TODO: fix this
             // self.register_agent(&builtin.name).await?;
         }
 

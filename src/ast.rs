@@ -1,9 +1,20 @@
 use core::fmt;
 use std::collections::HashMap;
 
-pub enum Ast {
-    MicroAgent(MicroAgentDef),
-    World(WorldDef),
+// Root AST Definition
+#[derive(Debug, Clone)]
+pub struct Root {
+    pub world_def: Option<WorldDef>,
+    pub micro_agent_defs: Vec<MicroAgentDef>,
+}
+
+impl Root {
+    pub fn new(world_def: Option<WorldDef>, micro_agent_defs: Vec<MicroAgentDef>) -> Self {
+        Self {
+            world_def,
+            micro_agent_defs,
+        }
+    }
 }
 
 // MicroAgentのトップレベル構造
