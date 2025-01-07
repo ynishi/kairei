@@ -10,7 +10,7 @@ use tokio::{
     sync::{broadcast, oneshot, RwLock},
     time::{sleep, timeout},
 };
-use tracing::debug;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::{
@@ -188,13 +188,17 @@ impl System {
             self.last_status.read().await.last_event_type.clone(),
             complete_state.clone(),
         )?;
-        let registry = self.agent_registry().read().await;
-        let builtin_defs = registry.get_builtin_agent_asts().await?;
+        let registry = self.ast_registry().read().await;
+        let builtin_defs = registry
+            .create_builtin_agent_asts(&self.config.read().await.agent_config)
+            .await?;
+        drop(registry);
 
         for builtin in builtin_defs {
+            debug!("register_builtin_agents builtin started: {}", builtin.name);
             self.register_agent_ast(&builtin.name, &builtin).await?;
-            // TODO: fix this
-            // self.register_agent(&builtin.name).await?;
+            self.register_agent(&builtin.name).await?;
+            debug!("register_builtin_agents builtin ended: {}", builtin.name);
         }
 
         self.update_system_status(complete_state).await;
@@ -506,6 +510,7 @@ impl System {
 
     /// Agent management
     pub async fn register_agent(&self, agent_name: &str) -> RuntimeResult<()> {
+        info!("register_agent: {}", agent_name);
         let ast_registry = self.ast_registry.read().await;
         let agent_def = ast_registry.get_agent_ast(agent_name).await?;
         drop(ast_registry);
@@ -516,6 +521,7 @@ impl System {
         agent_registry
             .register_agent(agent_name, runtime, &self.event_bus)
             .await?;
+        drop(agent_registry);
         Ok(())
     }
     pub async fn start_agent(&self, agent_name: &str) -> RuntimeResult<()> {
@@ -679,6 +685,10 @@ impl System {
 
     pub fn agent_registry(&self) -> &Arc<RwLock<AgentRegistry>> {
         &self.agent_registry
+    }
+
+    pub fn ast_registry(&self) -> &Arc<RwLock<AstRegistry>> {
+        &self.ast_registry
     }
 
     fn check_start_transition(currnt: EventType, next: EventType) -> RuntimeResult<()> {

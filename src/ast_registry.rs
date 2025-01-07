@@ -1,9 +1,11 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use dashmap::DashMap;
 
 use crate::{
-    ast, parse_root, EventsDef, HandlersDef, MicroAgentDef, RuntimeError, RuntimeResult, WorldDef,
+    ast, config::AgentConfig, parse_root, AnswerDef, EventsDef, Expression, HandlerBlock,
+    HandlersDef, Literal, MicroAgentDef, RequestHandler, RequestType, RuntimeError, RuntimeResult,
+    StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo, WorldDef,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -50,5 +52,57 @@ impl AstRegistry {
             events: EventsDef { events: vec![] },
             handlers: HandlersDef { handlers: vec![] },
         }
+    }
+
+    pub async fn create_builtin_agent_asts(
+        &self,
+        config: &AgentConfig,
+    ) -> RuntimeResult<Vec<MicroAgentDef>> {
+        let config = config.clone().scale_manager.unwrap_or_default();
+        let scale_manager_def = MicroAgentDef {
+            name: "scale_manager".to_string(),
+            state: Some(StateDef {
+                variables: {
+                    let mut vars = HashMap::new();
+                    vars.insert(
+                        "enabled".to_string(),
+                        StateVarDef {
+                            name: "enabled".to_string(),
+                            type_info: TypeInfo::Simple("boolean".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Boolean(
+                                config.enabled,
+                            ))),
+                        },
+                    );
+                    vars.insert(
+                        "max_instances_per_agent".to_string(),
+                        StateVarDef {
+                            name: "self.max_instances_per_agent".to_string(),
+                            type_info: TypeInfo::Simple("i64".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Integer(
+                                config.max_instances_per_agent as i64,
+                            ))),
+                        },
+                    );
+                    vars
+                },
+            }),
+            // simply return the value of max_instances_per_agent for agent request event.
+            answer: Some(AnswerDef {
+                handlers: vec![RequestHandler {
+                    request_type: RequestType::Custom("get_max_instances_per_agent".to_string()),
+                    parameters: vec![],
+                    return_type: TypeInfo::Simple("i64".to_string()),
+                    constraints: None,
+                    block: HandlerBlock {
+                        statements: vec![Statement::Return(Expression::StateAccess(
+                            StateAccessPath(vec!["self".into(), "max_instances_per_agent".into()]),
+                        ))],
+                    },
+                }],
+            }),
+            ..Default::default()
+        };
+        Ok(vec![scale_manager_def])
     }
 }
