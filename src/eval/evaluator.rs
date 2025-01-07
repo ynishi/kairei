@@ -1,15 +1,10 @@
-use std::sync::Arc;
-
-use crate::{
-    event_registry::EventType, ExecutionError, Expression, HandlerBlock, RuntimeError,
-    RuntimeResult,
-};
-
 use super::{
     context::{ContextError, ExecutionContext},
     expression::Value,
     statement::{ControlFlow, StatementEvaluator, StatementResult},
 };
+use crate::{event_registry::EventType, runtime::RuntimeError, Expression, HandlerBlock};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct Evaluator {
@@ -26,7 +21,7 @@ impl Evaluator {
         &self,
         block: &HandlerBlock,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<StatementResult> {
+    ) -> EvalResult<StatementResult> {
         let result = self
             .statement_evaluator
             .eval_block(&block.statements, context.clone())
@@ -50,45 +45,36 @@ impl Evaluator {
         block: &HandlerBlock,
         context: Arc<ExecutionContext>,
         event: EventType,
-    ) -> RuntimeResult<StatementResult> {
+    ) -> EvalResult<StatementResult> {
         let result = self
             .statement_evaluator
             .eval_block(&block.statements, context.clone())
             .await;
         match result {
             Ok(StatementResult::Control(ControlFlow::Return(value))) => {
-                context.send_response(event, Ok(value)).await.map_err(|e| {
-                    RuntimeError::Execution(ExecutionError::EvalError(format!(
-                        "Failed to send response: {}",
-                        e
-                    )))
-                })?;
+                context
+                    .send_response(event, Ok(value))
+                    .await
+                    .map_err(|e| EvalError::SendResponseFailed(format!("error: {}", e)))?;
             }
             Ok(StatementResult::Value(Value::Unit)) => {
                 context
                     .send_response(event, Ok(Value::Unit))
                     .await
-                    .map_err(|e| {
-                        RuntimeError::Execution(ExecutionError::EvalError(format!(
-                            "Failed to send response: {}",
-                            e
-                        )))
-                    })?;
+                    .map_err(|e| EvalError::SendResponseFailed(format!("error: {}", e)))?;
             }
             Err(e) => {
-                context.send_response(event, Err(e)).await.map_err(|e| {
-                    RuntimeError::Execution(ExecutionError::EvalError(format!(
-                        "Failed to send response: {}",
-                        e
-                    )))
-                })?;
+                context
+                    .send_response(event, Err(RuntimeError::from(e)))
+                    .await
+                    .map_err(|e| EvalError::SendResponseFailed(format!("error: {}", e)))?;
             }
             // その他の場合はエラーを返す
             Ok(s) => {
-                return Err(RuntimeError::Execution(ExecutionError::EvalError(format!(
+                return Err(EvalError::Eval(format!(
                     "Unexpected statement result: {:?}",
                     s
-                ))))
+                )))?;
             }
         }
         Ok(StatementResult::Value(Value::Unit))
@@ -98,9 +84,26 @@ impl Evaluator {
         &self,
         expression: &Expression,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         self.statement_evaluator
             .eval_expression(expression, context)
             .await
     }
 }
+
+// eval error
+#[derive(Debug, thiserror::Error)]
+pub enum EvalError {
+    #[error("Eval error: {0}")]
+    Eval(String),
+    #[error("Context error: {0}")]
+    Context(#[from] ContextError),
+    #[error("Send response failed: {0}")]
+    SendResponseFailed(String),
+    #[error("Variable not found: {name}, {messages}")]
+    VariableNotFound { name: String, messages: String },
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+}
+
+pub type EvalResult<T> = Result<T, EvalError>;

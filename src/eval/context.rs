@@ -8,12 +8,11 @@ use dashmap::DashMap;
 use tokio::sync::{oneshot, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use tracing::{debug, warn};
 
-use crate::config::ContextConfig;
-use crate::event_bus::{self, Event, EventBus, ToEventType};
-use crate::event_registry::EventType;
-use crate::{EventError, RuntimeError, StateError};
-
 use super::expression::Value;
+use crate::config::ContextConfig;
+use crate::event_bus::{self, Event, EventBus, EventError, ToEventType};
+use crate::event_registry::EventType;
+use crate::runtime::RuntimeError;
 
 pub struct SafeRwLock<T> {
     inner: RwLock<T>,
@@ -166,27 +165,37 @@ pub enum StateAccessMode {
     ReadWrite,
 }
 
-// TODO: merge application errors
-#[derive(Debug, strum::Display)]
+#[derive(Debug, thiserror::Error)]
 pub enum ContextError {
-    StateError(StateError),
+    #[error("Invalid state value for {key}: {message}")]
+    InvalidValue { key: String, message: String },
+    #[error("State error: {0}")]
     EventError(EventError),
     // アクセス制御のエラーを追加
+    #[error("Access error: {0}")]
     AccessError(String),
+    #[error("Lock timeout: {0}")]
     LockTimeout(String),
+    #[error("Deadlock: {0}")]
     Deadlock(String),
+    #[error("Variable not found: {0}")]
     VariableNotFound(String),
+    #[error("Read-only violation")]
     ReadOnlyViolation,
+    #[error("No parent scope")]
     NoParentScope,
+    #[error("Event send failed: {0}")]
     EventSendFailed(String),
+    #[error("State not found: {0}")]
     StateNotFound(String),
+    #[error("Failure: {0}")]
     Failure(String),
 }
 
 impl ToEventType for ContextError {
     fn to_event_type(&self) -> String {
         match self {
-            ContextError::StateError(_) => "StateError".to_string(),
+            ContextError::InvalidValue { .. } => "InvalidValue".to_string(),
             ContextError::EventError(_) => "EventError".to_string(),
             ContextError::AccessError(_) => "AccessError".to_string(),
             ContextError::LockTimeout(_) => "LockTimeout".to_string(),
@@ -326,10 +335,10 @@ impl ExecutionContext {
                                 drop(guard);
                                 self.notify_state_update(name, &Value::Unit)
                             } else {
-                                Err(ContextError::StateError(StateError::InvalidValue {
+                                Err(ContextError::InvalidValue {
                                     key: name.to_string(),
                                     message: "Invalid value".to_string(),
-                                }))
+                                })
                             }
                         }
                         Err(LockError::Timeout) => Err(ContextError::LockTimeout(name.to_string())),

@@ -501,11 +501,6 @@ mod tests {
             },
         };
 
-        let expected = quote! {
-            counter: i64,
-            name: String,
-        };
-
         assert!(state
             .generate_rust()
             .to_string()
@@ -939,6 +934,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn test_binary_operator() {
         let add_op = BinaryOperator::Add;
         let subtract_op = BinaryOperator::Subtract;

@@ -1,7 +1,5 @@
-use crate::{
-    ast, native_feature::types::NativeFeatureType, EventError, RuntimeError, RuntimeResult,
-    TypeInfo,
-};
+use crate::event_bus::{EventError, EventResult};
+use crate::{ast, native_feature::types::NativeFeatureType, TypeInfo};
 use dashmap::DashMap;
 use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
@@ -244,15 +242,15 @@ impl EventRegistry {
     }
 
     /// 新しいイベントを登録
-    pub fn register_event(&mut self, event_info: EventInfo) -> RuntimeResult<()> {
+    pub fn register_event(&mut self, event_info: EventInfo) -> EventResult<()> {
         if self.events.contains_key(&event_info.event_type) {
             match &event_info.event_type {
                 EventType::Custom(name) => {
-                    return Err(RuntimeError::Event(EventError::AlreadyRegistered {
+                    return Err(EventError::AlreadyRegistered {
                         event_type: name.clone(),
-                    }))
+                    })
                 }
-                _ => return Err(RuntimeError::Event(EventError::BuiltInAlreadyRegistered)),
+                _ => return Err(EventError::BuiltInAlreadyRegistered),
             }
         }
 
@@ -266,7 +264,7 @@ impl EventRegistry {
         &mut self,
         name: String,
         parameters: HashMap<String, ParameterType>,
-    ) -> RuntimeResult<()> {
+    ) -> EventResult<()> {
         let event_info = EventInfo {
             event_type: EventType::Custom(name.clone()),
             parameters,
@@ -289,30 +287,28 @@ impl EventRegistry {
         &self,
         event_type: &EventType,
         parameters: &[(String, ParameterType)],
-    ) -> RuntimeResult<()> {
+    ) -> EventResult<()> {
         let event_info = self
             .get_event_info(event_type)
-            .ok_or_else(|| RuntimeError::Event(EventError::NotFound(event_type.to_string())))?;
+            .ok_or_else(|| EventError::NotFound(event_type.to_string()))?;
 
         if parameters.len() != event_info.parameters.len() {
-            return Err(RuntimeError::Event(
-                EventError::ParametersLengthNotMatched {
-                    event_type: event_type.to_string(),
-                    expected: event_info.parameters.len(),
-                    got: parameters.len(),
-                },
-            ));
+            return Err(EventError::ParametersLengthNotMatched {
+                event_type: event_type.to_string(),
+                expected: event_info.parameters.len(),
+                got: parameters.len(),
+            });
         }
 
         // パラメータの名前と型を検証
         for (name, param_type) in parameters.iter() {
             let expected = &event_info.parameters[name];
             if param_type != expected {
-                return Err(RuntimeError::Event(EventError::TypeMismatch {
+                return Err(EventError::TypeMismatch {
                     event_type: event_type.to_string(),
                     expected: param_type.to_string(),
                     got: expected.to_string(),
-                }));
+                });
             }
         }
 

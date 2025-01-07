@@ -5,15 +5,15 @@ use async_recursion::async_recursion;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::{
-    event_bus::{self, Event},
-    event_registry, Argument, AwaitType, ErrorHandlerBlock, EventType, ExecutionError, Expression,
-    RequestOptions, RequestType, RuntimeError, RuntimeResult, Statement,
-};
-
 use super::{
     context::{ExecutionContext, StateAccessMode, VariableAccess},
     expression::{ExpressionEvaluator, Value},
+};
+use crate::eval::evaluator::{EvalError, EvalResult};
+use crate::{
+    event_bus::{self, Event},
+    event_registry, Argument, AwaitType, ErrorHandlerBlock, EventType, Expression, RequestOptions,
+    RequestType, Statement,
 };
 
 /// 文の評価結果を表す型
@@ -44,7 +44,7 @@ impl StatementEvaluator {
         &self,
         statement: &Statement,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<StatementResult> {
+    ) -> EvalResult<StatementResult> {
         // Dispatch to the appropriate evaluation method based on the statement type
         match statement {
             Statement::Expression(expr) => Ok(StatementResult::Value(
@@ -113,7 +113,7 @@ impl StatementEvaluator {
         &self,
         expr: &Expression,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         self.expression_evaluator
             .eval_expression(expr, context)
             .await
@@ -123,7 +123,7 @@ impl StatementEvaluator {
         &self,
         expr: &Expression,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         self.expression_evaluator
             .eval_expression(expr, context)
             .await
@@ -134,7 +134,7 @@ impl StatementEvaluator {
         target: &Expression,
         value: &Expression,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         let value = self
             .expression_evaluator
             .eval_expression(value, context.clone())
@@ -145,14 +145,12 @@ impl StatementEvaluator {
             Expression::Variable(name) => VariableAccess::Local(name.clone()),
             Expression::StateAccess(path) => VariableAccess::State(path.to_string()),
             _ => {
-                return Err(RuntimeError::Execution(ExecutionError::InvalidOperation(
-                    "invalid".to_string(),
-                )))
+                return Err(EvalError::InvalidOperation(
+                    "invalid access expression".to_string(),
+                ))
             }
         };
-        context.set(access, value.clone()).await.map_err(|e| {
-            RuntimeError::Execution(ExecutionError::InvalidOperation(e.to_string()))
-        })?;
+        context.set(access, value.clone()).await?;
 
         Ok(Value::Unit)
     }
@@ -163,9 +161,9 @@ impl StatementEvaluator {
         parameters: &[Argument],
         target: &Option<String>,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         // パラメータの評価
-        let mut evaluated_params = self.eval_argumants(parameters, context.clone()).await?;
+        let mut evaluated_params = self.eval_arguments(parameters, context.clone()).await?;
         if let Some(to) = target {
             evaluated_params.insert("to".to_string(), event_bus::Value::String(to.clone()));
         }
@@ -173,18 +171,16 @@ impl StatementEvaluator {
 
         // イベントの構築と発行
         let event = Event::new(&event_type, &evaluated_params);
-        context.emit_event(event).await.map_err(|e| {
-            RuntimeError::Execution(ExecutionError::EvaluationFailed(e.to_string()))
-        })?;
+        context.emit_event(event).await?;
 
         Ok(Value::Unit)
     }
 
-    async fn eval_argumants(
+    async fn eval_arguments(
         &self,
         arguments: &[Argument],
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<HashMap<String, event_bus::Value>> {
+    ) -> EvalResult<HashMap<String, event_bus::Value>> {
         let mut evaluated_params = HashMap::new();
         for (i, param) in arguments.iter().enumerate() {
             let (name, value) = match param {
@@ -215,9 +211,9 @@ impl StatementEvaluator {
         parameters: &[Argument],
         _options: &Option<RequestOptions>,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<Value> {
+    ) -> EvalResult<Value> {
         // パラメータの評価
-        let evaluated_params = self.eval_argumants(parameters, context.clone()).await?;
+        let evaluated_params = self.eval_arguments(parameters, context.clone()).await?;
 
         // リクエストの構築と送信
         let request = Event {
@@ -230,16 +226,12 @@ impl StatementEvaluator {
             parameters: evaluated_params,
         };
         debug!("Create Request: {:?}", request);
-        let response_event = context.send_request(request).await.map_err(|e| {
-            RuntimeError::Execution(ExecutionError::EvaluationFailed(e.to_string()))
-        })?;
-        debug!("Got Reponse: {:?}", response_event);
+        let response_event = context.send_request(request).await?;
+        debug!("Got Response: {:?}", response_event);
         let response = response_event
             .parameters
             .get("response")
-            .ok_or(RuntimeError::Execution(ExecutionError::EvaluationFailed(
-                "response not found".to_string(),
-            )))?
+            .ok_or(EvalError::Eval("response not found".to_string()))?
             .clone()
             .into();
         Ok(response)
@@ -251,7 +243,7 @@ impl StatementEvaluator {
         then_block: &[Statement],
         else_block: &Option<Vec<Statement>>,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<StatementResult> {
+    ) -> EvalResult<StatementResult> {
         let condition_value = self
             .expression_evaluator
             .eval_expression(condition, context.clone())
@@ -266,10 +258,10 @@ impl StatementEvaluator {
                     Ok(StatementResult::Value(Value::Unit))
                 }
             }
-            _ => Err(RuntimeError::Execution(ExecutionError::EvalError(format!(
+            _ => Err(EvalError::Eval(format!(
                 "{}, {:?}",
                 "boolean", condition_value,
-            )))),
+            ))),
         }
     }
 
@@ -277,7 +269,7 @@ impl StatementEvaluator {
         &self,
         statements: &[Statement],
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<StatementResult> {
+    ) -> EvalResult<StatementResult> {
         let mut last = Value::Unit;
         for stmt in statements.iter() {
             let result = self.eval_statement(stmt, context.clone()).await?;
@@ -301,7 +293,7 @@ impl StatementEvaluator {
         &self,
         await_type: &AwaitType,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<StatementResult> {
+    ) -> EvalResult<StatementResult> {
         match await_type {
             AwaitType::Block(statements) => {
                 let mut futures = Vec::with_capacity(statements.len());
@@ -337,7 +329,7 @@ impl StatementEvaluator {
         statement: &Statement,
         error_handler_block: &ErrorHandlerBlock,
         context: Arc<ExecutionContext>,
-    ) -> RuntimeResult<StatementResult> {
+    ) -> EvalResult<StatementResult> {
         match self.eval_statement(statement, context.clone()).await {
             Ok(value) => Ok(value),
             Err(error) => {
@@ -349,12 +341,7 @@ impl StatementEvaluator {
                     error_context
                         .set_variable(binding.as_str(), Value::Error(error.to_string()))
                         .await
-                        .map_err(|e| {
-                            RuntimeError::Execution(ExecutionError::EvalError(format!(
-                                "Error Binding Failed: {}",
-                                e
-                            )))
-                        })?;
+                        .map_err(|e| EvalError::Eval(format!("Error Binding Failed: {}", e)))?;
                 }
 
                 // Execute error handler block

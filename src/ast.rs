@@ -301,6 +301,7 @@ use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use proc_macro2::TokenStream;
+use thiserror::Error;
 
 // リクエストオプション
 #[derive(Debug, Clone, PartialEq)]
@@ -543,18 +544,15 @@ pub trait CodeGen {
     fn generate_rust(&self) -> TokenStream;
 }
 
-// パーサートレイト
-pub trait Parser {
-    fn parse(&self, input: &str) -> Result<MicroAgentDef, ParseError>;
+#[derive(Error, Debug)]
+pub enum ASTError {
+    #[error("Parse error: {target}: {message}")]
+    ParseError { target: String, message: String },
+    #[error("AST not found: {0}")]
+    ASTNotFound(String),
 }
 
-// パースエラー
-#[derive(Debug)]
-pub struct ParseError {
-    pub message: String,
-    pub line: usize,
-    pub column: usize,
-}
+pub type ASTResult<T> = Result<T, ASTError>;
 
 #[cfg(test)]
 mod tests {

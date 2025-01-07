@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use thiserror::Error;
 use tokio::{
     sync::{broadcast, oneshot, RwLock},
     time::{sleep, timeout},
@@ -13,6 +14,10 @@ use tokio::{
 use tracing::{debug, info};
 use uuid::Uuid;
 
+use crate::agent_registry::AgentError;
+use crate::event_bus::EventError;
+use crate::native_feature::types::FeatureError;
+use crate::runtime::RuntimeError;
 use crate::{
     agent_registry::AgentRegistry,
     ast_registry::AstRegistry,
@@ -22,8 +27,7 @@ use crate::{
     event_registry::{EventInfo, EventRegistry, EventType, ParameterType},
     native_feature::{native_registry::NativeFeatureRegistry, types::NativeFeatureContext},
     runtime::RuntimeAgentData,
-    CustomEventDef, EventError, EventsDef, ExecutionError, MicroAgentDef, RuntimeError,
-    RuntimeResult,
+    ASTError, CustomEventDef, EventsDef, MicroAgentDef,
 };
 use crate::{ast, WorldDef};
 
@@ -114,16 +118,17 @@ impl System {
         }
     }
 
-    pub async fn parse_dsl(&self, dsl: &str) -> RuntimeResult<ast::Root> {
+    pub async fn parse_dsl(&self, dsl: &str) -> SystemResult<ast::Root> {
         self.ast_registry
             .read()
             .await
             .create_ast_from_dsl(dsl)
             .await
+            .map_err(SystemError::from)
     }
 
     #[tracing::instrument(skip(self, root))]
-    pub async fn initialize(&mut self, root: ast::Root) -> RuntimeResult<()> {
+    pub async fn initialize(&mut self, root: ast::Root) -> SystemResult<()> {
         // call all registration methods
         self.register_native_features().await?;
         self.register_world(&root.world_def).await?;
@@ -134,7 +139,7 @@ impl System {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn register_native_features(&mut self) -> RuntimeResult<()> {
+    pub async fn register_native_features(&mut self) -> SystemResult<()> {
         debug!("started");
 
         let complete_state = EventType::SystemNativeFeaturesRegistered;
@@ -151,7 +156,7 @@ impl System {
     }
 
     #[tracing::instrument(skip(self, world_def))]
-    pub async fn register_world(&self, world_def: &Option<WorldDef>) -> RuntimeResult<()> {
+    pub async fn register_world(&self, world_def: &Option<WorldDef>) -> SystemResult<()> {
         debug!("started");
         let complete_state = EventType::SystemWorldRegistered;
         Self::check_start_transition(
@@ -184,7 +189,7 @@ impl System {
 
     // ビルトインエージェントの登録処理
     #[tracing::instrument(skip(self))]
-    pub async fn register_builtin_agents(&self) -> RuntimeResult<()> {
+    pub async fn register_builtin_agents(&self) -> SystemResult<()> {
         debug!("started");
 
         let complete_state = EventType::SystemBuiltinAgentsRegistered;
@@ -210,11 +215,11 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, micro_agent_defs))]
     pub async fn register_initial_user_agents(
         &self,
-        agent_asts: Vec<MicroAgentDef>,
-    ) -> RuntimeResult<()> {
+        micro_agent_defs: Vec<MicroAgentDef>,
+    ) -> SystemResult<()> {
         debug!("started");
         let complete_state = EventType::SystemUserAgentsRegistered;
         Self::check_start_transition(
@@ -222,9 +227,9 @@ impl System {
             complete_state.clone(),
         )?;
 
-        for agent_ast in agent_asts {
-            self.register_agent_ast(&agent_ast.name, &agent_ast).await?;
-            self.register_agent(&agent_ast.name).await?;
+        for agent_def in micro_agent_defs {
+            self.register_agent_ast(&agent_def.name, &agent_def).await?;
+            self.register_agent(&agent_def.name).await?;
         }
         self.update_system_status(complete_state).await;
         debug!("ended");
@@ -232,7 +237,7 @@ impl System {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn start(&self) -> RuntimeResult<()> {
+    pub async fn start(&self) -> SystemResult<()> {
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
             EventType::SystemStarting,
@@ -250,20 +255,20 @@ impl System {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn start_native_features(&self) -> RuntimeResult<()> {
+    async fn start_native_features(&self) -> SystemResult<()> {
         let registry = self.feature_registry.write().await;
         registry.start().await?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self))]
-    async fn start_world(&self) -> RuntimeResult<()> {
+    async fn start_world(&self) -> SystemResult<()> {
         self.start_agent(&AgentType::World.to_string()).await?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self))]
-    async fn start_builtin_agents(&self) -> RuntimeResult<()> {
+    async fn start_builtin_agents(&self) -> SystemResult<()> {
         let registry = self.agent_registry().read().await;
         let agent_names = registry
             .get_enabled_builtin_agent_types()
@@ -279,7 +284,7 @@ impl System {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn start_users_agents(&self) -> RuntimeResult<()> {
+    async fn start_users_agents(&self) -> SystemResult<()> {
         let registry = self.agent_registry().read().await;
         let agent_names =
             registry.agent_names_by_types(vec![AgentType::Custom("user".to_string())]);
@@ -293,7 +298,7 @@ impl System {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn shutdown(&self) -> RuntimeResult<()> {
+    pub async fn shutdown(&self) -> SystemResult<()> {
         let shutdown_started = Instant::now();
         self.update_system_status(EventType::SystemStopping).await;
         let shutdown_sequence = AgentRegistry::agent_shutdown_sequence();
@@ -342,7 +347,7 @@ impl System {
         shutdown_started.elapsed() > timeout
     }
 
-    pub async fn emergency_shutdown(&self) -> RuntimeResult<()> {
+    pub async fn emergency_shutdown(&self) -> SystemResult<()> {
         // シャットダウンシグナルを送信
         self.shutdown_tx
             .send(AgentType::World)
@@ -356,27 +361,29 @@ impl System {
         &self,
         agent_name: &str,
         ast: &MicroAgentDef,
-    ) -> RuntimeResult<()> {
+    ) -> SystemResult<()> {
         self.ast_registry
             .write()
             .await
             .register_agent_ast(agent_name, ast)
             .await
+            .map_err(SystemError::from)
     }
 
-    pub async fn get_agent_ast(&self, _agent_name: &str) -> RuntimeResult<Arc<MicroAgentDef>> {
+    pub async fn get_agent_ast(&self, _agent_name: &str) -> SystemResult<Arc<MicroAgentDef>> {
         self.ast_registry
             .read()
             .await
             .get_agent_ast(_agent_name)
             .await
+            .map_err(SystemError::from)
     }
 
-    pub async fn list_agent_asts(&self) -> RuntimeResult<Vec<String>> {
+    pub async fn list_agent_asts(&self) -> SystemResult<Vec<String>> {
         Ok(self.ast_registry.read().await.list_agent_asts().await)
     }
 
-    pub async fn register_event_ast(&self, event_def: CustomEventDef) -> RuntimeResult<()> {
+    pub async fn register_event_ast(&self, event_def: CustomEventDef) -> SystemResult<()> {
         let name = event_def.name.to_string();
         let parameters: HashMap<String, ParameterType> = event_def
             .parameters
@@ -384,10 +391,12 @@ impl System {
             .map(|p| (p.name.clone(), ParameterType::from(p.type_info.clone())))
             .collect();
         let mut registry = self.event_registry.write().await;
-        registry.register_custom_event(name, parameters)
+        registry
+            .register_custom_event(name, parameters)
+            .map_err(SystemError::from)
     }
 
-    pub async fn get_event(&self, name: &str) -> RuntimeResult<EventInfo> {
+    pub async fn get_event(&self, name: &str) -> SystemResult<EventInfo> {
         let event_type = if let Ok(event_type) = EventType::from_str(name) {
             event_type
         } else {
@@ -396,7 +405,8 @@ impl System {
         let registry = self.event_registry.read().await;
         registry
             .get_event_info(&event_type)
-            .ok_or(RuntimeError::Event(EventError::NotFound(name.to_string())))
+            .ok_or(EventError::NotFound(name.to_string()))
+            .map_err(SystemError::from)
     }
 
     pub async fn scale_up(
@@ -404,7 +414,7 @@ impl System {
         name: &str,
         count: usize,
         _metadata: HashMap<String, Value>,
-    ) -> RuntimeResult<Vec<String>> {
+    ) -> SystemResult<Vec<String>> {
         let request_id = Uuid::new_v4().to_string();
 
         // ASTの存在確認
@@ -421,9 +431,9 @@ impl System {
                 .await
                 .agent_state("scale_manager", "max_instances_per_agent")
                 .await
-                .ok_or(RuntimeError::Execution(ExecutionError::AgentNotFound {
-                    id: "scale_manager".to_string(),
-                }))?;
+                .ok_or(SystemError::ScaleManagerNotFound {
+                    agent_name: "scale_manager".to_string(),
+                })?;
             match got {
                 expression::Value::Integer(i) => i as usize,
                 _ => 0,
@@ -465,17 +475,15 @@ impl System {
         name: &str,
         count: usize,
         _metadata: HashMap<String, Value>,
-    ) -> RuntimeResult<()> {
+    ) -> SystemResult<()> {
         let target_agent_names = self.find_agents_by_base_name(name).await;
         // 削除対象が足りない場合はエラー
         if target_agent_names.len() < count {
-            return Err(RuntimeError::Execution(
-                ExecutionError::ScalingNotEnoughAgents {
-                    base_name: name.to_string(),
-                    required: count,
-                    current: target_agent_names.len(),
-                },
-            ));
+            Err(SystemError::ScalingNotEnoughAgents {
+                base_name: name.to_string(),
+                required: count,
+                current: target_agent_names.len(),
+            })?;
         }
 
         // TODO: ScaleManagerAgent へのリクエストを送信して削除対象を取得する
@@ -492,17 +500,17 @@ impl System {
     }
 
     /// 現在のスケール状態を取得
-    pub async fn get_scale_status(&self, name: &str) -> RuntimeResult<ScaleStatus> {
+    pub async fn get_scale_status(&self, name: &str) -> SystemResult<ScaleStatus> {
         let agent_names = self.find_agents_by_base_name(name).await;
 
-        let registory = self.agent_registry.read().await;
+        let registry = self.agent_registry.read().await;
 
         Ok(ScaleStatus {
             base_name: name.to_string(),
             total_count: agent_names.len(),
             running_count: agent_names
                 .iter()
-                .filter(|name| registory.is_agent_running(name))
+                .filter(|name| registry.is_agent_running(name))
                 .count(),
             agent_names,
         })
@@ -519,7 +527,7 @@ impl System {
     }
 
     /// Agent management
-    pub async fn register_agent(&self, agent_name: &str) -> RuntimeResult<()> {
+    pub async fn register_agent(&self, agent_name: &str) -> SystemResult<()> {
         info!("register_agent: {}", agent_name);
         let ast_registry = self.ast_registry.read().await;
         let agent_def = ast_registry.get_agent_ast(agent_name).await?;
@@ -534,34 +542,46 @@ impl System {
         drop(agent_registry);
         Ok(())
     }
-    pub async fn start_agent(&self, agent_name: &str) -> RuntimeResult<()> {
+    pub async fn start_agent(&self, agent_name: &str) -> SystemResult<()> {
         let registry = self.agent_registry.read().await;
-        registry.run_agent(agent_name, self.event_bus.clone()).await
+        registry
+            .run_agent(agent_name, self.event_bus.clone())
+            .await
+            .map_err(SystemError::from)
     }
 
-    pub async fn stop_agent(&self, agent_name: &str) -> RuntimeResult<()> {
+    pub async fn stop_agent(&self, agent_name: &str) -> SystemResult<()> {
         let registry = self.agent_registry.read().await;
-        registry.shutdown_agent(agent_name, None).await
+        registry
+            .shutdown_agent(agent_name, None)
+            .await
+            .map_err(SystemError::from)
     }
 
-    pub async fn restart_agent(&self, agent_name: &str) -> RuntimeResult<()> {
+    pub async fn restart_agent(&self, agent_name: &str) -> SystemResult<()> {
         let registry = self.agent_registry.read().await;
         registry.shutdown_agent(agent_name, None).await?;
-        registry.run_agent(agent_name, self.event_bus.clone()).await
+        registry
+            .run_agent(agent_name, self.event_bus.clone())
+            .await
+            .map_err(SystemError::from)
     }
 
     /// Send/Receive events
-    pub async fn send_event(&self, event: Event) -> RuntimeResult<()> {
-        self.event_bus.publish(event).await
+    pub async fn send_event(&self, event: Event) -> SystemResult<()> {
+        self.event_bus
+            .publish(event)
+            .await
+            .map_err(SystemError::from)
     }
 
-    pub async fn send_request(&self, event: Event) -> RuntimeResult<Value> {
+    pub async fn send_request(&self, event: Event) -> SystemResult<Value> {
         let request_id = match event.event_type.clone() {
             EventType::Request { request_id, .. } => request_id,
             _ => {
-                return Err(RuntimeError::Event(EventError::UnsupportedRequest {
+                return Err(SystemError::UnsupportedRequest {
                     request_type: event.event_type.to_string(),
-                }));
+                });
             }
         };
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -570,17 +590,15 @@ impl System {
         event_bus.publish(event).await?;
         let timeout_secs = 30;
         match timeout(Duration::from_secs(timeout_secs), rx).await {
-            Ok(value) => value.map_err(|e| {
-                RuntimeError::Event(EventError::RecieveResponseFailed {
-                    request_id: request_id.to_string(),
-                    message: e.to_string(),
-                })
+            Ok(value) => value.map_err(|e| SystemError::ReceiveResponseFailed {
+                request_id: request_id.to_string(),
+                message: e.to_string(),
             }),
-            Err(e) => Err(RuntimeError::Event(EventError::RecieveResponseTimeout {
+            Err(e) => Err(SystemError::ReceiveResponseTimeout {
                 request_id: request_id.to_string(),
                 timeout_secs,
                 message: e.to_string(),
-            })),
+            }),
         }
     }
 
@@ -588,21 +606,22 @@ impl System {
         &self,
         agent_name: &str,
         key: &str,
-    ) -> RuntimeResult<expression::Value> {
+    ) -> SystemResult<expression::Value> {
         let registry = self.agent_registry.read().await;
         registry
             .agent_state(agent_name, key)
             .await
-            .ok_or(RuntimeError::Execution(ExecutionError::AgentNotFound {
-                id: agent_name.to_string(),
-            }))
+            .ok_or(AgentError::AgentNotFound {
+                agent_id: agent_name.to_string(),
+            })
+            .map_err(SystemError::from)
     }
 
     /// イベントの購読
     pub async fn subscribe_events(
         &self,
         event_types: Vec<EventType>,
-    ) -> RuntimeResult<EventReceiver> {
+    ) -> SystemResult<EventReceiver> {
         let key = self.get_filtered_subscription_key(&event_types);
         if let Some(sender) = self.filtered_subscriptions.get(&key) {
             return Ok(EventReceiver::new(sender.subscribe()));
@@ -639,7 +658,7 @@ impl System {
     }
 
     /// Status and Metrics
-    pub async fn get_system_status(&self) -> RuntimeResult<SystemStatus> {
+    pub async fn get_system_status(&self) -> SystemResult<SystemStatus> {
         let registry = self.agent_registry.read().await;
         let event_bus = &self.event_bus;
 
@@ -656,13 +675,15 @@ impl System {
     }
 
     /// 特定のエージェントの状態取得
-    pub async fn get_agent_status(&self, agent_name: &str) -> RuntimeResult<AgentStatus> {
+    pub async fn get_agent_status(&self, agent_name: &str) -> SystemResult<AgentStatus> {
         let registry = self.agent_registry.read().await;
-        let agent_status = registry.agent_status(agent_name).await.ok_or_else(|| {
-            RuntimeError::Execution(ExecutionError::AgentNotFound {
-                id: agent_name.to_string(),
-            })
-        })?;
+        let agent_status =
+            registry
+                .agent_status(agent_name)
+                .await
+                .ok_or_else(|| AgentError::AgentNotFound {
+                    agent_id: agent_name.to_string(),
+                })?;
 
         Ok(AgentStatus {
             name: agent_name.to_string(),
@@ -701,14 +722,12 @@ impl System {
         &self.ast_registry
     }
 
-    fn check_start_transition(currnt: EventType, next: EventType) -> RuntimeResult<()> {
-        let err = Err(RuntimeError::Execution(ExecutionError::InvalidOperation(
-            format!(
-                "Invalid System State Transition: Current: {}, Next: {}",
-                currnt, next
-            ),
-        )));
-        match (currnt.clone(), next.clone()) {
+    fn check_start_transition(current: EventType, next: EventType) -> SystemResult<()> {
+        let err = Err(SystemError::InvalidStateTransition {
+            current: current.to_string(),
+            wanted: next.to_string(),
+        });
+        match (current.clone(), next.clone()) {
             (EventType::SystemCreated, EventType::SystemNativeFeaturesRegistered) => Ok(()),
             (_, EventType::SystemNativeFeaturesRegistered) => err,
             (EventType::SystemNativeFeaturesRegistered, EventType::SystemWorldRegistered) => Ok(()),
@@ -755,6 +774,46 @@ pub struct AgentStatus {
     pub state: String,
     pub last_lifecycle_updated: DateTime<Utc>,
 }
+
+#[derive(Debug, Error)]
+pub enum SystemError {
+    #[error("Parse error: {0}")]
+    Runtime(#[from] RuntimeError),
+    #[error("Event error: {0}")]
+    Event(#[from] EventError),
+    #[error("Agent error: {0}")]
+    Agent(#[from] AgentError),
+    // ast error
+    #[error("AST error: {0}")]
+    Ast(#[from] ASTError),
+    // feature
+    #[error("Feature error: {0}")]
+    Feature(#[from] FeatureError),
+    #[error("Scaling not enough agents: {base_name}, required: {required}, current: {current}")]
+    ScalingNotEnoughAgents {
+        base_name: String,
+        required: usize,
+        current: usize,
+    },
+    #[error("ScaleManager not found: {agent_name}")]
+    ScaleManagerNotFound { agent_name: String },
+    #[error("Invalid state transition: {current:?} -> {wanted:?}")]
+    InvalidStateTransition { current: String, wanted: String },
+    #[error("Unsupported request: {request_type}")]
+    UnsupportedRequest { request_type: String },
+
+    #[error("Event Receive response failed: {message}")]
+    ReceiveResponseFailed { request_id: String, message: String },
+
+    #[error("Event Receive response timeout: {request_id}")]
+    ReceiveResponseTimeout {
+        request_id: String,
+        timeout_secs: u64,
+        message: String,
+    },
+}
+
+pub type SystemResult<T> = Result<T, SystemError>;
 
 #[cfg(test)]
 mod tests {
