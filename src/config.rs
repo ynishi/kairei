@@ -52,6 +52,16 @@ pub struct ScaleManagerConfig {
     pub scale_check_interval: Duration,
 }
 
+impl Default for ScaleManagerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            max_instances_per_agent: default_max_instances(),
+            scale_check_interval: default_scale_interval(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitorConfig {
     #[serde(default = "default_true")]
@@ -62,6 +72,16 @@ pub struct MonitorConfig {
 
     #[serde(default = "default_retention_period", with = "duration_ms")]
     pub retention_period: Duration,
+}
+
+impl Default for MonitorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            metrics_interval: default_metrics_interval(),
+            retention_period: default_retention_period(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -11,7 +11,11 @@ use crate::eval::expression;
 use crate::event_bus::{ErrorEvent, ErrorSeverity, Event, EventBus, LastStatus, Value};
 use crate::event_registry::EventType;
 use crate::runtime::RuntimeAgent;
-use crate::{ExecutionError, MicroAgentDef, RuntimeError, RuntimeResult};
+use crate::{
+    AnswerDef, ExecutionError, Expression, HandlerBlock, Literal, MicroAgentDef, RequestHandler,
+    RequestType, RuntimeError, RuntimeResult, StateAccessPath, StateDef, StateVarDef, Statement,
+    TypeInfo,
+};
 
 pub struct AgentRegistry {
     agents: Arc<DashMap<String, Arc<dyn RuntimeAgent>>>,
@@ -332,7 +336,52 @@ impl AgentRegistry {
     }
 
     pub async fn get_builtin_agent_asts(&self) -> RuntimeResult<Vec<MicroAgentDef>> {
-        Ok(vec![])
+        let config = self.config.scale_manager.clone().unwrap_or_default();
+        let scale_manager_def = MicroAgentDef {
+            name: "scale_manager".to_string(),
+            state: Some(StateDef {
+                variables: {
+                    let mut vars = HashMap::new();
+                    vars.insert(
+                        "enabled".to_string(),
+                        StateVarDef {
+                            name: "enabled".to_string(),
+                            type_info: TypeInfo::Simple("boolean".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Boolean(
+                                config.enabled,
+                            ))),
+                        },
+                    );
+                    vars.insert(
+                        "max_instances_per_agent".to_string(),
+                        StateVarDef {
+                            name: "self.max_instances_per_agent".to_string(),
+                            type_info: TypeInfo::Simple("i64".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::Integer(
+                                config.max_instances_per_agent as i64,
+                            ))),
+                        },
+                    );
+                    vars
+                },
+            }),
+            // simply return the value of max_instances_per_agent for agent request event.
+            answer: Some(AnswerDef {
+                handlers: vec![RequestHandler {
+                    request_type: RequestType::Custom("get_max_instances_per_agent".to_string()),
+                    parameters: vec![],
+                    return_type: TypeInfo::Simple("i64".to_string()),
+                    constraints: None,
+                    block: HandlerBlock {
+                        statements: vec![Statement::Return(Expression::StateAccess(
+                            StateAccessPath(vec!["self".into(), "max_instances_per_agent".into()]),
+                        ))],
+                    },
+                }],
+            }),
+            ..Default::default()
+        };
+        Ok(vec![scale_manager_def])
     }
 
     pub fn builtin_agent_types() -> Vec<AgentType> {
