@@ -2,6 +2,7 @@ use clap::{command, Parser};
 use kairei::{config::SystemConfig, system::System, KaireiError};
 use std::path::PathBuf;
 use tracing::{debug, info};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -69,6 +70,8 @@ async fn run(cli: &Cli) -> Result<(), KaireiError> {
     // Clean shutdown
     system.shutdown().await?;
 
+    debug!("Shutdown completed.");
+
     println!("System shutdown completed.");
 
     Ok(())
@@ -76,7 +79,10 @@ async fn run(cli: &Cli) -> Result<(), KaireiError> {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "debug".into()))
+        .with(fmt::layer())
+        .init();
 
     let cli = Cli::parse();
 
