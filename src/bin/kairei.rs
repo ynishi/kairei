@@ -44,12 +44,12 @@ async fn run(cli: &Cli) -> Result<(), KaireiError> {
 
     debug!("Parsing DSL file: {:?}", cli.dsl);
 
-    let asts = system.parse_dsl(&dsl).await?;
+    let root = system.parse_dsl(&dsl).await?;
 
     debug!("Successfully parsed DSL, initializing system...");
 
     // Initialize system with parsed definitions
-    system.initialize(asts).await?;
+    system.initialize(root).await?;
 
     debug!("System initialized, starting...");
 

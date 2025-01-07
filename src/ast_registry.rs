@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 
-use crate::{Ast, EventsDef, HandlersDef, MicroAgentDef, RuntimeError, RuntimeResult, WorldDef};
+use crate::{
+    ast, parse_root, EventsDef, HandlersDef, MicroAgentDef, RuntimeError, RuntimeResult, WorldDef,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct AstRegistry {
@@ -10,8 +12,14 @@ pub struct AstRegistry {
 }
 
 impl AstRegistry {
-    pub async fn create_asts_from_dsl(&self, _dsl: &str) -> RuntimeResult<Vec<Ast>> {
-        todo!()
+    pub async fn create_ast_from_dsl(&self, dsl: &str) -> RuntimeResult<ast::Root> {
+        let (_, root) = parse_root(dsl).map_err(|e| {
+            RuntimeError::Execution(crate::ExecutionError::ASTError(format!(
+                "Failed to parse DSL: {}",
+                e
+            )))
+        })?;
+        Ok(root)
     }
     pub async fn register_agent_ast(
         &mut self,
