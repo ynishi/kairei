@@ -44,6 +44,7 @@ pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
         input,
         MicroAgentDef {
             name: name.to_string(),
+            policies: Default::default(),
             lifecycle,
             state,
             observe,
@@ -120,6 +121,7 @@ pub fn parse_world(input: &str) -> IResult<&str, WorldDef> {
         input,
         WorldDef {
             name: name.to_string(),
+            policies: Default::default(),
             config,
             events: events.unwrap_or_else(|| EventsDef { events: vec![] }),
             handlers: handlers.unwrap_or_else(|| HandlersDef { handlers: vec![] }),
@@ -1421,6 +1423,7 @@ mod tests {
                         .join(", ")
                 )
             }
+            Expression::Think { .. } => todo!(),
             Expression::BinaryOp { op, left, right } => {
                 let op_str = match op {
                     BinaryOperator::Add => "+",
