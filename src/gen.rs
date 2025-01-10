@@ -331,6 +331,9 @@ impl CodeGen for Expression {
                 let op_tokens = op.generate_rust();
                 quote! { #left_tokens #op_tokens #right_tokens }
             }
+            Expression::Think { .. } => {
+                todo!()
+            }
         }
     }
 }
@@ -392,6 +395,7 @@ mod tests {
     fn test_micro_agent_def() {
         let micro_agent = MicroAgentDef {
             name: "TestAgent".to_string(),
+            policies: vec![],
             lifecycle: Some(LifecycleDef {
                 on_init: Some(HandlerBlock {
                     statements: vec![Statement::Assignment {

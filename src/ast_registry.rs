@@ -46,6 +46,7 @@ impl AstRegistry {
     pub fn create_world_ast(&self) -> WorldDef {
         WorldDef {
             name: "world".to_string(),
+            policies: vec![],
             config: None,
             events: EventsDef { events: vec![] },
             handlers: HandlersDef { handlers: vec![] },

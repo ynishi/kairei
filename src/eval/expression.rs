@@ -51,6 +51,7 @@ impl ExpressionEvaluator {
             Expression::BinaryOp { op, left, right } => {
                 self.eval_binary_op(op, left, right, context).await
             }
+            Expression::Think { .. } => Ok(Value::Unit),
         }
     }
 
