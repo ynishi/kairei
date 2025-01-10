@@ -1,6 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use crate::{eval::expression, event_registry::EventType};
+use crate::{eval::expression, event_registry::EventType, RetryDelay};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tokio::sync::broadcast;
@@ -68,6 +68,7 @@ impl From<expression::Value> for Value {
     fn from(value: expression::Value) -> Self {
         match value {
             expression::Value::Integer(i) => Value::Integer(i),
+            expression::Value::UInteger(u) => Value::Integer(u as i64),
             expression::Value::Float(f) => Value::Float(f),
             expression::Value::String(s) => Value::String(s),
             expression::Value::Boolean(b) => Value::Boolean(b),
@@ -82,6 +83,26 @@ impl From<expression::Value> for Value {
                     .collect::<HashMap<String, Value>>(),
             ),
             expression::Value::Error(s) => Value::String(s),
+            expression::Value::Delay(retry) => {
+                let mut map = HashMap::new();
+                map.insert("type".to_string(), Value::String("retry".to_string()));
+                match retry {
+                    RetryDelay::Fixed(d) => {
+                        map.insert(
+                            "delay".to_string(),
+                            Value::Duration(Duration::from_millis(d)),
+                        );
+                    }
+                    RetryDelay::Exponential { initial, max } => {
+                        map.insert(
+                            "initial_delay".to_string(),
+                            Value::Duration(Duration::from_millis(initial)),
+                        );
+                        map.insert("multiplier".to_string(), Value::Integer(max as i64));
+                    }
+                }
+                Value::Map(map)
+            }
         }
     }
 }

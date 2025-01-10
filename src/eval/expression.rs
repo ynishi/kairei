@@ -1,21 +1,24 @@
+use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
 use async_recursion::async_recursion;
 
 use super::context::{ExecutionContext, VariableAccess};
 use crate::eval::evaluator::{EvalError, EvalResult};
-use crate::{BinaryOperator, Expression, Literal};
+use crate::{BinaryOperator, Expression, Literal, RetryDelay};
 
 // 値の型システム
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Integer(i64),
+    UInteger(u64),
     Float(f64),
     String(String),
     Boolean(bool),
     List(Vec<Value>),
     Map(HashMap<String, Value>),
     Duration(std::time::Duration),
+    Delay(RetryDelay),
     Tuple(Vec<Value>),
     Unit,          // Return value for statements
     Error(String), // Error name for handling.
@@ -81,6 +84,27 @@ impl ExpressionEvaluator {
                 Value::Map(map)
             }
             Literal::Null => Value::Null,
+            Literal::Retry(retry) => {
+                // make hashmap
+                let mut map = HashMap::new();
+                map.insert("type".to_string(), Value::String("retry".to_string()));
+                match retry.delay {
+                    RetryDelay::Fixed(d) => {
+                        map.insert(
+                            "delay".to_string(),
+                            Value::Duration(Duration::from_millis(d)),
+                        );
+                    }
+                    RetryDelay::Exponential { initial, max } => {
+                        map.insert(
+                            "initial_delay".to_string(),
+                            Value::Duration(Duration::from_millis(initial)),
+                        );
+                        map.insert("multiplier".to_string(), Value::UInteger(max));
+                    }
+                }
+                Value::Map(map)
+            }
         })
     }
 

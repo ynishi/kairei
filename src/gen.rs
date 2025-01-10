@@ -361,6 +361,9 @@ impl CodeGen for Literal {
                 quote! { vec![#(#items),*].into_iter().collect() }
             }
             Literal::Null => quote! { None },
+            Literal::Retry(_) => {
+                todo!()
+            }
         }
     }
 }
