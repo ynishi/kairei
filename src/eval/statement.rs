@@ -9,11 +9,14 @@ use super::{
     context::{ExecutionContext, StateAccessMode, VariableAccess},
     expression::{ExpressionEvaluator, Value},
 };
-use crate::eval::evaluator::{EvalError, EvalResult};
+use crate::{
+    eval::evaluator::{EvalError, EvalResult},
+    RequestAttributes,
+};
 use crate::{
     event_bus::{self, Event},
-    event_registry, Argument, AwaitType, ErrorHandlerBlock, EventType, Expression, RequestOptions,
-    RequestType, Statement,
+    event_registry, Argument, AwaitType, ErrorHandlerBlock, EventType, Expression, RequestType,
+    Statement,
 };
 
 /// 文の評価結果を表す型
@@ -209,7 +212,7 @@ impl StatementEvaluator {
         agent: &str,
         request_type: &RequestType,
         parameters: &[Argument],
-        _options: &Option<RequestOptions>,
+        _options: &Option<RequestAttributes>,
         context: Arc<ExecutionContext>,
     ) -> EvalResult<Value> {
         // パラメータの評価

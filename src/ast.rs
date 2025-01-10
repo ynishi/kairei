@@ -324,7 +324,7 @@ pub enum Statement {
         agent: String,
         request_type: RequestType,
         parameters: Vec<Argument>,
-        options: Option<RequestOptions>,
+        options: Option<RequestAttributes>,
     },
     // grouping
     Block(Statements),
@@ -371,7 +371,7 @@ use thiserror::Error;
 
 // リクエストオプション
 #[derive(Debug, Clone, PartialEq)]
-pub struct RequestOptions {
+pub struct RequestAttributes {
     pub timeout: Option<Duration>,
     pub retry: Option<u32>, // 回数
 }
@@ -403,8 +403,7 @@ pub enum Expression {
     },
     Think {
         args: Vec<Argument>,
-        policy: Option<Policy>,
-        with_block: Option<ThinkWithBlock>,
+        with_block: Option<ThinkAttributes>,
     },
     BinaryOp {
         op: BinaryOperator,
@@ -414,13 +413,15 @@ pub enum Expression {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ThinkWithBlock {
+pub struct ThinkAttributes {
     // 必須項目
     pub provider: Option<String>, // Noneの場合はデフォルトプロバイダー
 
+    pub policies: Vec<Policy>,
+
     // オプション項目
     pub model: Option<String>,
-    pub temperature: Option<f32>,
+    pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
 
     // リトライ設定
@@ -429,16 +430,16 @@ pub struct ThinkWithBlock {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RetryConfig {
-    pub max_attempts: u32,
+    pub max_attempts: u64,
     pub delay: RetryDelay,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RetryDelay {
-    Fixed(u32), // ミリ秒
+    Fixed(u64), // ミリ秒
     Exponential {
-        initial: u32, // ミリ秒
-        max: u32,     // ミリ秒
+        initial: u64, // ミリ秒
+        max: u64,     // ミリ秒
     },
 }
 
@@ -484,6 +485,7 @@ pub enum Literal {
     Duration(Duration),
     List(Vec<Literal>),
     Map(HashMap<String, Literal>),
+    Retry(RetryConfig),
     Null,
 }
 
