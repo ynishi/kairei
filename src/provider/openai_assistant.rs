@@ -7,16 +7,18 @@ use async_openai::{
     Client,
 };
 use async_trait::async_trait;
+use secrecy::ExposeSecret;
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
 
-use crate::provider::types::ProviderError;
+use crate::{config::ProviderConfig, provider::types::ProviderError};
 
-use super::types::{LLMProvider, ProviderConfig, ProviderParams, ProviderResult};
+use super::types::{LLMProvider, ProviderResult, ProviderSecret};
 
 #[derive(Debug, Clone)]
 pub struct OpenAIAssistantProvider {
-    client: Option<Client<OpenAIConfig>>,
+    pub client: Option<Client<OpenAIConfig>>,
+    pub config: Option<ProviderConfig>,
 }
 
 impl Default for OpenAIAssistantProvider {
@@ -27,7 +29,10 @@ impl Default for OpenAIAssistantProvider {
 
 impl OpenAIAssistantProvider {
     pub fn new() -> Self {
-        Self { client: None }
+        Self {
+            client: None,
+            config: None,
+        }
     }
 
     async fn wait_for_run(&self, thread_id: &str, run_id: &str) -> ProviderResult<String> {
@@ -102,20 +107,21 @@ impl LLMProvider for OpenAIAssistantProvider {
         "openai-assistant"
     }
 
-    async fn initialize(&self, params: ProviderParams) -> ProviderResult<Arc<dyn LLMProvider>> {
-        let api_key = params
-            .auth
-            .get("api_key")
-            .ok_or_else(|| ProviderError::Configuration("API key not provided".to_string()))?;
+    async fn initialize(
+        &self,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
+    ) -> ProviderResult<Arc<dyn LLMProvider>> {
+        let api_key = secret.api_key.clone();
+        let mut openai_config = OpenAIConfig::new().with_api_key(api_key.expose_secret());
 
-        let mut config = OpenAIConfig::new().with_api_key(api_key);
-
-        if let Some(org_id) = params.auth.get("organization_id") {
-            config = config.with_org_id(org_id);
+        if let Some(org_id) = secret.additional_auth.get("organization_id") {
+            openai_config = openai_config.with_org_id(org_id.expose_secret());
         }
 
         let mut provider = self.clone();
-        provider.client = Some(Client::with_config(config));
+        provider.client = Some(Client::with_config(openai_config));
+        provider.config = Some(config.clone());
 
         Ok(Arc::new(provider))
     }
@@ -126,12 +132,12 @@ impl LLMProvider for OpenAIAssistantProvider {
 
     async fn validate_config(&self, config: &ProviderConfig) -> ProviderResult<()> {
         // モデル名の検証
-        let model = config
-            .provider_specific
-            .get("model")
-            .ok_or_else(|| ProviderError::Configuration("Model not specified".to_string()))?
-            .as_str()
-            .ok_or_else(|| ProviderError::Configuration("Invalid model format".to_string()))?;
+        let model = config.common_config.model.clone();
+        if model.is_empty() {
+            return Err(ProviderError::Configuration(
+                "Model not specified".to_string(),
+            ));
+        }
 
         if !model.starts_with("gpt-4") && !model.starts_with("gpt-3.5") {
             return Err(ProviderError::Configuration(
@@ -148,12 +154,7 @@ impl LLMProvider for OpenAIAssistantProvider {
             .as_ref()
             .ok_or_else(|| ProviderError::Configuration("Client not initialized".to_string()))?;
 
-        let model = config
-            .provider_specific
-            .get("model")
-            .ok_or_else(|| ProviderError::Configuration("Model not specified".to_string()))?
-            .as_str()
-            .ok_or_else(|| ProviderError::Configuration("Invalid model format".to_string()))?;
+        let model = config.common_config.model.clone();
 
         let request = CreateAssistantRequest {
             model: model.to_string(),
@@ -274,8 +275,9 @@ impl LLMProvider for OpenAIAssistantProvider {
 mod tests {
     use std::collections::HashMap;
 
+    use crate::config::CommonConfig;
+
     use super::*;
-    use crate::provider::types::CommonConfig;
 
     #[tokio::test]
     async fn test_validate_config() {
@@ -291,8 +293,10 @@ mod tests {
             common_config: CommonConfig {
                 temperature: 0.7,
                 max_tokens: 1000,
+                model: "gpt-4".to_string(),
             },
             provider_specific,
+            ..Default::default()
         };
 
         assert!(provider.validate_config(&config).await.is_ok());
@@ -312,8 +316,10 @@ mod tests {
             common_config: CommonConfig {
                 temperature: 0.7,
                 max_tokens: 1000,
+                model: "gpt-4".to_string(),
             },
             provider_specific,
+            ..Default::default()
         };
 
         assert!(provider.validate_config(&config).await.is_err());

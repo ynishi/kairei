@@ -1,5 +1,9 @@
 use clap::{command, Parser};
-use kairei::{config::SystemConfig, system::System, Error};
+use kairei::{
+    config::{SecretConfig, SystemConfig},
+    system::System,
+    Error,
+};
 use std::path::PathBuf;
 use tracing::{debug, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -37,7 +41,7 @@ async fn run(cli: &Cli) -> Result<(), Error> {
     debug!("config: {:?}", config);
 
     // Initialize system
-    let mut system = System::new(&config).await;
+    let mut system = System::new(&config, &SecretConfig::default()).await;
 
     // Load and parse DSL
     let dsl = std::fs::read_to_string(&cli.dsl)

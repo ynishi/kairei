@@ -15,8 +15,11 @@ use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::agent_registry::AgentError;
+use crate::config::{ProviderConfig, SecretConfig};
 use crate::event_bus::EventError;
 use crate::native_feature::types::FeatureError;
+use crate::provider::provider_registry::ProviderRegistry;
+use crate::provider::types::ProviderSecret;
 use crate::runtime::RuntimeError;
 use crate::{
     agent_registry::AgentRegistry,
@@ -53,7 +56,7 @@ pub struct System {
 
 impl System {
     // System Lifecycles
-    pub async fn new(config: &SystemConfig) -> Self {
+    pub async fn new(config: &SystemConfig, secret_config: &SecretConfig) -> Self {
         let capacity = config.event_buffer_size;
         let (shutdown_tx, _) = broadcast::channel::<AgentType>(1); // 容量は1で十分
         let event_registry = Arc::new(RwLock::new(EventRegistry::new()));
@@ -75,6 +78,8 @@ impl System {
         let pending_requests_ref = pending_requests.clone();
         let mut event_rx = event_bus.subscribe().0;
         let filtered_subscriptions = Arc::new(DashMap::new());
+        let _provider_registry =
+            ProviderRegistry::new(config.provider_configs.clone(), secret_config.clone());
 
         // Receive response.
         tokio::spawn(async move {
@@ -705,6 +710,24 @@ impl System {
             .await;
     }
 
+    /// provider management
+    pub async fn register_provider(
+        &self,
+        _name: &str,
+        _config: ProviderConfig,
+        _secret: ProviderSecret,
+    ) -> SystemResult<()> {
+        // シークレットの検証と安全な保存
+        // プロバイダーの初期化
+        // ProviderRegistryへの登録
+        todo!()
+    }
+
+    pub async fn set_primary_provider(&self, _name: &str) -> SystemResult<()> {
+        // プライマリプロバイダーの設定
+        todo!()
+    }
+
     /// basic accessors
     pub fn event_bus(&self) -> Arc<EventBus> {
         self.event_bus.clone()
@@ -829,12 +852,12 @@ mod tests {
 
     #[test]
     async fn test_system_creation() {
-        System::new(&SystemConfig::default()).await;
+        System::new(&SystemConfig::default(), &SecretConfig::default()).await;
     }
 
     #[test]
     async fn test_system_shutdown() {
-        let system = System::new(&SystemConfig::default()).await;
+        let system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
         let result = system.shutdown().await;
         sleep(Duration::from_secs(1)).await;
         assert!(result.is_ok());
@@ -842,7 +865,7 @@ mod tests {
 
     #[test]
     async fn test_system_emergency_shutdown() {
-        let system = System::new(&SystemConfig::default()).await;
+        let system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
         let result = system.emergency_shutdown().await;
         sleep(Duration::from_secs(1)).await;
         assert!(result.is_ok());
@@ -915,7 +938,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_system_integration() {
-        let system = System::new(&SystemConfig::default()).await;
+        let system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
 
         // Ping-Pong AgentのAST作成
         let (ping_ast, pong_ast) = create_ping_pong_asts();
