@@ -25,8 +25,12 @@ pub fn parse_root(input: &str) -> IResult<&str, Root> {
 pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
     let (input, _) = ws(tag("micro"))(input)?;
     let (input, name) = ws(identifier)(input)?;
+    let context = PolicyParseContext {
+        scope: PolicyScope::Agent(name.to_string()),
+    };
     let (input, _) = ws(char('{'))(input)?;
 
+    let mut policies = vec![];
     let mut lifecycle = None;
     let mut state = None;
     let mut observe = None;
@@ -34,6 +38,7 @@ pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
     let mut react = None;
 
     let (input, _) = many0(alt((
+        map(|input| parse_policy(input, &context), |p| policies.push(p)),
         map(parse_lifecycle, |l| lifecycle = Some(l)),
         map(parse_state, |s| state = Some(s)),
         map(parse_observe, |o| observe = Some(o)),
@@ -47,7 +52,7 @@ pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
         input,
         MicroAgentDef {
             name: name.to_string(),
-            policies: Default::default(),
+            policies,
             lifecycle,
             state,
             observe,
@@ -112,13 +117,20 @@ fn parse_react(input: &str) -> IResult<&str, ReactDef> {
 pub fn parse_world(input: &str) -> IResult<&str, WorldDef> {
     let (input, _) = ws(tag("world"))(input)?;
     let (input, name) = ws(identifier)(input)?;
+
+    let context = PolicyParseContext {
+        scope: PolicyScope::World(name.to_string()),
+    };
+
     let (input, _) = ws(char('{'))(input)?;
 
+    let mut policies = vec![];
     let mut config = None;
     let mut events = None;
     let mut handlers = None;
 
     let (input, _) = many0(alt((
+        map(|i| parse_policy(i, &context), |p| policies.push(p)),
         map(parse_config, |c| config = Some(c)),
         map(parse_events, |e| events = Some(e)),
         map(parse_handlers, |h| handlers = Some(h)),
@@ -130,10 +142,10 @@ pub fn parse_world(input: &str) -> IResult<&str, WorldDef> {
         input,
         WorldDef {
             name: name.to_string(),
-            policies: Default::default(),
+            policies,
             config,
-            events: events.unwrap_or_else(|| EventsDef { events: vec![] }),
-            handlers: handlers.unwrap_or_else(|| HandlersDef { handlers: vec![] }),
+            events: events.unwrap_or_default(),
+            handlers: handlers.unwrap_or_default(),
         },
     ))
 }
@@ -957,6 +969,40 @@ fn parse_retry_delay(input: &str) -> IResult<&str, RetryDelay> {
     ))(input)
 }
 
+// パースコンテキストを構造体として定義（ASTの構築時のみ使用）
+#[derive(Debug, Clone)]
+struct PolicyParseContext {
+    scope: PolicyScope,
+}
+
+#[instrument(level = "debug", skip(input, context))]
+fn parse_policy<'a>(input: &'a str, context: &PolicyParseContext) -> IResult<&'a str, Policy> {
+    println!("parse_policy: input={:?}", input);
+    let (input, _) = ws(tag("policy"))(input)?;
+
+    // policy <text> または policy <name> <text>
+    let (input, (name, text)) = alt((
+        // Named policy: policy <name> <text>
+        map(tuple((identifier, ws(parse_string))), |(name, text)| {
+            (Some(name), text)
+        }),
+        // Anonymous policy: policy <text>
+        map(parse_string, |text| (None, text)),
+    ))(input)?;
+
+    Ok((
+        input,
+        Policy {
+            text,
+            scope: context.scope.clone(),
+            internal_id: match name {
+                Some(name) => PolicyId::builtin(name),
+                None => PolicyId::new(),
+            },
+        },
+    ))
+}
+
 // ヘルパー関数
 fn collect_with_settings(settings: Vec<ThinkAttributeKV>) -> ThinkAttributes {
     let mut block = ThinkAttributes {
@@ -1302,6 +1348,8 @@ mod tests {
     fn test_parse_micro_agent() {
         let input = r#"
             micro TestAgent {
+                policy "policy text"
+                policy named "named policy text"
                 lifecycle {
                     onInit {
                         counter = 0
@@ -1347,6 +1395,17 @@ mod tests {
         assert!(result.is_ok());
         let agent = result.unwrap().1;
         assert_eq!(agent.name, "TestAgent");
+        assert_eq!(agent.policies[0].text, "policy text".to_string());
+        assert_eq!(
+            agent.policies[0].scope,
+            PolicyScope::Agent("TestAgent".to_string())
+        );
+        assert_eq!(agent.policies[1].text, "named policy text".to_string());
+        assert_eq!(
+            agent.policies[1].scope,
+            PolicyScope::Agent("TestAgent".to_string())
+        );
+
         assert!(agent.lifecycle.is_some());
         assert!(agent.state.is_some());
         assert!(agent.observe.is_some());
@@ -1888,6 +1947,28 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_world_with_policies() {
+        let input = r#"
+                world TestWorld {
+                    policy "Global policy"
+                    policy named_policy "Named global policy"
+                }
+            "#;
+
+        let (_, world) = parse_world(input).unwrap();
+        assert_eq!(world.name, "TestWorld");
+        assert_eq!(world.policies.len(), 2);
+        assert_eq!(
+            world.policies[0].scope,
+            PolicyScope::World("TestWorld".to_string())
+        );
+        assert_eq!(
+            world.policies[1].scope,
+            PolicyScope::World("TestWorld".to_string())
+        );
+    }
+
+    #[test]
     fn test_parse_world_errors() {
         // Invalid duration format
         let input = r#"
@@ -1898,6 +1979,32 @@ mod tests {
             }
         "#;
         assert!(parse_world(input).is_err());
+    }
+
+    #[test]
+    fn test_parse_policy() {
+        let context = PolicyParseContext {
+            scope: PolicyScope::World("TestWorld".to_string()),
+        };
+
+        let (rest, policy) = parse_policy(r#"policy "Be concise""#, &context).unwrap();
+        assert!(rest.is_empty());
+        assert_eq!(policy.text, "Be concise");
+        assert_eq!(policy.scope, PolicyScope::World("TestWorld".to_string()));
+    }
+
+    #[test]
+    fn test_parse_named_policy() {
+        let context = PolicyParseContext {
+            scope: PolicyScope::World("TestWorld".to_string()),
+        };
+
+        let (rest, policy) =
+            parse_policy(r#"policy tech_terms "Use technical terms""#, &context).unwrap();
+        assert!(rest.is_empty());
+        assert_eq!(policy.text, "Use technical terms");
+        assert_eq!(policy.scope, PolicyScope::World("TestWorld".to_string()));
+        assert!(matches!(policy.internal_id, PolicyId(id) if id.contains("tech_terms")));
     }
 
     #[test]
