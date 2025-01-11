@@ -4,8 +4,12 @@ use std::{collections::HashMap, sync::Arc};
 use async_recursion::async_recursion;
 
 use super::context::{ExecutionContext, VariableAccess};
+use super::generator::PromptMeta;
 use crate::eval::evaluator::{EvalError, EvalResult};
-use crate::{BinaryOperator, Expression, Literal, RetryDelay};
+use crate::{
+    ast, event_bus, Argument, BinaryOperator, Expression, Literal, Policy, RetryDelay,
+    ThinkAttributes,
+};
 
 // 値の型システム
 #[derive(Clone, Debug, PartialEq)]
@@ -54,12 +58,62 @@ impl ExpressionEvaluator {
             Expression::BinaryOp { op, left, right } => {
                 self.eval_binary_op(op, left, right, context).await
             }
-            Expression::Think { .. } => Ok(Value::Unit),
+            Expression::Think { args, with_block } => {
+                self.eval_think(args, with_block, context).await
+            }
         }
     }
 
     pub fn new() -> Self {
         Self
+    }
+
+    pub async fn eval_arguments(
+        &self,
+        arguments: &[Argument],
+        context: Arc<ExecutionContext>,
+    ) -> EvalResult<HashMap<String, event_bus::Value>> {
+        self.eval_arguments_inner(arguments, context, false).await
+    }
+
+    pub async fn eval_arguments_detect_name(
+        &self,
+        arguments: &[Argument],
+        context: Arc<ExecutionContext>,
+    ) -> EvalResult<HashMap<String, event_bus::Value>> {
+        self.eval_arguments_inner(arguments, context, true).await
+    }
+
+    async fn eval_arguments_inner(
+        &self,
+        arguments: &[Argument],
+        context: Arc<ExecutionContext>,
+        is_named: bool,
+    ) -> EvalResult<HashMap<String, event_bus::Value>> {
+        let mut evaluated_params = HashMap::new();
+        for (i, param) in arguments.iter().enumerate() {
+            let (name, value) = match param {
+                Argument::Named { name, value } => {
+                    let value = self.eval_expression(value, context.clone()).await?;
+                    (name.clone(), value)
+                }
+                Argument::Positional(value) => {
+                    let indexed_name = (i + 1).to_string();
+                    let name = if is_named {
+                        match value {
+                            Expression::Variable(name) => name.clone(),
+                            _ => indexed_name,
+                        }
+                    } else {
+                        indexed_name
+                    };
+                    let value = self.eval_expression(value, context.clone()).await?;
+                    (name, value)
+                }
+            };
+            evaluated_params.insert(name, event_bus::Value::from(value));
+        }
+        Ok(evaluated_params)
     }
 
     fn eval_literal(lit: &Literal) -> EvalResult<Value> {
@@ -122,6 +176,95 @@ impl ExpressionEvaluator {
     ) -> EvalResult<Value> {
         let access = VariableAccess::State(path.to_string());
         context.get(access).await.map_err(EvalError::from)
+    }
+
+    pub async fn eval_think(
+        &self,
+        args: &[Argument],
+        with_block: &Option<ThinkAttributes>,
+        context: Arc<ExecutionContext>,
+    ) -> EvalResult<Value> {
+        let provider = context.shared.llm_provider.clone();
+
+        let user_content = self.build_content_from_args(args, context.clone()).await?;
+
+        let policies = self.collect_policies(context.clone(), with_block.as_ref())?;
+
+        let meta = PromptMeta {
+            agent_name: context.agent_name().to_string(),
+        };
+
+        let prompt = context
+            .shared
+            .prompt_generator
+            .generate_prompt(user_content, &policies, meta)
+            .await?;
+
+        let thread_id = provider
+            .provider
+            .create_thread()
+            .await
+            .map_err(EvalError::from)?;
+
+        let assistant_id_key = "assistant_id";
+        let assistant_id =
+            if let Some(assitant_id) = provider.config.provider_specific.get(assistant_id_key) {
+                if let Some(s) = assitant_id.as_str() {
+                    Ok(s)
+                } else {
+                    Err(EvalError::InvalidParameter {
+                        name: assistant_id_key.to_string(),
+                        value: assitant_id.to_string(),
+                    })
+                }
+            } else {
+                Err(EvalError::ParameterNotFound {
+                    name: assistant_id_key.to_string(),
+                })
+            }?;
+
+        let result = provider
+            .provider
+            .send_message(&thread_id, assistant_id, format!("{:?}", prompt).as_str())
+            .await;
+
+        let _ = provider.provider.delete_thread(&thread_id).await;
+
+        result.map(Value::String).map_err(EvalError::from)
+    }
+
+    async fn build_content_from_args(
+        &self,
+        args: &[Argument],
+        context: Arc<ExecutionContext>,
+    ) -> EvalResult<String> {
+        let evaled = self.eval_arguments_detect_name(args, context).await?;
+        let content = format!("{:?}", evaled);
+
+        Ok(content)
+    }
+
+    fn collect_policies(
+        &self,
+        _context: Arc<ExecutionContext>,
+        attributes: Option<&ThinkAttributes>,
+    ) -> EvalResult<Vec<Policy>> {
+        Ok(attributes
+            .map(|attr| {
+                let mut sorted = attr
+                    .policies
+                    .iter()
+                    .enumerate()
+                    .collect::<Vec<(usize, &Policy)>>()
+                    .clone();
+                sorted.sort_by(|a, b| a.0.cmp(&b.0));
+                sorted
+                    .iter()
+                    .map(|(_, p)| (*p).clone())
+                    .clone()
+                    .collect::<Vec<ast::Policy>>()
+            })
+            .unwrap_or_default())
     }
 
     // 関数呼び出しの評価

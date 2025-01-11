@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use async_recursion::async_recursion;
 
@@ -166,7 +166,10 @@ impl StatementEvaluator {
         context: Arc<ExecutionContext>,
     ) -> EvalResult<Value> {
         // パラメータの評価
-        let mut evaluated_params = self.eval_arguments(parameters, context.clone()).await?;
+        let mut evaluated_params = self
+            .expression_evaluator
+            .eval_arguments(parameters, context.clone())
+            .await?;
         if let Some(to) = target {
             evaluated_params.insert("to".to_string(), event_bus::Value::String(to.clone()));
         }
@@ -179,34 +182,6 @@ impl StatementEvaluator {
         Ok(Value::Unit)
     }
 
-    async fn eval_arguments(
-        &self,
-        arguments: &[Argument],
-        context: Arc<ExecutionContext>,
-    ) -> EvalResult<HashMap<String, event_bus::Value>> {
-        let mut evaluated_params = HashMap::new();
-        for (i, param) in arguments.iter().enumerate() {
-            let (name, value) = match param {
-                Argument::Named { name, value } => {
-                    let value = self
-                        .expression_evaluator
-                        .eval_expression(value, context.clone())
-                        .await?;
-                    (name.clone(), value)
-                }
-                Argument::Positional(value) => {
-                    let value = self
-                        .expression_evaluator
-                        .eval_expression(value, context.clone())
-                        .await?;
-                    ((i + 1).to_string(), value)
-                }
-            };
-            evaluated_params.insert(name, event_bus::Value::from(value));
-        }
-        Ok(evaluated_params)
-    }
-
     async fn eval_request(
         &self,
         agent: &str,
@@ -216,7 +191,10 @@ impl StatementEvaluator {
         context: Arc<ExecutionContext>,
     ) -> EvalResult<Value> {
         // パラメータの評価
-        let evaluated_params = self.eval_arguments(parameters, context.clone()).await?;
+        let evaluated_params = self
+            .expression_evaluator
+            .eval_arguments(parameters, context.clone())
+            .await?;
 
         // リクエストの構築と送信
         let request = Event {
