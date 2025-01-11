@@ -340,11 +340,13 @@ impl StatementEvaluator {
 
 #[cfg(test)]
 mod tests {
+    use dashmap::DashMap;
     use event_bus::EventBus;
 
     use crate::{
         config::ContextConfig,
         eval::context::{AgentInfo, StateAccessMode},
+        provider::types::ProviderInstance,
         BinaryOperator, Literal,
     };
 
@@ -359,6 +361,8 @@ mod tests {
             AgentInfo::default(),
             StateAccessMode::ReadWrite,
             ContextConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
         ))
     }
 

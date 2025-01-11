@@ -210,7 +210,7 @@ pub struct SecretConfig {
     pub providers: HashMap<String, ProviderSecretConfig>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct ProviderSecretConfig {
     pub api_key: String,
     pub additional_auth: HashMap<String, String>, // 追加の認証情報

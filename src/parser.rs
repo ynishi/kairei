@@ -9,7 +9,7 @@ use nom::{
     IResult,
 };
 use std::{collections::HashMap, time::Duration};
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 /// Entry point of the parser.
 #[instrument(level = "debug", skip(input))]
@@ -977,7 +977,7 @@ struct PolicyParseContext {
 
 #[instrument(level = "debug", skip(input, context))]
 fn parse_policy<'a>(input: &'a str, context: &PolicyParseContext) -> IResult<&'a str, Policy> {
-    println!("parse_policy: input={:?}", input);
+    debug!("parse_policy: input={:?}", input);
     let (input, _) = ws(tag("policy"))(input)?;
 
     // policy <text> または policy <name> <text>
