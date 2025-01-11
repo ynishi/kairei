@@ -19,7 +19,7 @@ use crate::config::{ProviderConfig, SecretConfig};
 use crate::event_bus::EventError;
 use crate::native_feature::types::FeatureError;
 use crate::provider::provider_registry::ProviderRegistry;
-use crate::provider::types::ProviderSecret;
+use crate::provider::types::{ProviderError, ProviderSecret};
 use crate::runtime::RuntimeError;
 use crate::{
     agent_registry::AgentRegistry,
@@ -42,6 +42,7 @@ pub struct System {
     agent_registry: Arc<RwLock<AgentRegistry>>,
     ast_registry: Arc<RwLock<AstRegistry>>,
     feature_registry: Arc<RwLock<NativeFeatureRegistry>>,
+    provider_registry: Arc<RwLock<ProviderRegistry>>,
     shutdown_tx: broadcast::Sender<AgentType>, // Systemがシャットダウンシグナルを送信
     _shutdown_rx: broadcast::Receiver<AgentType>, // シャットダウンシグナルを受信
     // event request/response
@@ -78,8 +79,14 @@ impl System {
         let pending_requests_ref = pending_requests.clone();
         let mut event_rx = event_bus.subscribe().0;
         let filtered_subscriptions = Arc::new(DashMap::new());
-        let _provider_registry =
-            ProviderRegistry::new(config.provider_configs.clone(), secret_config.clone());
+        let provider_registry = Arc::new(RwLock::new(
+            ProviderRegistry::new(
+                config.provider_configs.clone(),
+                secret_config.clone(),
+                event_bus.clone(),
+            )
+            .await,
+        ));
 
         // Receive response.
         tokio::spawn(async move {
@@ -112,6 +119,7 @@ impl System {
             agent_registry,
             ast_registry,
             feature_registry,
+            provider_registry,
             shutdown_tx,
             _shutdown_rx,
             pending_requests,
@@ -136,6 +144,7 @@ impl System {
     pub async fn initialize(&mut self, root: ast::Root) -> SystemResult<()> {
         // call all registration methods
         self.register_native_features().await?;
+        self.register_providers().await?;
         self.register_world(&root.world_def).await?;
         self.register_builtin_agents().await?;
         self.register_initial_user_agents(root.micro_agent_defs)
@@ -157,6 +166,20 @@ impl System {
         registry.register().await?;
         self.update_system_status(complete_state).await;
         debug!("ended");
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub async fn register_providers(&self) -> SystemResult<()> {
+        let complete_state = EventType::SystemProvidersRegistered;
+        Self::check_start_transition(
+            self.last_status.read().await.last_event_type.clone(),
+            complete_state.clone(),
+        )?;
+
+        let registry = self.provider_registry.write().await;
+        registry.register_providers().await?;
+        self.update_system_status(complete_state).await;
         Ok(())
     }
 
@@ -251,6 +274,8 @@ impl System {
 
         self.start_native_features().await?;
 
+        self.start_providers().await?;
+
         self.start_world().await?;
         self.start_builtin_agents().await?;
         self.start_users_agents().await?;
@@ -263,6 +288,14 @@ impl System {
     async fn start_native_features(&self) -> SystemResult<()> {
         let registry = self.feature_registry.write().await;
         registry.start().await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn start_providers(&self) -> SystemResult<()> {
+        let registry = self.provider_registry.write().await;
+        // No need to start, just check health
+        registry.check_providers_health().await?;
         Ok(())
     }
 
@@ -314,8 +347,7 @@ impl System {
         self.shutdown_tx
             .send(AgentType::Custom("All".to_string()))
             .expect("Failed to send shutdown signal");
-        let registry = self.feature_registry.write().await;
-        registry.shutdown().await?;
+        // Agent のシャットダウン
         for agent_type in shutdown_sequence {
             self.shutdown_tx
                 .send(agent_type.clone())
@@ -343,6 +375,13 @@ impl System {
                 break;
             }
         }
+        // Provider のシャットダウン
+        let registry = self.provider_registry.write().await;
+        registry.shutdown().await?;
+
+        // Native Feature のシャットダウン
+        let registry = self.feature_registry.write().await;
+        registry.shutdown().await?;
 
         self.update_system_status(EventType::SystemStopped).await;
         Ok(())
@@ -753,7 +792,11 @@ impl System {
         match (current.clone(), next.clone()) {
             (EventType::SystemCreated, EventType::SystemNativeFeaturesRegistered) => Ok(()),
             (_, EventType::SystemNativeFeaturesRegistered) => err,
-            (EventType::SystemNativeFeaturesRegistered, EventType::SystemWorldRegistered) => Ok(()),
+            (EventType::SystemNativeFeaturesRegistered, EventType::SystemProvidersRegistered) => {
+                Ok(())
+            }
+            (_, EventType::SystemProvidersRegistered) => err,
+            (EventType::SystemProvidersRegistered, EventType::SystemWorldRegistered) => Ok(()),
             (_, EventType::SystemWorldRegistered) => err,
             (EventType::SystemWorldRegistered, EventType::SystemBuiltinAgentsRegistered) => Ok(()),
             (_, EventType::SystemBuiltinAgentsRegistered) => err,
@@ -806,12 +849,12 @@ pub enum SystemError {
     Event(#[from] EventError),
     #[error("Agent error: {0}")]
     Agent(#[from] AgentError),
-    // ast error
     #[error("AST error: {0}")]
     Ast(#[from] ASTError),
-    // feature
     #[error("Feature error: {0}")]
     Feature(#[from] FeatureError),
+    #[error("Provider error: {0}")]
+    Provider(#[from] ProviderError),
     #[error("Scaling not enough agents: {base_name}, required: {required}, current: {current}")]
     ScalingNotEnoughAgents {
         base_name: String,

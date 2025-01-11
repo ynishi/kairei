@@ -6,6 +6,7 @@ use crate::eval::expression;
 use crate::evaluator::EvalError;
 use crate::event_bus::{ErrorEvent, Event, EventBus, EventError, LastStatus, Value};
 use crate::event_registry::{EventType, LifecycleEvent};
+use crate::provider::types::ProviderError;
 use crate::{EventHandler, HandlerBlock, MicroAgentDef, RequestHandler};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -574,6 +575,7 @@ impl RuntimeAgentData {
             | EventType::AgentStopped
             | EventType::SystemCreated
             | EventType::SystemNativeFeaturesRegistered
+            | EventType::SystemProvidersRegistered
             | EventType::SystemWorldRegistered
             | EventType::SystemBuiltinAgentsRegistered
             | EventType::SystemUserAgentsRegistered
@@ -581,6 +583,10 @@ impl RuntimeAgentData {
             | EventType::SystemStarted
             | EventType::SystemStopping
             | EventType::SystemStopped
+            | EventType::ProviderRegistered
+            | EventType::ProviderShutdown
+            | EventType::ProviderPrimarySet
+            | EventType::ProviderStatusUpdated
             | EventType::FeatureStatusUpdated { .. } => self.handle_system_event(event).await,
             // レスポンスは直接evaluatorで処理する
             EventType::ResponseSuccess { .. } => Ok(()),
@@ -645,6 +651,9 @@ pub enum RuntimeError {
 
     #[error("Event error: {0}")]
     Event(#[from] EventError),
+
+    #[error("Provider error: {0}")]
+    Provider(#[from] ProviderError),
 
     #[error("Expression evaluation failed: {0}")]
     EvaluationFailed(String),

@@ -1,8 +1,13 @@
 use dashmap::DashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
+use tracing::{debug, instrument};
 
-use crate::config::{ProviderConfigs, SecretConfig};
+use crate::{
+    config::{ProviderConfigs, SecretConfig},
+    event_bus::{ErrorEvent, Event, EventBus, Value},
+    event_registry::EventType,
+};
 
 use super::{
     openai_assistant::OpenAIAssistantProvider,
@@ -19,6 +24,7 @@ pub struct ProviderRegistry {
     states: DashMap<String, ProviderState>,
     secret_registry: SecretRegistry,
     primary_provider: RwLock<Option<String>>,
+    event_bus: Arc<EventBus>,
 }
 
 impl ProviderRegistry {
@@ -26,18 +32,30 @@ impl ProviderRegistry {
     pub async fn new(
         provider_configs: ProviderConfigs,
         secret_config: SecretConfig,
-    ) -> ProviderResult<Self> {
+        event_bus: Arc<EventBus>,
+    ) -> Self {
         let primary_provider = RwLock::new(provider_configs.primary_provider.clone());
-        Ok(Self {
+        Self {
             configs: provider_configs.clone(),
             providers: DashMap::new(),
             states: DashMap::new(),
-            secret_registry: SecretRegistry::new(secret_config.clone())?,
+            secret_registry: SecretRegistry::new(secret_config.clone()),
             primary_provider,
-        })
+            event_bus,
+        }
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    pub async fn register_providers(&self) -> ProviderResult<()> {
+        for (name, config) in self.configs.providers.iter() {
+            self.register_provider(name, config.provider_type.clone())
+                .await?;
+        }
+        Ok(())
     }
 
     /// プロバイダーの登録と初期化
+    #[instrument(level = "debug", skip(self))]
     pub async fn register_provider(
         &self,
         name: &str,
@@ -46,6 +64,22 @@ impl ProviderRegistry {
         let provider = self.create_provider(&provider_type).await?;
 
         self.register_provider_with(name, provider).await?;
+
+        let _ = self
+            .event_bus
+            .publish(Event {
+                event_type: EventType::ProviderRegistered,
+                parameters: {
+                    let mut params = HashMap::new();
+                    params.insert(
+                        "provider_type".to_string(),
+                        Value::String(provider_type.to_string()),
+                    );
+                    params.insert("provider_name".to_string(), Value::String(name.to_string()));
+                    params
+                },
+            })
+            .await;
 
         Ok(())
     }
@@ -89,10 +123,23 @@ impl ProviderRegistry {
     }
 
     /// デフォルトプロバイダーの設定
+    #[instrument(level = "debug", skip(self))]
     pub async fn set_default_provider(&self, name: &str) -> ProviderResult<()> {
         if self.providers.contains_key(name) {
             let mut primary_provider = self.primary_provider.write().await;
             *primary_provider = Some(name.to_string());
+
+            let _ = self
+                .event_bus
+                .publish(Event {
+                    event_type: EventType::ProviderPrimarySet,
+                    parameters: {
+                        let mut params = HashMap::new();
+                        params.insert("provider_name".to_string(), Value::String(name.to_string()));
+                        params
+                    },
+                })
+                .await;
             Ok(())
         } else {
             Err(ProviderError::ProviderNotFound(name.to_string()))
@@ -128,6 +175,18 @@ impl ProviderRegistry {
     }
 
     /// プロバイダーのヘルスチェック実行
+    pub async fn check_providers_health(&self) -> ProviderResult<()> {
+        let names = self
+            .providers
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect::<Vec<_>>();
+        for name in names {
+            self.check_provider_health(&name).await?;
+        }
+        Ok(())
+    }
+
     pub async fn check_provider_health(&self, name: &str) -> ProviderResult<()> {
         let instance = self.get_provider(name).await?;
         let health_result = instance.provider.health_check().await;
@@ -136,20 +195,76 @@ impl ProviderRegistry {
             let value = state.value_mut();
             value.is_healthy = health_result.is_ok();
             value.last_health_check = std::time::SystemTime::now();
+            if let Err(err) = &health_result {
+                value.error_count += 1;
+                value.last_error = Some(err.to_string());
+                let error_event = if self.get_primary_provider_name().await? == name {
+                    ErrorEvent {
+                        error_type: "primary provider unhealthy".to_string(),
+                        message: err.to_string(),
+                        severity: crate::event_bus::ErrorSeverity::Error,
+                        parameters: {
+                            let mut params = HashMap::new();
+                            params.insert(
+                                "provider_name".to_string(),
+                                Value::String(name.to_string()),
+                            );
+                            params
+                        },
+                    }
+                } else {
+                    ErrorEvent {
+                        error_type: "provider unhealthy".to_string(),
+                        message: err.to_string(),
+                        severity: crate::event_bus::ErrorSeverity::Warning,
+                        parameters: {
+                            let mut params = HashMap::new();
+                            params.insert(
+                                "provider_name".to_string(),
+                                Value::String(name.to_string()),
+                            );
+                            params
+                        },
+                    }
+                };
+                let _ = self.event_bus.publish_error(error_event).await;
+            } else {
+                let _ = self
+                    .event_bus
+                    .publish(Event {
+                        event_type: EventType::ProviderStatusUpdated,
+                        parameters: {
+                            let mut params = HashMap::new();
+                            params.insert(
+                                "provider_name".to_string(),
+                                Value::String(name.to_string()),
+                            );
+                            params
+                                .insert("is_healthy".to_string(), Value::Boolean(value.is_healthy));
+                            params.insert(
+                                "last_updated_at".to_string(),
+                                Value::String(format!("{:?}", value.last_health_check)),
+                            );
+                            params
+                        },
+                    })
+                    .await;
+            }
         }
 
         health_result
     }
 
     /// すべてのプロバイダーのシャットダウン
-    pub async fn shutdown_all(&self) -> ProviderResult<()> {
+    #[instrument(level = "debug", skip(self))]
+    pub async fn shutdown(&self) -> ProviderResult<()> {
         let names = self
             .providers
             .iter()
             .map(|entry| entry.key().clone())
             .collect::<Vec<_>>();
         for name in names {
-            println!("start: {}", name);
+            debug!("shutdown start: {}", name);
             let entry = self
                 .providers
                 .get_mut(&name)
@@ -158,11 +273,24 @@ impl ProviderRegistry {
             drop(entry);
             self.providers.remove(&name);
             self.states.remove(&name);
+            let _ = self
+                .event_bus
+                .publish(Event {
+                    event_type: EventType::ProviderShutdown,
+                    parameters: {
+                        let mut params = HashMap::new();
+                        params.insert("provider_name".to_string(), Value::String(name.clone()));
+                        params
+                    },
+                })
+                .await;
         }
+
         Ok(())
     }
 
     /// Factory method to create a new assistant
+    #[instrument(level = "debug", skip(self))]
     pub async fn create_provider(
         &self,
         provider_type: &ProviderType,
@@ -277,7 +405,8 @@ mod tests {
             primary_provider: Some(primary_name.to_string()),
             providers: provider_configs,
         };
-        ProviderRegistry::new(config, secret_configs).await.unwrap()
+        let event_bus = Arc::new(EventBus::new(20));
+        ProviderRegistry::new(config, secret_configs, event_bus).await
     }
 
     #[tokio::test]
@@ -311,7 +440,7 @@ mod tests {
         println!("{:?}", state);
 
         // シャットダウン
-        registry.shutdown_all().await.unwrap();
+        registry.shutdown().await.unwrap();
     }
 
     #[tokio::test]
