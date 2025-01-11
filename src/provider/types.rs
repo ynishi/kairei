@@ -67,7 +67,17 @@ impl Default for ProviderInstance {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, strum::Display, strum::EnumString, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    strum::Display,
+    strum::EnumString,
+    Default,
+    PartialEq,
+    PartialOrd,
+)]
 pub enum ProviderType {
     #[default]
     OpenAIAssistant,

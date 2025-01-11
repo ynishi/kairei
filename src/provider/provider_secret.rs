@@ -9,12 +9,12 @@ pub struct SecretRegistry {
 }
 
 impl SecretRegistry {
-    pub fn new(config: SecretConfig) -> ProviderResult<Self> {
+    pub fn new(config: SecretConfig) -> Self {
         let mut secrets = HashMap::new();
         for (provider_name, secret) in config.providers {
             secrets.insert(provider_name, ProviderSecret::from(secret));
         }
-        Ok(Self { secrets })
+        Self { secrets }
     }
 
     pub fn get_secret(&self, provider_name: &str) -> ProviderResult<ProviderSecret> {
