@@ -6,7 +6,7 @@ use crate::eval::expression;
 use crate::evaluator::EvalError;
 use crate::event_bus::{ErrorEvent, Event, EventBus, EventError, LastStatus, Value};
 use crate::event_registry::{EventType, LifecycleEvent};
-use crate::provider::types::ProviderError;
+use crate::provider::types::{ProviderError, ProviderInstance};
 use crate::{EventHandler, HandlerBlock, MicroAgentDef, RequestHandler};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -276,6 +276,8 @@ impl RuntimeAgentData {
         agent_def: &MicroAgentDef,
         event_bus: &Arc<EventBus>,
         config: AgentConfig,
+        primary: Arc<ProviderInstance>,
+        providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
     ) -> RuntimeResult<Self> {
         let agent_name = agent_def.name.clone();
         let agent_info = AgentInfo {
@@ -291,6 +293,8 @@ impl RuntimeAgentData {
             agent_info,
             StateAccessMode::ReadWrite,
             config.context,
+            primary.clone(),
+            providers.clone(),
         ));
 
         let last_status = RwLock::new(LastStatus {
@@ -730,9 +734,15 @@ mod tests {
         };
 
         // RuntimeAgentを生成
-        let agent = RuntimeAgentData::new(&counter_def, &event_bus, AgentConfig::default())
-            .await
-            .unwrap();
+        let agent = RuntimeAgentData::new(
+            &counter_def,
+            &event_bus,
+            AgentConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
+        )
+        .await
+        .unwrap();
         let context = agent.base_context.clone();
 
         // 初期状態を確認
@@ -862,9 +872,15 @@ mod tests {
             ..Default::default()
         };
 
-        let agent = RuntimeAgentData::new(&answer_def, &event_bus, AgentConfig::default())
-            .await
-            .unwrap();
+        let agent = RuntimeAgentData::new(
+            &answer_def,
+            &event_bus,
+            AgentConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
+        )
+        .await
+        .unwrap();
         let context = agent.base_context.clone();
         let shutdown_rx = broadcast::channel(1).1;
         let sender_agent = TestAgent::new("test", &event_bus);
@@ -964,9 +980,15 @@ mod tests {
             ..Default::default()
         };
 
-        let agent = RuntimeAgentData::new(&react_def, &event_bus, AgentConfig::default())
-            .await
-            .unwrap();
+        let agent = RuntimeAgentData::new(
+            &react_def,
+            &event_bus,
+            AgentConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
+        )
+        .await
+        .unwrap();
         let context = agent.base_context.clone();
         let shutdown_rx = broadcast::channel(1).1;
 

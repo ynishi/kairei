@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, instrument};
 
 use crate::{
-    config::{ProviderConfigs, SecretConfig},
+    config::{ProviderConfig, ProviderConfigs, SecretConfig},
     event_bus::{ErrorEvent, Event, EventBus, Value},
     event_registry::EventType,
 };
@@ -13,17 +13,18 @@ use super::{
     openai_assistant::OpenAIAssistantProvider,
     provider_secret::SecretRegistry,
     types::{
-        LLMProvider, ProviderError, ProviderInstance, ProviderResult, ProviderState, ProviderType,
+        LLMProvider, ProviderError, ProviderInstance, ProviderResult, ProviderSecret,
+        ProviderState, ProviderType,
     },
 };
 
 /// プロバイダーリポジトリ
 pub struct ProviderRegistry {
     configs: ProviderConfigs,
-    providers: DashMap<String, ProviderInstance>,
-    states: DashMap<String, ProviderState>,
-    secret_registry: SecretRegistry,
-    primary_provider: RwLock<Option<String>>,
+    providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
+    states: Arc<DashMap<String, Arc<RwLock<ProviderState>>>>,
+    secret_registry: Arc<SecretRegistry>,
+    primary_provider: Arc<RwLock<Option<String>>>,
     event_bus: Arc<EventBus>,
 }
 
@@ -34,12 +35,12 @@ impl ProviderRegistry {
         secret_config: SecretConfig,
         event_bus: Arc<EventBus>,
     ) -> Self {
-        let primary_provider = RwLock::new(provider_configs.primary_provider.clone());
+        let primary_provider = Arc::new(RwLock::new(provider_configs.primary_provider.clone()));
         Self {
             configs: provider_configs.clone(),
-            providers: DashMap::new(),
-            states: DashMap::new(),
-            secret_registry: SecretRegistry::new(secret_config.clone()),
+            providers: Arc::new(DashMap::new()),
+            states: Arc::new(DashMap::new()),
+            secret_registry: Arc::new(SecretRegistry::new(secret_config.clone())),
             primary_provider,
             event_bus,
         }
@@ -96,11 +97,24 @@ impl ProviderRegistry {
             .get(name)
             .ok_or(ProviderError::ProviderNotFound(name.to_string()))?;
 
+        self.register_provider_with_config(name, provider, config, &secret)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn register_provider_with_config(
+        &self,
+        name: &str,
+        provider: Arc<dyn LLMProvider>,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
+    ) -> ProviderResult<()> {
         // 設定のバリデーション
         provider.validate_config(config).await?;
 
         // プロバイダーの初期化
-        let provider = provider.initialize(config, &secret).await?;
+        let provider = provider.initialize(config, secret).await?;
 
         // 状態の初期化
         let state = ProviderState {
@@ -112,12 +126,13 @@ impl ProviderRegistry {
 
         let insance = ProviderInstance {
             provider,
-            secret,
+            secret: secret.clone(),
             config: config.clone(),
         };
 
-        self.providers.insert(name.to_string(), insance);
-        self.states.insert(name.to_string(), state);
+        self.providers.insert(name.to_string(), Arc::new(insance));
+        self.states
+            .insert(name.to_string(), Arc::new(RwLock::new(state)));
 
         Ok(())
     }
@@ -155,8 +170,17 @@ impl ProviderRegistry {
             .ok_or(ProviderError::PrimaryNameNotSet)
     }
 
+    pub async fn get_primary_provider(&self) -> ProviderResult<Arc<ProviderInstance>> {
+        let name = self.get_primary_provider_name().await?;
+        self.get_provider(&name).await
+    }
+
+    pub fn get_providers(&self) -> Arc<DashMap<String, Arc<ProviderInstance>>> {
+        self.providers.clone()
+    }
+
     /// プロバイダーの取得
-    pub async fn get_provider(&self, name: &str) -> ProviderResult<ProviderInstance> {
+    pub async fn get_provider(&self, name: &str) -> ProviderResult<Arc<ProviderInstance>> {
         if !self.providers.contains_key(name) {
             return Err(ProviderError::ProviderNotFound(name.to_string()));
         }
@@ -167,7 +191,10 @@ impl ProviderRegistry {
     }
 
     /// プロバイダーの状態取得
-    pub async fn get_provider_state(&self, name: &str) -> ProviderResult<ProviderState> {
+    pub async fn get_provider_state(
+        &self,
+        name: &str,
+    ) -> ProviderResult<Arc<RwLock<ProviderState>>> {
         self.states
             .get(name)
             .map(|state| state.value().clone())
@@ -191,13 +218,14 @@ impl ProviderRegistry {
         let instance = self.get_provider(name).await?;
         let health_result = instance.provider.health_check().await;
 
-        if let Some(mut state) = self.states.get_mut(name) {
-            let value = state.value_mut();
+        if let Some(state) = self.states.get(name) {
+            let mut value = state.write().await;
             value.is_healthy = health_result.is_ok();
             value.last_health_check = std::time::SystemTime::now();
             if let Err(err) = &health_result {
                 value.error_count += 1;
                 value.last_error = Some(err.to_string());
+                drop(value);
                 let error_event = if self.get_primary_provider_name().await? == name {
                     ErrorEvent {
                         error_type: "primary provider unhealthy".to_string(),
@@ -229,6 +257,8 @@ impl ProviderRegistry {
                 };
                 let _ = self.event_bus.publish_error(error_event).await;
             } else {
+                let value_clone = value.clone();
+                drop(value);
                 let _ = self
                     .event_bus
                     .publish(Event {
@@ -239,11 +269,13 @@ impl ProviderRegistry {
                                 "provider_name".to_string(),
                                 Value::String(name.to_string()),
                             );
-                            params
-                                .insert("is_healthy".to_string(), Value::Boolean(value.is_healthy));
+                            params.insert(
+                                "is_healthy".to_string(),
+                                Value::Boolean(value_clone.is_healthy),
+                            );
                             params.insert(
                                 "last_updated_at".to_string(),
-                                Value::String(format!("{:?}", value.last_health_check)),
+                                Value::String(format!("{:?}", value_clone.last_health_check)),
                             );
                             params
                         },
@@ -263,13 +295,14 @@ impl ProviderRegistry {
             .iter()
             .map(|entry| entry.key().clone())
             .collect::<Vec<_>>();
+
         for name in names {
             debug!("shutdown start: {}", name);
             let entry = self
                 .providers
-                .get_mut(&name)
+                .get(&name)
                 .ok_or(ProviderError::ProviderNotFound(name.clone()))?;
-            entry.provider.shutdown().await?;
+            entry.value().provider.shutdown().await?;
             drop(entry);
             self.providers.remove(&name);
             self.states.remove(&name);
@@ -436,8 +469,7 @@ mod tests {
         // ヘルスチェック
         registry.check_provider_health("mock").await.unwrap();
         let state = registry.get_provider_state("mock").await.unwrap();
-        assert!(state.is_healthy);
-        println!("{:?}", state);
+        assert!(state.read().await.is_healthy);
 
         // シャットダウン
         registry.shutdown().await.unwrap();

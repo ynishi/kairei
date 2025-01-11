@@ -6,6 +6,7 @@ use async_recursion::async_recursion;
 use super::context::{ExecutionContext, VariableAccess};
 use super::generator::PromptMeta;
 use crate::eval::evaluator::{EvalError, EvalResult};
+use crate::provider::types::{ProviderError, ProviderInstance};
 use crate::{
     ast, event_bus, Argument, BinaryOperator, Expression, Literal, Policy, RetryDelay,
     ThinkAttributes,
@@ -184,7 +185,13 @@ impl ExpressionEvaluator {
         with_block: &Option<ThinkAttributes>,
         context: Arc<ExecutionContext>,
     ) -> EvalResult<Value> {
-        let provider = context.shared.llm_provider.clone();
+        let provider_name = if let Some(with_block) = with_block {
+            with_block.provider.clone()
+        } else {
+            None
+        };
+
+        let provider = self.select_provider(provider_name, context.clone()).await?;
 
         let user_content = self.build_content_from_args(args, context.clone()).await?;
 
@@ -231,6 +238,25 @@ impl ExpressionEvaluator {
         let _ = provider.provider.delete_thread(&thread_id).await;
 
         result.map(Value::String).map_err(EvalError::from)
+    }
+
+    async fn select_provider(
+        &self,
+        provider_name: Option<String>,
+        context: Arc<ExecutionContext>,
+    ) -> EvalResult<Arc<ProviderInstance>> {
+        if let Some(provider_name) = provider_name {
+            let entry = context
+                .shared
+                .providers
+                .get(&provider_name)
+                .ok_or(EvalError::from(ProviderError::ProviderNotFound(
+                    provider_name.clone(),
+                )))?;
+            Ok(entry.value().clone())
+        } else {
+            Ok(context.shared.primary.clone())
+        }
     }
 
     async fn build_content_from_args(
@@ -532,6 +558,8 @@ impl ExpressionEvaluator {
 
 #[cfg(test)]
 mod tests {
+    use dashmap::DashMap;
+
     use crate::{
         config::ContextConfig,
         eval::context::{AgentInfo, StateAccessMode},
@@ -549,6 +577,8 @@ mod tests {
             AgentInfo::default(),
             StateAccessMode::ReadWrite,
             ContextConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
         ))
     }
 

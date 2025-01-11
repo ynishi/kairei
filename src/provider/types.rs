@@ -151,6 +151,7 @@ pub type ProviderResult<T> = Result<T, ProviderError>;
 #[cfg(test)]
 mod tests {
 
+    use dashmap::DashMap;
     use serde_json::json;
 
     use crate::{
@@ -177,14 +178,18 @@ mod tests {
             provider: Arc::new(mock),
             secret: ProviderSecret::default(),
         });
+        let providers = Arc::new(DashMap::new());
+        providers.insert("MockProvider".to_string(), provider_instance.clone());
         let event_bus = Arc::new(EventBus::new(10));
-        let mut context = ExecutionContext::new(
+        let context = ExecutionContext::new(
             event_bus,
             AgentInfo::default(),
             StateAccessMode::ReadWrite,
             ContextConfig::default(),
+            provider_instance,
+            providers,
         );
-        Arc::new(context.with_provider(provider_instance).clone())
+        Arc::new(context)
     }
 
     #[tokio::test]

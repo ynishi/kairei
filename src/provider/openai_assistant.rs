@@ -316,7 +316,7 @@ mod tests {
             common_config: CommonConfig {
                 temperature: 0.7,
                 max_tokens: 1000,
-                model: "gpt-4".to_string(),
+                model: "abc-1".to_string(),
             },
             provider_specific,
             ..Default::default()

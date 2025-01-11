@@ -19,7 +19,7 @@ use crate::config::{ProviderConfig, SecretConfig};
 use crate::event_bus::EventError;
 use crate::native_feature::types::FeatureError;
 use crate::provider::provider_registry::ProviderRegistry;
-use crate::provider::types::{ProviderError, ProviderSecret};
+use crate::provider::types::{ProviderError, ProviderSecret, ProviderType};
 use crate::runtime::RuntimeError;
 use crate::{
     agent_registry::AgentRegistry,
@@ -486,14 +486,30 @@ impl System {
             count
         };
 
+        let primary = self
+            .provider_registry
+            .read()
+            .await
+            .get_primary_provider()
+            .await
+            .map_err(SystemError::from)?;
+
+        let providers = self.provider_registry.read().await.get_providers().clone();
+
         // 指定された数だけエージェントを作成
         for i in 0..count {
             let agent_name = format!("{}-{}-{}", name, request_id, i);
             let agent_def = ast_def.clone();
 
             let agent_data = Arc::new(
-                RuntimeAgentData::new(&agent_def, &self.event_bus(), AgentConfig::default())
-                    .await?,
+                RuntimeAgentData::new(
+                    &agent_def,
+                    &self.event_bus(),
+                    AgentConfig::default(),
+                    primary.clone(),
+                    providers.clone(),
+                )
+                .await?,
             );
 
             let registry = self.agent_registry.write().await;
@@ -576,8 +592,27 @@ impl System {
         let ast_registry = self.ast_registry.read().await;
         let agent_def = ast_registry.get_agent_ast(agent_name).await?;
         drop(ast_registry);
+
+        let providers = self.provider_registry.read().await.get_providers().clone();
+
+        // プライマリプロバイダーの取得
+        let primary = self
+            .provider_registry
+            .read()
+            .await
+            .get_primary_provider()
+            .await
+            .map_err(SystemError::from)?;
+
         let runtime = Arc::new(
-            RuntimeAgentData::new(&agent_def, &self.event_bus, AgentConfig::default()).await?,
+            RuntimeAgentData::new(
+                &agent_def,
+                &self.event_bus,
+                AgentConfig::default(),
+                primary,
+                providers,
+            )
+            .await?,
         );
         let agent_registry = self.agent_registry.write().await;
         agent_registry
@@ -752,19 +787,23 @@ impl System {
     /// provider management
     pub async fn register_provider(
         &self,
-        _name: &str,
-        _config: ProviderConfig,
-        _secret: ProviderSecret,
+        name: &str,
+        provider_type: ProviderType,
+        config: ProviderConfig,
+        secret: ProviderSecret,
     ) -> SystemResult<()> {
-        // シークレットの検証と安全な保存
-        // プロバイダーの初期化
-        // ProviderRegistryへの登録
-        todo!()
+        let registry = self.provider_registry.write().await;
+        let provider = registry.create_provider(&provider_type).await?;
+        registry
+            .register_provider_with_config(name, provider, &config, &secret)
+            .await
+            .map_err(SystemError::from)
     }
 
-    pub async fn set_primary_provider(&self, _name: &str) -> SystemResult<()> {
-        // プライマリプロバイダーの設定
-        todo!()
+    pub async fn set_primary_provider(&self, name: &str) -> SystemResult<()> {
+        let registry = self.provider_registry.write().await;
+        registry.set_default_provider(name).await?;
+        Ok(())
     }
 
     /// basic accessors
@@ -886,8 +925,9 @@ mod tests {
     use std::time::Duration;
 
     use crate::{
-        ast, event_registry::EventType, AnswerDef, EventHandler, Expression, HandlerBlock, Literal,
-        ReactDef, RequestHandler, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
+        ast, config::ProviderSecretConfig, event_registry::EventType, AnswerDef, EventHandler,
+        Expression, HandlerBlock, Literal, ReactDef, RequestHandler, StateAccessPath, StateDef,
+        StateVarDef, Statement, TypeInfo,
     };
 
     use super::*;
@@ -981,7 +1021,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_system_integration() {
-        let system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
+        let default_name = "default";
+        let mut system_config = SystemConfig::default();
+        system_config.provider_configs.primary_provider = Some(default_name.to_string());
+
+        let secret_config = SecretConfig::default();
+        let system = System::new(&system_config, &secret_config).await;
+
+        let provider_config = ProviderConfig {
+            provider_type: ProviderType::OpenAIAssistant,
+            name: default_name.to_string(),
+            ..Default::default()
+        };
+
+        system
+            .register_provider(
+                default_name,
+                ProviderType::OpenAIAssistant,
+                provider_config,
+                ProviderSecret::default(),
+            )
+            .await
+            .unwrap();
 
         // Ping-Pong AgentのAST作成
         let (ping_ast, pong_ast) = create_ping_pong_asts();

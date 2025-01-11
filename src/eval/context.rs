@@ -161,7 +161,8 @@ pub struct SharedContext {
     pending_requests: Arc<DashMap<RequestId, oneshot::Sender<Event>>>,
     agent_info: AgentInfo, // システム提供の情報を追加
     // LLM 関連
-    pub llm_provider: Arc<ProviderInstance>,
+    pub primary: Arc<ProviderInstance>,
+    pub providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
     pub prompt_generator: Arc<dyn PromptGenerator>,
     pub policies: Vec<Policy>,
 }
@@ -221,6 +222,51 @@ impl ToEventType for ContextError {
 }
 
 impl ExecutionContext {
+    pub fn new(
+        event_bus: Arc<EventBus>,
+        agent_info: AgentInfo,
+        access_mode: StateAccessMode,
+        config: ContextConfig,
+        primary: Arc<ProviderInstance>,
+        providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
+    ) -> Self {
+        let name = agent_info.agent_name.clone();
+        let (mut event_rx, _) = event_bus.subscribe();
+        let new_self = Self {
+            shared: SharedContext {
+                state: Arc::new(DashMap::new()),
+                event_bus,
+                parent_scopes: Arc::new(Vec::new()),
+                pending_requests: Arc::new(DashMap::new()),
+                agent_info,
+                primary,
+                providers,
+                // only 1 variant, when appended type, inject here.
+                prompt_generator: Arc::new(StandardPromptGenerator),
+                policies: vec![],
+            },
+            current_scope: DashMap::new(),
+            access_mode,
+            timeout: config.access_timeout,
+        };
+        let self_ref = new_self.clone();
+        tokio::spawn(async move {
+            while let Ok(event) = event_rx.recv().await {
+                debug!("Received Event in context: {:?}", event);
+                if event.event_type.is_for_me(&name) {
+                    if let Some(request_id) = event.event_type.clone().request_id() {
+                        debug!(
+                            "Received response in cotext: I'm {}, {}, {:?}",
+                            name, request_id, event
+                        );
+                        self_ref.handle_response(request_id, event).await;
+                    }
+                }
+            }
+        });
+        new_self
+    }
+
     pub async fn fork(&self, access_mode: Option<StateAccessMode>) -> Self {
         // 現在のスコープの内容を新しいスコープにコピー
         let new_scope = {
@@ -390,53 +436,6 @@ impl ExecutionContext {
 
     pub fn agent_name(&self) -> String {
         self.shared.agent_info.agent_name.clone()
-    }
-
-    pub fn new(
-        event_bus: Arc<EventBus>,
-        agent_info: AgentInfo,
-        access_mode: StateAccessMode,
-        config: ContextConfig,
-    ) -> Self {
-        let name = agent_info.agent_name.clone();
-        let (mut event_rx, _) = event_bus.subscribe();
-        let new_self = Self {
-            shared: SharedContext {
-                state: Arc::new(DashMap::new()),
-                event_bus,
-                parent_scopes: Arc::new(Vec::new()),
-                pending_requests: Arc::new(DashMap::new()),
-                agent_info,
-                llm_provider: Arc::new(ProviderInstance::default()),
-                // only 1 variant, when appended type, inject here.
-                prompt_generator: Arc::new(StandardPromptGenerator),
-                policies: vec![],
-            },
-            current_scope: DashMap::new(),
-            access_mode,
-            timeout: config.access_timeout,
-        };
-        let self_ref = new_self.clone();
-        tokio::spawn(async move {
-            while let Ok(event) = event_rx.recv().await {
-                debug!("Received Event in context: {:?}", event);
-                if event.event_type.is_for_me(&name) {
-                    if let Some(request_id) = event.event_type.clone().request_id() {
-                        debug!(
-                            "Received response in cotext: I'm {}, {}, {:?}",
-                            name, request_id, event
-                        );
-                        self_ref.handle_response(request_id, event).await;
-                    }
-                }
-            }
-        });
-        new_self
-    }
-
-    pub fn with_provider(&mut self, provider: Arc<ProviderInstance>) -> &mut Self {
-        self.shared.llm_provider = provider;
-        self
     }
 
     // 統一された変数アクセスインターフェース
@@ -673,6 +672,8 @@ mod tests {
             AgentInfo::default(),
             StateAccessMode::ReadWrite,
             ContextConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
         )
     }
 
@@ -683,6 +684,8 @@ mod tests {
             AgentInfo::default(),
             StateAccessMode::ReadOnly,
             ContextConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
         )
     }
 
