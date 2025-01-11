@@ -97,7 +97,7 @@ impl Default for ConfigDef {
 }
 
 // イベント定義のコレクション
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventsDef {
     pub events: Vec<CustomEventDef>,
 }
@@ -119,7 +119,7 @@ impl From<EventsDef> for Vec<EventType> {
 }
 
 // ハンドラー定義のコレクション
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct HandlersDef {
     pub handlers: Vec<HandlerDef>,
 }
@@ -462,7 +462,7 @@ pub struct Policy {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PolicyId(String);
+pub struct PolicyId(pub String);
 
 impl PolicyId {
     // ビルトインポリシー用のID生成
