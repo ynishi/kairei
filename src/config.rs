@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
+
+use crate::provider::types::ProviderType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemConfig {
@@ -20,6 +22,9 @@ pub struct SystemConfig {
 
     #[serde(default)]
     pub native_feature_config: NativeFeatureConfig,
+
+    #[serde(default)]
+    pub provider_configs: ProviderConfigs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -120,6 +125,97 @@ impl Default for TickerConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProviderConfigs {
+    pub providers: HashMap<String, ProviderConfig>,
+    pub primary_provider: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderConfig {
+    // 基本情報
+    #[serde(default = "ProviderType::default")]
+    pub provider_type: ProviderType,
+
+    #[serde(default = "default_provider_name")]
+    pub name: String,
+
+    // 共通設定
+    #[serde(default)]
+    pub common_config: CommonConfig,
+
+    // エンドポイント設定
+    #[serde(default)]
+    pub endpoint: EndpointConfig,
+
+    // プロバイダー固有設定
+    #[serde(default)]
+    pub provider_specific: HashMap<String, serde_json::Value>,
+}
+
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            provider_type: ProviderType::default(),
+            name: default_provider_name(),
+            common_config: CommonConfig::default(),
+            endpoint: EndpointConfig::default(),
+            provider_specific: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommonConfig {
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: usize,
+    #[serde(default = "default_model")]
+    pub model: String,
+}
+
+impl Default for CommonConfig {
+    fn default() -> Self {
+        Self {
+            temperature: default_temperature(),
+            max_tokens: default_max_tokens(),
+            model: default_model(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EndpointConfig {
+    #[serde(default = "default_endpoint")]
+    pub url: Option<String>,
+    #[serde(default = "default_api_version")]
+    pub api_version: Option<String>,
+    pub deployment_id: Option<String>,
+}
+
+impl Default for EndpointConfig {
+    fn default() -> Self {
+        Self {
+            url: default_endpoint(),
+            api_version: default_api_version(),
+            deployment_id: None,
+        }
+    }
+}
+
+/// シークレット設定(secret.json)
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct SecretConfig {
+    pub providers: HashMap<String, ProviderSecretConfig>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ProviderSecretConfig {
+    pub api_key: String,
+    pub additional_auth: HashMap<String, String>, // 追加の認証情報
+}
+
 // デフォルト値の定義
 fn default_event_buffer_size() -> usize {
     1000
@@ -160,6 +256,29 @@ fn default_ticker_config() -> Option<TickerConfig> {
     Some(TickerConfig::default())
 }
 
+fn default_provider_name() -> String {
+    "default_provider".to_string()
+}
+
+fn default_temperature() -> f32 {
+    0.7
+}
+fn default_max_tokens() -> usize {
+    1000
+}
+
+fn default_model() -> String {
+    "gpt-3.5-turbo".to_string()
+}
+
+fn default_endpoint() -> Option<String> {
+    Some("https://api.openai.com".to_string())
+}
+
+fn default_api_version() -> Option<String> {
+    Some("v1".to_string())
+}
+
 // Duration型のシリアライズ/デシリアライズヘルパー
 mod duration_ms {
     use serde::{Deserialize, Deserializer, Serializer};
@@ -190,6 +309,7 @@ impl Default for SystemConfig {
             shutdown_timeout: default_shutdown_timeout(),
             agent_config: AgentConfig::default(),
             native_feature_config: NativeFeatureConfig::default(),
+            provider_configs: ProviderConfigs::default(),
         }
     }
 }

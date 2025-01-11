@@ -1256,20 +1256,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
     use super::*;
-
-    #[ctor::ctor]
-    fn init() {
-        // テストの前に一度だけ実行したい処理
-        // tracing_subscriberの初期化
-        let subscriber = FmtSubscriber::builder()
-            .with_env_filter(EnvFilter::from_default_env())
-            .finish();
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("Failed to set tracing subscriber");
-    }
 
     #[test]
     fn test_parse_root_with_world_and_agents() {

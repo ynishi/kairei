@@ -1,8 +1,11 @@
 use async_trait::async_trait;
 use mockall::automock;
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::SystemTime};
 use thiserror::Error;
+
+use crate::config::{ProviderConfig, ProviderSecretConfig};
 
 /// LLMプロバイダーの基本トレイト
 #[async_trait]
@@ -12,7 +15,11 @@ pub trait LLMProvider: Send + Sync {
     fn name(&self) -> &str;
 
     /// 初期化処理
-    async fn initialize(&self, params: ProviderParams) -> ProviderResult<Arc<dyn LLMProvider>>;
+    async fn initialize(
+        &self,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
+    ) -> ProviderResult<Arc<dyn LLMProvider>>;
 
     /// シャットダウン処理
     async fn shutdown(&self) -> ProviderResult<()>;
@@ -46,6 +53,7 @@ pub trait LLMProvider: Send + Sync {
 pub struct ProviderInstance {
     pub config: ProviderConfig,
     pub provider: Arc<dyn LLMProvider>,
+    pub secret: ProviderSecret,
 }
 
 impl Default for ProviderInstance {
@@ -54,6 +62,34 @@ impl Default for ProviderInstance {
             config: ProviderConfig::default(),
             // TODO: モックを削除
             provider: Arc::new(MockLLMProvider::new()),
+            secret: ProviderSecret::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, strum::Display, strum::EnumString, Default)]
+pub enum ProviderType {
+    #[default]
+    OpenAIAssistant,
+    Unknown,
+}
+
+#[derive(Clone, Default)]
+pub struct ProviderSecret {
+    pub api_key: SecretString,
+    pub additional_auth: HashMap<String, SecretString>,
+}
+
+impl From<ProviderSecretConfig> for ProviderSecret {
+    fn from(secret: ProviderSecretConfig) -> Self {
+        let additional_auth = secret
+            .additional_auth
+            .into_iter()
+            .map(|(k, v)| (k, SecretString::from(v)))
+            .collect();
+        Self {
+            api_key: SecretString::from(secret.api_key),
+            additional_auth,
         }
     }
 }
@@ -62,51 +98,8 @@ impl Default for ProviderInstance {
 pub struct ProviderState {
     pub is_healthy: bool,
     pub last_health_check: SystemTime,
-}
-
-/// LLMプロバイダーの設定
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ProviderConfig {
-    /// プロバイダー名
-    pub name: String,
-    /// 共通設定
-    pub common_config: CommonConfig,
-    /// プロバイダー固有の設定
-    pub provider_specific: HashMap<String, serde_json::Value>,
-}
-
-/// 共通設定
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommonConfig {
-    /// 温度パラメータ (0.0-1.0)
-    #[serde(default = "default_temperature")]
-    pub temperature: f32,
-    /// 最大トークン数
-    #[serde(default = "default_max_tokens")]
-    pub max_tokens: usize,
-}
-
-impl Default for CommonConfig {
-    fn default() -> Self {
-        Self {
-            temperature: default_temperature(),
-            max_tokens: default_max_tokens(),
-        }
-    }
-}
-
-fn default_temperature() -> f32 {
-    0.7
-}
-fn default_max_tokens() -> usize {
-    1000
-}
-
-/// プロバイダーの初期化パラメータ
-#[derive(Debug, Clone)]
-pub struct ProviderParams {
-    pub config: ProviderConfig,
-    pub auth: HashMap<String, String>,
+    pub error_count: u32,
+    pub last_error: Option<String>,
 }
 
 /// LLMプロバイダーのエラー
@@ -131,10 +124,16 @@ pub enum ProviderError {
     Initialization(String),
 
     #[error("Provider not found: {0}")]
-    NotFound(String),
+    ProviderNotFound(String),
 
-    #[error("Provider name not specified")]
-    NameNotSpecified,
+    #[error("Primary Provider name not set")]
+    PrimaryNameNotSet,
+
+    #[error("Provider secret not found: {0}")]
+    SecretNotFound(String),
+
+    #[error("Unknown provider: {0}")]
+    UnknownProvider(String),
 }
 
 pub type ProviderResult<T> = Result<T, ProviderError>;
@@ -160,12 +159,13 @@ mod tests {
         provider_specific.insert("assistant_id".to_string(), json!("mock_assistant_id"));
         let config = ProviderConfig {
             name: "MockProvider".to_string(),
-            common_config: CommonConfig::default(),
             provider_specific,
+            ..Default::default()
         };
         let provider_instance = Arc::new(ProviderInstance {
             config,
             provider: Arc::new(mock),
+            secret: ProviderSecret::default(),
         });
         let event_bus = Arc::new(EventBus::new(10));
         let mut context = ExecutionContext::new(

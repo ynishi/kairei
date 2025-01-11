@@ -2,59 +2,88 @@ use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::types::{
-    LLMProvider, ProviderError, ProviderInstance, ProviderParams, ProviderResult, ProviderState,
+use crate::config::{ProviderConfigs, SecretConfig};
+
+use super::{
+    openai_assistant::OpenAIAssistantProvider,
+    provider_secret::SecretRegistry,
+    types::{
+        LLMProvider, ProviderError, ProviderInstance, ProviderResult, ProviderState, ProviderType,
+    },
 };
 
 /// プロバイダーリポジトリ
 pub struct ProviderRegistry {
+    configs: ProviderConfigs,
     providers: DashMap<String, ProviderInstance>,
     states: DashMap<String, ProviderState>,
-    primary_provider: Arc<RwLock<Option<String>>>,
-}
-
-impl Default for ProviderRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
+    secret_registry: SecretRegistry,
+    primary_provider: RwLock<Option<String>>,
 }
 
 impl ProviderRegistry {
-    pub fn new() -> Self {
-        Self {
+    // 同期的な基本初期化
+    pub async fn new(
+        provider_configs: ProviderConfigs,
+        secret_config: SecretConfig,
+    ) -> ProviderResult<Self> {
+        let primary_provider = RwLock::new(provider_configs.primary_provider.clone());
+        Ok(Self {
+            configs: provider_configs.clone(),
             providers: DashMap::new(),
             states: DashMap::new(),
-            primary_provider: Arc::new(RwLock::new(None)),
-        }
+            secret_registry: SecretRegistry::new(secret_config.clone())?,
+            primary_provider,
+        })
     }
 
     /// プロバイダーの登録と初期化
     pub async fn register_provider(
         &self,
-        provider: Arc<dyn LLMProvider>,
-        params: ProviderParams,
+        name: &str,
+        provider_type: ProviderType,
     ) -> ProviderResult<()> {
-        let provider_name = provider.name().to_string();
+        let provider = self.create_provider(&provider_type).await?;
+
+        self.register_provider_with(name, provider).await?;
+
+        Ok(())
+    }
+
+    pub async fn register_provider_with(
+        &self,
+        name: &str,
+        provider: Arc<dyn LLMProvider>,
+    ) -> ProviderResult<()> {
+        let secret = self.secret_registry.get_secret(name)?;
+        let config = self
+            .configs
+            .providers
+            .get(name)
+            .ok_or(ProviderError::ProviderNotFound(name.to_string()))?;
 
         // 設定のバリデーション
-        provider.validate_config(&params.config).await?;
+        provider.validate_config(config).await?;
 
         // プロバイダーの初期化
-        let provider = provider.initialize(params.clone()).await?;
+        let provider = provider.initialize(config, &secret).await?;
 
         // 状態の初期化
         let state = ProviderState {
             is_healthy: true,
             last_health_check: std::time::SystemTime::now(),
+            error_count: 0,
+            last_error: None,
         };
 
         let insance = ProviderInstance {
             provider,
-            config: params.config.clone(),
+            secret,
+            config: config.clone(),
         };
 
-        self.providers.insert(provider_name.clone(), insance);
-        self.states.insert(provider_name, state);
+        self.providers.insert(name.to_string(), insance);
+        self.states.insert(name.to_string(), state);
 
         Ok(())
     }
@@ -66,29 +95,28 @@ impl ProviderRegistry {
             *primary_provider = Some(name.to_string());
             Ok(())
         } else {
-            Err(ProviderError::NotFound(name.to_string()))
+            Err(ProviderError::ProviderNotFound(name.to_string()))
         }
     }
 
+    /// デフォルトプロバイダーの取得
+    pub async fn get_primary_provider_name(&self) -> ProviderResult<String> {
+        self.primary_provider
+            .read()
+            .await
+            .clone()
+            .ok_or(ProviderError::PrimaryNameNotSet)
+    }
+
     /// プロバイダーの取得
-    pub async fn get_provider(
-        &self,
-        name: Option<&str>,
-    ) -> Result<Arc<dyn LLMProvider>, ProviderError> {
-        let provider_name = if let Some(name) = name {
-            if !self.providers.contains_key(name) {
-                return Err(ProviderError::NotFound(name.to_string()));
-            }
-            name.to_string()
-        } else if let Some(primary) = self.primary_provider.read().await.clone() {
-            primary
-        } else {
-            return Err(ProviderError::NameNotSpecified);
-        };
+    pub async fn get_provider(&self, name: &str) -> ProviderResult<ProviderInstance> {
+        if !self.providers.contains_key(name) {
+            return Err(ProviderError::ProviderNotFound(name.to_string()));
+        }
         self.providers
-            .get(&provider_name)
-            .map(|provider| provider.provider.clone())
-            .ok_or(ProviderError::NotFound(provider_name))
+            .get(&name.to_string())
+            .map(|entry| entry.value().clone())
+            .ok_or(ProviderError::ProviderNotFound(name.to_string()))
     }
 
     /// プロバイダーの状態取得
@@ -96,13 +124,13 @@ impl ProviderRegistry {
         self.states
             .get(name)
             .map(|state| state.value().clone())
-            .ok_or(ProviderError::NotFound(name.to_string()))
+            .ok_or(ProviderError::ProviderNotFound(name.to_string()))
     }
 
     /// プロバイダーのヘルスチェック実行
-    pub async fn check_provider_health(&self, name: &str) -> Result<(), ProviderError> {
-        let provider = self.get_provider(Some(name)).await?;
-        let health_result = provider.health_check().await;
+    pub async fn check_provider_health(&self, name: &str) -> ProviderResult<()> {
+        let instance = self.get_provider(name).await?;
+        let health_result = instance.provider.health_check().await;
 
         if let Some(mut state) = self.states.get_mut(name) {
             let value = state.value_mut();
@@ -125,16 +153,28 @@ impl ProviderRegistry {
             let entry = self
                 .providers
                 .get_mut(&name)
-                .ok_or(ProviderError::NotFound(format!(
-                    "Provider not found: {}",
-                    name
-                )))?;
+                .ok_or(ProviderError::ProviderNotFound(name.clone()))?;
             entry.provider.shutdown().await?;
             drop(entry);
             self.providers.remove(&name);
             self.states.remove(&name);
         }
         Ok(())
+    }
+
+    /// Factory method to create a new assistant
+    pub async fn create_provider(
+        &self,
+        provider_type: &ProviderType,
+    ) -> ProviderResult<Arc<dyn LLMProvider>> {
+        match provider_type {
+            ProviderType::OpenAIAssistant => self.create_assistant().await,
+            _ => Err(ProviderError::UnknownProvider(provider_type.to_string())),
+        }
+    }
+
+    pub async fn create_assistant(&self) -> ProviderResult<Arc<dyn LLMProvider>> {
+        Ok(Arc::new(OpenAIAssistantProvider::new()))
     }
 }
 
@@ -144,7 +184,10 @@ mod tests {
 
     use async_trait::async_trait;
 
-    use crate::provider::types::{CommonConfig, ProviderConfig};
+    use crate::{
+        config::{CommonConfig, EndpointConfig, ProviderConfig, ProviderSecretConfig},
+        provider::types::ProviderSecret,
+    };
 
     use super::*;
 
@@ -161,7 +204,8 @@ mod tests {
 
         async fn initialize(
             &self,
-            _params: ProviderParams,
+            _config: &ProviderConfig,
+            _secret: &ProviderSecret,
         ) -> ProviderResult<Arc<dyn LLMProvider>> {
             Ok(Arc::new(self.clone()))
         }
@@ -200,75 +244,92 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_provider_registry() {
-        let manager = ProviderRegistry::new();
-
-        // プロバイダーの登録
-        let provider = MockProvider {
-            name: "mock".to_string(),
+    async fn get_registry(names: &[String]) -> ProviderRegistry {
+        let mut provider_configs = HashMap::new();
+        let mut secret_configs = SecretConfig {
+            providers: HashMap::new(),
         };
-        let auth = HashMap::new();
-        let params = ProviderParams {
-            config: ProviderConfig {
-                name: "mock".to_string(),
+        let primary_name = names[0].clone();
+        for name in names.iter() {
+            let config = ProviderConfig {
+                provider_type: ProviderType::Unknown,
+                name: name.to_string(),
                 common_config: CommonConfig {
                     temperature: 0.7,
                     max_tokens: 1000,
+                    model: "gpt-3.5-turbo".to_string(),
                 },
                 provider_specific: HashMap::new(),
-            },
-            auth,
+                endpoint: EndpointConfig::default(),
+            };
+            provider_configs.insert(name.to_string(), config);
+
+            secret_configs.providers.insert(
+                name.to_string(),
+                ProviderSecretConfig {
+                    api_key: "mock_api_key".to_string(),
+                    additional_auth: HashMap::new(),
+                },
+            );
+        }
+
+        let config = ProviderConfigs {
+            primary_provider: Some(primary_name.to_string()),
+            providers: provider_configs,
+        };
+        ProviderRegistry::new(config, secret_configs).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_provider_registry() {
+        let name = "mock";
+        let registry = get_registry(&[name.to_string()]).await;
+
+        // プロバイダーの登録
+
+        let provider = MockProvider {
+            name: "mock".to_string(),
         };
 
-        manager
-            .register_provider(Arc::new(provider), params)
+        registry
+            .register_provider_with(&name, Arc::new(provider))
             .await
             .unwrap();
 
-        // デフォルトプロバイダーの設定
-        manager.set_default_provider("mock").await.unwrap();
+        // デフォルトプロバイダー
+        registry.set_default_provider("mock").await.unwrap();
+        assert_eq!(registry.get_primary_provider_name().await.unwrap(), "mock");
 
         // プロバイダーの取得
-        assert!(manager.get_provider(Some("mock")).await.is_ok());
-        assert!(manager.get_provider(None).await.is_ok());
-        assert!(manager.get_provider(Some("nonexistent")).await.is_err());
+        assert!(registry.get_provider("mock").await.is_ok());
+        assert!(registry.get_provider("nonexistent").await.is_err());
 
         // ヘルスチェック
-        manager.check_provider_health("mock").await.unwrap();
-        let state = manager.get_provider_state("mock").await.unwrap();
+        registry.check_provider_health("mock").await.unwrap();
+        let state = registry.get_provider_state("mock").await.unwrap();
         assert!(state.is_healthy);
         println!("{:?}", state);
 
         // シャットダウン
-        manager.shutdown_all().await.unwrap();
+        registry.shutdown_all().await.unwrap();
     }
 
     #[tokio::test]
     async fn test_concurrent_access() {
-        let manager = Arc::new(ProviderRegistry::new());
+        let mut names = vec![];
+        for i in 0..10 {
+            names.push(format!("mock_{}", i));
+        }
+        let registry = Arc::new(get_registry(names.as_slice()).await);
 
         // 並行アクセスのテスト
         let mut handles = vec![];
-        for i in 0..10 {
-            let manager_clone = manager.clone();
+        for name in names.clone() {
+            let registry_clone = registry.clone();
             let handle = tokio::spawn(async move {
-                let provider = MockProvider {
-                    name: format!("mock_{}", i),
-                };
-                let params = ProviderParams {
-                    config: ProviderConfig {
-                        name: format!("mock_{}", i),
-                        common_config: CommonConfig {
-                            temperature: 0.7,
-                            max_tokens: 1000,
-                        },
-                        provider_specific: HashMap::new(),
-                    },
-                    auth: HashMap::new(),
-                };
-                manager_clone
-                    .register_provider(Arc::new(provider), params)
+                let provider = MockProvider { name: name.clone() };
+                registry_clone
+                    .register_provider_with(&name, Arc::new(provider))
                     .await
             });
             handles.push(handle);
@@ -279,7 +340,7 @@ mod tests {
         }
 
         // 登録されたプロバイダーの確認
-        let providers = manager.providers.iter().collect::<Vec<_>>();
+        let providers = registry.providers.iter().collect::<Vec<_>>();
         assert_eq!(providers.len(), 10);
     }
 }
