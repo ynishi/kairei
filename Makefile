@@ -1,7 +1,7 @@
 .PHONY: build run test clippy fmt
 
 test:
-	cargo test --verbose
+	RUST_LOG=debug cargo test --verbose
 
 fmt:
 	cargo clippy -- -D warnings
