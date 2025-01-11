@@ -9,10 +9,13 @@ use tokio::sync::{oneshot, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use tracing::{debug, warn};
 
 use super::expression::Value;
+use super::generator::{PromptGenerator, StandardPromptGenerator};
 use crate::config::ContextConfig;
 use crate::event_bus::{self, Event, EventBus, EventError, ToEventType};
 use crate::event_registry::EventType;
+use crate::provider::types::{ProviderError, ProviderInstance};
 use crate::runtime::RuntimeError;
+use crate::Policy;
 
 pub struct SafeRwLock<T> {
     inner: RwLock<T>,
@@ -95,7 +98,7 @@ pub enum VariableAccess {
 /// 実行コンテキスト
 #[derive(Clone)]
 pub struct ExecutionContext {
-    shared: SharedContext,
+    pub shared: SharedContext,
     current_scope: DashMap<String, Arc<SafeRwLock<Value>>>,
     access_mode: StateAccessMode,
     // config Read/Write timeout
@@ -157,6 +160,10 @@ pub struct SharedContext {
     parent_scopes: Arc<ParentScopes>,
     pending_requests: Arc<DashMap<RequestId, oneshot::Sender<Event>>>,
     agent_info: AgentInfo, // システム提供の情報を追加
+    // LLM 関連
+    pub llm_provider: Arc<ProviderInstance>,
+    pub prompt_generator: Arc<dyn PromptGenerator>,
+    pub policies: Vec<Policy>,
 }
 
 #[derive(Copy, Clone)]
@@ -188,6 +195,8 @@ pub enum ContextError {
     EventSendFailed(String),
     #[error("State not found: {0}")]
     StateNotFound(String),
+    #[error("Provider error: {0}")]
+    Provider(#[from] ProviderError),
     #[error("Failure: {0}")]
     Failure(String),
 }
@@ -205,6 +214,7 @@ impl ToEventType for ContextError {
             ContextError::NoParentScope => "NoParentScope".to_string(),
             ContextError::EventSendFailed(_) => "EventSendFailed".to_string(),
             ContextError::StateNotFound(_) => "StateNotFound".to_string(),
+            ContextError::Provider(_) => "ProviderError".to_string(),
             ContextError::Failure(_) => "Failure".to_string(),
         }
     }
@@ -230,13 +240,8 @@ impl ExecutionContext {
         }
 
         // 新しい共有コンテキストを作成
-        let new_shared = SharedContext {
-            state: self.shared.state.clone(),         // グローバル状態は共有
-            event_bus: self.shared.event_bus.clone(), // イベントバスは共有
-            parent_scopes: Arc::new(new_parents),     // 新しい親スコープチェーン
-            pending_requests: self.shared.pending_requests.clone(),
-            agent_info: self.shared.agent_info.clone(),
-        };
+        let mut new_shared = self.shared.clone();
+        new_shared.parent_scopes = Arc::new(new_parents);
 
         Self {
             shared: new_shared,
@@ -402,6 +407,10 @@ impl ExecutionContext {
                 parent_scopes: Arc::new(Vec::new()),
                 pending_requests: Arc::new(DashMap::new()),
                 agent_info,
+                llm_provider: Arc::new(ProviderInstance::default()),
+                // only 1 variant, when appended type, inject here.
+                prompt_generator: Arc::new(StandardPromptGenerator),
+                policies: vec![],
             },
             current_scope: DashMap::new(),
             access_mode,
@@ -423,6 +432,11 @@ impl ExecutionContext {
             }
         });
         new_self
+    }
+
+    pub fn with_provider(&mut self, provider: Arc<ProviderInstance>) -> &mut Self {
+        self.shared.llm_provider = provider;
+        self
     }
 
     // 統一された変数アクセスインターフェース
@@ -652,7 +666,7 @@ impl ExecutionContext {
 mod tests {
     use super::*;
 
-    async fn setup_readwrite_test_context() -> ExecutionContext {
+    pub async fn setup_readwrite_test_context() -> ExecutionContext {
         let event_bus = Arc::new(EventBus::new(10));
         ExecutionContext::new(
             event_bus,

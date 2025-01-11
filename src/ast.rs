@@ -412,11 +412,11 @@ pub enum Expression {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ThinkAttributes {
     // 必須項目
     pub provider: Option<String>, // Noneの場合はデフォルトプロバイダー
-
+    pub prompt_generator_type: Option<PromptGeneratorType>,
     pub policies: Vec<Policy>,
 
     // オプション項目
@@ -426,6 +426,15 @@ pub struct ThinkAttributes {
 
     // リトライ設定
     pub retry: Option<RetryConfig>,
+}
+
+// プロンプトジェネレータータイプ
+#[derive(Debug, Clone, PartialEq)]
+pub enum PromptGeneratorType {
+    Standard,
+    // 将来の拡張用
+    // Detailed,
+    // Custom(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]

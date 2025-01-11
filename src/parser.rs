@@ -603,7 +603,6 @@ fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
 
 #[instrument(level = "debug", skip(input))]
 fn parse_arguments(input: &str) -> IResult<&str, Vec<Argument>> {
-    println!("parse_arguments: {}", input);
     delimited(
         ws(char('(')),
         separated_list0(ws(char(',')), parse_argument),
@@ -857,16 +856,12 @@ fn parse_state_access(input: &str) -> IResult<&str, Expression> {
 fn parse_variable(input: &str) -> IResult<&str, Expression> {
     preceded(
         parse_not_reserved,
-        map(identifier, |id| {
-            println!("Variable!: {}", id);
-            Expression::Variable(id.to_string())
-        }),
+        map(identifier, |id| Expression::Variable(id.to_string())),
     )(input)
 }
 
 #[instrument(level = "debug", skip(input))]
 fn parse_think_expression(input: &str) -> IResult<&str, Expression> {
-    println!("parse_think_expression: {:?}", input);
     map(
         tuple((
             ws(tag("think")),
@@ -896,12 +891,9 @@ fn parse_think_attributes(input: &str) -> IResult<&str, ThinkAttributes> {
 fn parse_think_attribute(input: &str) -> IResult<&str, ThinkAttributeKV> {
     map(
         tuple((ws(identifier), ws(char(':')), parse_literal)),
-        |(key, _, value)| {
-            println!("key: {}, value: {:?}", key, value);
-            ThinkAttributeKV {
-                key: key.to_string(),
-                value,
-            }
+        |(key, _, value)| ThinkAttributeKV {
+            key: key.to_string(),
+            value,
         },
     )(input)
 }
@@ -967,7 +959,6 @@ fn parse_retry_delay(input: &str) -> IResult<&str, RetryDelay> {
 
 // ヘルパー関数
 fn collect_with_settings(settings: Vec<ThinkAttributeKV>) -> ThinkAttributes {
-    println!("settings: {:?}", settings);
     let mut block = ThinkAttributes {
         provider: None,
         model: None,
@@ -975,6 +966,7 @@ fn collect_with_settings(settings: Vec<ThinkAttributeKV>) -> ThinkAttributes {
         max_tokens: None,
         retry: None,
         policies: vec![],
+        prompt_generator_type: None,
     };
 
     for setting in settings {
@@ -1083,7 +1075,6 @@ fn parse_type_info(input: &str) -> IResult<&str, TypeInfo> {
 
 #[instrument(level = "debug", skip(input))]
 fn parse_literal(input: &str) -> IResult<&str, Literal> {
-    println!("parse_literal: {}", input);
     alt((
         // number(ここは自動で決定するため`.`なしは整数とする)
         map(parse_f64_strict, Literal::Float),
@@ -1951,7 +1942,6 @@ mod tests {
                 args[1],
                 Argument::Positional(Expression::BinaryOp { .. })
             ));
-            println!("{:?}", args[2]);
             assert!(matches!(
                 args[2],
                 Argument::Positional(Expression::Literal(Literal::Boolean(_)))
