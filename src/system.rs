@@ -20,7 +20,7 @@ use crate::context::AGENT_TYPE_CUSTOM_ALL;
 use crate::event_bus::EventError;
 use crate::native_feature::types::FeatureError;
 use crate::provider::provider_registry::ProviderRegistry;
-use crate::provider::types::{ProviderError, ProviderSecret, ProviderType};
+use crate::provider::types::{ProviderError, ProviderInstance, ProviderSecret, ProviderType};
 use crate::request_manager::{RequestError, RequestManager};
 use crate::runtime::RuntimeError;
 use crate::{
@@ -789,6 +789,11 @@ impl System {
             .register_provider_with_config(name, provider, &config, &secret)
             .await
             .map_err(SystemError::from)
+    }
+
+    pub async fn get_provider(&self, name: &str) -> SystemResult<Arc<ProviderInstance>> {
+        let registry = self.provider_registry.read().await;
+        registry.get_provider(name).await.map_err(SystemError::from)
     }
 
     pub async fn set_primary_provider(&self, name: &str) -> SystemResult<()> {

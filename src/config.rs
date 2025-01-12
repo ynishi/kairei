@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Duration};
 
-use crate::provider::types::ProviderType;
+use crate::{provider::types::ProviderType, Error, InternalResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemConfig {
@@ -242,9 +242,19 @@ impl Default for SecretConfig {
     }
 }
 
+pub fn from_file<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(path: P) -> InternalResult<T> {
+    let file = File::open(path)
+        .map_err(|e| Error::Internal(format!("Failed to open secret file: {}", e)))?;
+    let reader = BufReader::new(file);
+    let config = serde_json::from_reader(reader)
+        .map_err(|e| Error::Internal(format!("Failed to parse secret file: {}", e)))?;
+    Ok(config)
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ProviderSecretConfig {
     pub api_key: String,
+    #[serde(default = "HashMap::new")]
     pub additional_auth: HashMap<String, String>, // 追加の認証情報
 }
 
@@ -356,9 +366,7 @@ impl Default for SystemConfig {
 
 impl SystemConfig {
     // JSONファイルから設定を読み込む
-    pub fn from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let file = std::fs::File::open(path)?;
-        let config = serde_json::from_reader(file)?;
-        Ok(config)
+    pub fn from_file(path: &str) -> InternalResult<Self> {
+        from_file(path)
     }
 }
