@@ -5,8 +5,7 @@ pub mod config;
 pub mod core;
 pub mod error;
 pub mod eval;
-pub mod event_bus;
-pub mod event_registry;
+pub mod event;
 pub mod gen;
 pub mod native_feature;
 pub mod parser;
@@ -18,6 +17,7 @@ pub mod system;
 pub use ast::*;
 pub use error::*;
 pub use eval::*;
+pub use event::*;
 pub use parser::*;
 
 #[cfg(test)]

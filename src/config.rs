@@ -17,6 +17,9 @@ pub struct SystemConfig {
     #[serde(default = "default_shutdown_timeout", with = "duration_ms")]
     pub shutdown_timeout: Duration,
 
+    #[serde(default = "default_request_timeout", with = "duration_ms")]
+    pub request_timeout: Duration,
+
     #[serde(default)]
     pub agent_config: AgentConfig,
 
@@ -43,6 +46,8 @@ pub struct AgentConfig {
 pub struct ContextConfig {
     #[serde(default = "default_access_timeout")]
     pub access_timeout: Duration,
+    #[serde(default = "default_request_timeout", with = "duration_ms")]
+    pub request_timeout: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,10 +130,25 @@ impl Default for TickerConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfigs {
+    #[serde(default)]
     pub providers: HashMap<String, ProviderConfig>,
+    #[serde(default = "some_default_provider_name")]
     pub primary_provider: Option<String>,
+}
+
+impl Default for ProviderConfigs {
+    fn default() -> Self {
+        Self {
+            providers: {
+                let mut map = HashMap::new();
+                map.insert(default_provider_name(), ProviderConfig::default());
+                map
+            },
+            primary_provider: some_default_provider_name(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,12 +225,24 @@ impl Default for EndpointConfig {
 }
 
 /// シークレット設定(secret.json)
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SecretConfig {
     pub providers: HashMap<String, ProviderSecretConfig>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+impl Default for SecretConfig {
+    fn default() -> Self {
+        Self {
+            providers: {
+                let mut map = HashMap::new();
+                map.insert(default_provider_name(), ProviderSecretConfig::default());
+                map
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ProviderSecretConfig {
     pub api_key: String,
     pub additional_auth: HashMap<String, String>, // 追加の認証情報
@@ -230,6 +262,9 @@ fn default_init_timeout() -> Duration {
     Duration::from_secs(30)
 }
 fn default_shutdown_timeout() -> Duration {
+    Duration::from_secs(30)
+}
+fn default_request_timeout() -> Duration {
     Duration::from_secs(30)
 }
 fn default_true() -> bool {
@@ -258,6 +293,10 @@ fn default_ticker_config() -> Option<TickerConfig> {
 
 fn default_provider_name() -> String {
     "default_provider".to_string()
+}
+
+fn some_default_provider_name() -> Option<String> {
+    Some(default_provider_name())
 }
 
 fn default_temperature() -> f32 {
@@ -307,6 +346,7 @@ impl Default for SystemConfig {
             max_agents: default_max_agents(),
             init_timeout: default_init_timeout(),
             shutdown_timeout: default_shutdown_timeout(),
+            request_timeout: default_request_timeout(),
             agent_config: AgentConfig::default(),
             native_feature_config: NativeFeatureConfig::default(),
             provider_configs: ProviderConfigs::default(),

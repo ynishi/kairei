@@ -12,6 +12,7 @@ use crate::{
 use super::{
     openai_assistant::OpenAIAssistantProvider,
     provider_secret::SecretRegistry,
+    simple_expert::SimpleExpertProvider,
     types::{
         LLMProvider, ProviderError, ProviderInstance, ProviderResult, ProviderSecret,
         ProviderState, ProviderType,
@@ -330,12 +331,17 @@ impl ProviderRegistry {
     ) -> ProviderResult<Arc<dyn LLMProvider>> {
         match provider_type {
             ProviderType::OpenAIAssistant => self.create_assistant().await,
+            ProviderType::SimpleExpert => self.create_simple_expert().await,
             _ => Err(ProviderError::UnknownProvider(provider_type.to_string())),
         }
     }
 
     pub async fn create_assistant(&self) -> ProviderResult<Arc<dyn LLMProvider>> {
         Ok(Arc::new(OpenAIAssistantProvider::new()))
+    }
+
+    pub async fn create_simple_expert(&self) -> ProviderResult<Arc<dyn LLMProvider>> {
+        Ok(Arc::new(SimpleExpertProvider::default()))
     }
 }
 

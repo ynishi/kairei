@@ -8,18 +8,20 @@ use std::{
 };
 use thiserror::Error;
 use tokio::{
-    sync::{broadcast, oneshot, RwLock},
-    time::{sleep, timeout},
+    sync::{broadcast, RwLock},
+    time::sleep,
 };
-use tracing::{debug, info};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::agent_registry::AgentError;
 use crate::config::{ProviderConfig, SecretConfig};
+use crate::context::AGENT_TYPE_CUSTOM_ALL;
 use crate::event_bus::EventError;
 use crate::native_feature::types::FeatureError;
 use crate::provider::provider_registry::ProviderRegistry;
 use crate::provider::types::{ProviderError, ProviderSecret, ProviderType};
+use crate::request_manager::{RequestError, RequestManager};
 use crate::runtime::RuntimeError;
 use crate::{
     agent_registry::AgentRegistry,
@@ -46,7 +48,7 @@ pub struct System {
     shutdown_tx: broadcast::Sender<AgentType>, // Systemがシャットダウンシグナルを送信
     _shutdown_rx: broadcast::Receiver<AgentType>, // シャットダウンシグナルを受信
     // event request/response
-    pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
+    request_manager: Arc<RequestManager>,
     filtered_subscriptions: Arc<DashMap<Vec<EventType>, broadcast::Sender<Event>>>, // Vec<EventType>は Sorted　である必要がある
     // metrics
     started_at: DateTime<Utc>,
@@ -74,9 +76,11 @@ impl System {
             config.native_feature_config.clone(),
         )));
         let _shutdown_rx = shutdown_tx.subscribe();
-        let pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>> =
-            Arc::new(DashMap::new());
-        let pending_requests_ref = pending_requests.clone();
+        let request_manager = Arc::new(RequestManager::new(
+            event_bus.clone(),
+            config.request_timeout,
+        ));
+        let request_manager_ref = request_manager.clone();
         let mut event_rx = event_bus.subscribe().0;
         let filtered_subscriptions = Arc::new(DashMap::new());
         let provider_registry = Arc::new(RwLock::new(
@@ -91,16 +95,12 @@ impl System {
         // Receive response.
         tokio::spawn(async move {
             while let Ok(event) = event_rx.recv().await {
-                debug!("event: {:?}", event);
-                if let Some(request_id) = event.event_type.request_id() {
-                    debug!("request_id: {}", request_id);
-                    if let Some((_, sender)) = pending_requests_ref.remove(request_id) {
-                        if let Some(value) = event.parameters.get("response") {
-                            let _ = sender.send(value.clone());
-                        } else {
-                            let _ = sender.send(Value::Null);
-                        }
-                    }
+                if event.event_type.is_response() {
+                    debug!(
+                        "Recv system response: request_id: {:?}",
+                        event.event_type.request_id()
+                    );
+                    let _ = request_manager_ref.handle_event(&event);
                 }
             }
         });
@@ -122,7 +122,7 @@ impl System {
             provider_registry,
             shutdown_tx,
             _shutdown_rx,
-            pending_requests,
+            request_manager,
             filtered_subscriptions,
             started_at,
             uptime_instant,
@@ -324,8 +324,8 @@ impl System {
     #[tracing::instrument(skip(self))]
     async fn start_users_agents(&self) -> SystemResult<()> {
         let registry = self.agent_registry().read().await;
-        let agent_names =
-            registry.agent_names_by_types(vec![AgentType::Custom("user".to_string())]);
+        let agent_names = registry
+            .agent_names_by_types(vec![AgentType::User, AgentType::Custom("All".to_string())]);
         drop(registry);
 
         for agent_name in agent_names {
@@ -345,7 +345,7 @@ impl System {
         drop(config);
         // シャットダウンシグナルを送信
         self.shutdown_tx
-            .send(AgentType::Custom("All".to_string()))
+            .send(AgentType::Custom(AGENT_TYPE_CUSTOM_ALL.to_string()))
             .expect("Failed to send shutdown signal");
         // Agent のシャットダウン
         for agent_type in shutdown_sequence {
@@ -588,7 +588,7 @@ impl System {
 
     /// Agent management
     pub async fn register_agent(&self, agent_name: &str) -> SystemResult<()> {
-        info!("register_agent: {}", agent_name);
+        debug!("register_agent: {}", agent_name);
         let ast_registry = self.ast_registry.read().await;
         let agent_def = ast_registry.get_agent_ast(agent_name).await?;
         drop(ast_registry);
@@ -663,22 +663,13 @@ impl System {
                 });
             }
         };
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.pending_requests.insert(request_id.clone(), tx);
-        let event_bus = self.event_bus.clone();
-        event_bus.publish(event).await?;
-        let timeout_secs = 30;
-        match timeout(Duration::from_secs(timeout_secs), rx).await {
-            Ok(value) => value.map_err(|e| SystemError::ReceiveResponseFailed {
-                request_id: request_id.to_string(),
-                message: e.to_string(),
-            }),
-            Err(e) => Err(SystemError::ReceiveResponseTimeout {
-                request_id: request_id.to_string(),
-                timeout_secs,
-                message: e.to_string(),
-            }),
-        }
+        debug!("request_id: {}", request_id);
+        let event = self
+            .request_manager
+            .request(&event)
+            .await
+            .map_err(SystemError::from)?;
+        Ok(event.response_value())
     }
 
     pub async fn get_agent_state(
@@ -894,6 +885,8 @@ pub enum SystemError {
     Feature(#[from] FeatureError),
     #[error("Provider error: {0}")]
     Provider(#[from] ProviderError),
+    #[error("Request error: {0}")]
+    Request(#[from] RequestError),
     #[error("Scaling not enough agents: {base_name}, required: {required}, current: {current}")]
     ScalingNotEnoughAgents {
         base_name: String,
@@ -925,9 +918,8 @@ mod tests {
     use std::time::Duration;
 
     use crate::{
-        ast, config::ProviderSecretConfig, event_registry::EventType, AnswerDef, EventHandler,
-        Expression, HandlerBlock, Literal, ReactDef, RequestHandler, StateAccessPath, StateDef,
-        StateVarDef, Statement, TypeInfo,
+        ast, event_registry::EventType, AnswerDef, EventHandler, Expression, HandlerBlock, Literal,
+        ReactDef, RequestHandler, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
     };
 
     use super::*;
