@@ -81,6 +81,7 @@ impl Default for ProviderInstance {
 pub enum ProviderType {
     #[default]
     OpenAIAssistant,
+    SimpleExpert,
     Unknown,
 }
 

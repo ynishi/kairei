@@ -18,6 +18,9 @@ struct Cli {
     #[arg(short, long, default_value = "data/default.kairei")]
     dsl: PathBuf,
 
+    #[arg(short, long, default_value = "secret.json")]
+    secret: PathBuf,
+
     /// Enable debug mode
     #[arg(short, long)]
     verbose: bool,
@@ -35,13 +38,25 @@ async fn run(cli: &Cli) -> Result<(), Error> {
         // Default config
         SystemConfig::default()
     };
+    let secret_path = cli.secret.clone();
+    let secret_config: SecretConfig = if secret_path.clone().exists() {
+        let content = std::fs::read_to_string(secret_path)
+            .map_err(|e| Error::Internal(format!("Failed to read secret file: {}", e)))?;
+        serde_json::from_str(&content)
+            .map_err(|e| Error::Internal(format!("Failed to parse secret file: {}", e)))?
+    } else {
+        // Default secret config
+        SecretConfig::default()
+    };
 
     info!("config loaded.");
 
     debug!("config: {:?}", config);
 
+    debug!("secret_config: {:?}", secret_config);
+
     // Initialize system
-    let mut system = System::new(&config, &SecretConfig::default()).await;
+    let mut system = System::new(&config, &secret_config).await;
 
     // Load and parse DSL
     let dsl = std::fs::read_to_string(&cli.dsl)

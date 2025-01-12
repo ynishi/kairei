@@ -95,7 +95,14 @@ impl EventType {
         )
     }
 
-    pub fn is_for_me(&self, agent_name: &str) -> bool {
+    pub fn request_for_me(&self, agent_name: &str) -> bool {
+        match self {
+            EventType::Request { responder, .. } => responder == agent_name,
+            _ => false,
+        }
+    }
+
+    pub fn response_for_me(&self, agent_name: &str) -> bool {
         match self {
             EventType::ResponseSuccess { requester, .. }
             | EventType::ResponseFailure { requester, .. } => requester == agent_name,
@@ -109,6 +116,16 @@ impl EventType {
             EventType::ResponseSuccess { request_id, .. } => Some(request_id),
             EventType::ResponseFailure { request_id, .. } => Some(request_id),
             _ => None,
+        }
+    }
+
+    pub fn is_response_to(&self, request_id: &str) -> bool {
+        if !self.is_response() {
+            false
+        } else if let Some(response_id) = self.request_id() {
+            response_id == request_id
+        } else {
+            false
         }
     }
 

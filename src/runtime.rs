@@ -4,7 +4,7 @@ use crate::eval::context::{AgentInfo, AgentType, ExecutionContext, StateAccessMo
 use crate::eval::evaluator::Evaluator;
 use crate::eval::expression;
 use crate::evaluator::EvalError;
-use crate::event_bus::{ErrorEvent, Event, EventBus, EventError, LastStatus, Value};
+use crate::event_bus::{ErrorEvent, Event, EventBus, EventCategory, EventError, LastStatus, Value};
 use crate::event_registry::{EventType, LifecycleEvent};
 use crate::provider::types::{ProviderError, ProviderInstance};
 use crate::{EventHandler, HandlerBlock, MicroAgentDef, RequestHandler};
@@ -282,7 +282,8 @@ impl RuntimeAgentData {
         let agent_name = agent_def.name.clone();
         let agent_info = AgentInfo {
             agent_name: agent_name.clone(),
-            agent_type: AgentType::Custom(agent_name),
+            // TODO: RuntimeAgentData は User のみのため固定値としている
+            agent_type: AgentType::User,
             created_at: Utc::now(),
         };
 
@@ -333,12 +334,14 @@ impl RuntimeAgentData {
             }
         }
         if let Some(answer_def) = &agent_def.answer {
+            debug!("Register answer handlers");
             for handler in answer_def.handlers.iter() {
                 let created = Self::create_answer_handler(
                     self.evaluator.clone(),
                     Arc::new(handler.clone()),
                     self.base_context.clone(),
                 );
+                debug!("Register answer handler: {}", &handler.request_type);
                 self.register_answer(&handler.request_type.to_string(), created);
             }
         }
@@ -421,6 +424,7 @@ impl RuntimeAgentData {
     pub fn register_answer(&mut self, request_type: &str, handler: AnswerHandler) {
         self.answer_handlers
             .insert(request_type.to_string(), handler);
+        debug!("Register answer handler: {:?}", request_type);
     }
 
     pub fn create_answer_handler(
@@ -538,15 +542,13 @@ impl RuntimeAgentData {
     }
 
     // イベントの処理
+    #[tracing::instrument(skip(self, event))]
     async fn handle_event(&self, event: &Event) -> RuntimeResult<()> {
-        debug!("Handle event in Runtime: {:?}", event);
-        match &event.event_type {
-            EventType::Request {
-                request_type,
-                responder,
-                ..
-            } => {
-                if responder == &self.name {
+        debug!("Event received: name: {}, event: {:?}", self.name(), event);
+        match &event.category() {
+            // リクエストイベント
+            EventCategory::Request { request_type, .. } => {
+                if event.event_type.request_for_me(&self.name) {
                     if let Some(handler) = self.answer_handlers.get(request_type) {
                         handler(event).await
                     } else {
@@ -560,42 +562,14 @@ impl RuntimeAgentData {
                     Ok(())
                 }
             }
-
-            // 通常のメッセージ(Ok, Err)とカスタムイベント
-            EventType::Message { .. }
-            | EventType::Failure { .. }
-            | EventType::Custom(_)
-            | EventType::FeatureFailure { .. } => self.handle_normal_event(event).await,
-
+            // 通常のイベント
+            EventCategory::Agent => self.handle_normal_event(event).await,
             // システムイベント
-            EventType::Tick
-            | EventType::StateUpdated { .. }
-            | EventType::AgentCreated
-            | EventType::AgentAdded
-            | EventType::AgentRemoved
-            | EventType::AgentStarting
-            | EventType::AgentStarted
-            | EventType::AgentStopping
-            | EventType::AgentStopped
-            | EventType::SystemCreated
-            | EventType::SystemNativeFeaturesRegistered
-            | EventType::SystemProvidersRegistered
-            | EventType::SystemWorldRegistered
-            | EventType::SystemBuiltinAgentsRegistered
-            | EventType::SystemUserAgentsRegistered
-            | EventType::SystemStarting
-            | EventType::SystemStarted
-            | EventType::SystemStopping
-            | EventType::SystemStopped
-            | EventType::ProviderRegistered
-            | EventType::ProviderShutdown
-            | EventType::ProviderPrimarySet
-            | EventType::ProviderStatusUpdated
-            | EventType::FeatureStatusUpdated { .. } => self.handle_system_event(event).await,
+            EventCategory::System | EventCategory::Component => {
+                self.handle_system_event(event).await
+            }
             // レスポンスは直接evaluatorで処理する
-            EventType::ResponseSuccess { .. } => Ok(()),
-            EventType::ResponseFailure { .. } => Ok(()),
-            // 確実にバリアントを処理するため _ => Ok(()) は使用しない
+            EventCategory::Response => Ok(()),
         }
     }
 
@@ -788,7 +762,9 @@ mod tests {
             // 非同期にイベントを取得して、responsesに格納する処理を開始
             tokio::spawn(async move {
                 while let Ok(event) = event_rx.recv().await {
-                    response_ref.lock().unwrap().push(event);
+                    if event.event_type.is_response() {
+                        response_ref.lock().unwrap().push(event);
+                    }
                 }
             });
             Self {
@@ -805,7 +781,7 @@ mod tests {
                 .filter(|e| e.event_type.request_id() == Some(&want_request_id));
             let res = filtered.last().unwrap();
             // failure will be handled by unwrap
-            res.parameters.get("response").unwrap().clone()
+            res.response_value()
         }
     }
 

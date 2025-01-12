@@ -21,6 +21,267 @@ impl Event {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum EventCategory {
+    System,
+    Request { request_type: String },
+    Response,
+    Agent,
+    Component,
+    // 必要に応じて追加
+}
+
+impl Event {
+    pub fn category(&self) -> EventCategory {
+        match &self.event_type {
+            EventType::Tick => EventCategory::System,
+            EventType::StateUpdated { .. } => EventCategory::Agent,
+            EventType::Message { .. } => EventCategory::Agent,
+            EventType::Failure { .. } => EventCategory::Agent,
+            EventType::Request { request_type, .. } => EventCategory::Request {
+                request_type: request_type.clone(),
+            },
+            EventType::ResponseSuccess { .. } => EventCategory::Response,
+            EventType::ResponseFailure { .. } => EventCategory::Response,
+            EventType::AgentCreated => EventCategory::Agent,
+            EventType::AgentAdded => EventCategory::Agent,
+            EventType::AgentRemoved => EventCategory::Agent,
+            EventType::AgentStarting => EventCategory::Agent,
+            EventType::AgentStarted => EventCategory::Agent,
+            EventType::AgentStopping => EventCategory::Agent,
+            EventType::AgentStopped => EventCategory::Agent,
+            EventType::SystemCreated => EventCategory::System,
+            EventType::SystemNativeFeaturesRegistered => EventCategory::System,
+            EventType::SystemProvidersRegistered => EventCategory::System,
+            EventType::SystemWorldRegistered => EventCategory::System,
+            EventType::SystemBuiltinAgentsRegistered => EventCategory::System,
+            EventType::SystemUserAgentsRegistered => EventCategory::System,
+            EventType::SystemStarting => EventCategory::System,
+            EventType::SystemStarted => EventCategory::System,
+            EventType::SystemStopping => EventCategory::System,
+            EventType::SystemStopped => EventCategory::System,
+            EventType::FeatureStatusUpdated { .. } => EventCategory::Component,
+            EventType::FeatureFailure { .. } => EventCategory::Component,
+            EventType::ProviderRegistered => EventCategory::Component,
+            EventType::ProviderStatusUpdated => EventCategory::Component,
+            EventType::ProviderShutdown => EventCategory::Component,
+            EventType::ProviderPrimarySet => EventCategory::Component,
+            EventType::Custom(_) => EventCategory::Agent,
+        }
+    }
+
+    pub fn request_buidler() -> RequestBuilder {
+        RequestBuilder::new()
+    }
+
+    pub fn response_builder() -> ResponseBuilder {
+        ResponseBuilder::new()
+    }
+
+    pub fn response_value(&self) -> Value {
+        match &self.event_type {
+            EventType::ResponseSuccess { .. } => self
+                .parameters
+                .get("response")
+                .cloned()
+                .unwrap_or(Value::Null),
+            EventType::ResponseFailure { .. } => {
+                self.parameters.get("error").cloned().unwrap_or(Value::Null)
+            }
+            _ => Value::Null,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct RequestBuilder {
+    request_type: Option<String>,
+    requester: Option<String>,
+    responder: Option<String>,
+    request_id: Option<String>,
+    parameters: HashMap<String, Value>,
+}
+
+impl RequestBuilder {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn request_type(mut self, request_type: String) -> Self {
+        self.request_type = Some(request_type);
+        self
+    }
+
+    pub fn requester(mut self, requester: String) -> Self {
+        self.requester = Some(requester);
+        self
+    }
+
+    pub fn responder(mut self, responder: String) -> Self {
+        self.responder = Some(responder);
+        self
+    }
+
+    pub fn request_id(mut self, request_id: String) -> Self {
+        self.request_id = Some(request_id);
+        self
+    }
+
+    pub fn parameters(mut self, parameters: HashMap<String, Value>) -> Self {
+        self.parameters = parameters;
+        self
+    }
+
+    pub fn build(self) -> EventResult<Event> {
+        Ok(Event {
+            event_type: EventType::Request {
+                request_type: self.request_type.ok_or(EventError::RequestBuilderFailed(
+                    "request_type is required".to_string(),
+                ))?,
+                requester: self.requester.ok_or(EventError::RequestBuilderFailed(
+                    "requester is required".to_string(),
+                ))?,
+                responder: self.responder.ok_or(EventError::RequestBuilderFailed(
+                    "responder is required".to_string(),
+                ))?,
+                request_id: self.request_id.ok_or(EventError::RequestBuilderFailed(
+                    "request_id is required".to_string(),
+                ))?,
+            },
+            parameters: self.parameters,
+        })
+    }
+}
+
+// response builder
+#[derive(Default)]
+pub struct ResponseBuilder {
+    is_success: Option<bool>,
+    request_type: Option<String>,
+    requester: Option<String>,
+    responder: Option<String>,
+    request_id: Option<String>,
+    response: Option<Value>,
+    error: Option<String>,
+    parameters: HashMap<String, Value>,
+}
+
+impl ResponseBuilder {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn success(mut self) -> Self {
+        self.is_success = Some(true);
+        self
+    }
+
+    pub fn failure(mut self) -> Self {
+        self.is_success = Some(false);
+        self
+    }
+
+    pub fn request_type(mut self, request_type: String) -> Self {
+        self.request_type = Some(request_type);
+        self
+    }
+
+    pub fn requester(mut self, requester: String) -> Self {
+        self.requester = Some(requester);
+        self
+    }
+
+    pub fn responder(mut self, responder: String) -> Self {
+        self.responder = Some(responder);
+        self
+    }
+
+    pub fn request_id(mut self, request_id: String) -> Self {
+        self.request_id = Some(request_id);
+        self
+    }
+
+    pub fn response(mut self, response: Value) -> Self {
+        self.response = Some(response);
+        self
+    }
+
+    pub fn error(mut self, error: &str) -> Self {
+        self.error = Some(error.to_string());
+        self
+    }
+
+    pub fn parameters(mut self, parameters: HashMap<String, Value>) -> Self {
+        self.parameters = parameters;
+        self
+    }
+
+    pub fn build(self) -> EventResult<Event> {
+        match self.is_success {
+            Some(true) => self.build_success(),
+            Some(false) => self.build_failure(),
+            None => Err(EventError::ResponseBuilderFailed(
+                "is_success is required".to_string(),
+            )),
+        }
+    }
+
+    fn build_success(self) -> EventResult<Event> {
+        let parameters = if let Some(response) = self.response {
+            let mut params = self.parameters;
+            params.insert("response".to_string(), response);
+            params
+        } else {
+            self.parameters
+        };
+
+        Ok(Event {
+            event_type: EventType::ResponseSuccess {
+                request_type: self.request_type.ok_or(EventError::ResponseBuilderFailed(
+                    "request_type is required".to_string(),
+                ))?,
+                requester: self.requester.ok_or(EventError::ResponseBuilderFailed(
+                    "requester is required".to_string(),
+                ))?,
+                responder: self.responder.ok_or(EventError::ResponseBuilderFailed(
+                    "responder is required".to_string(),
+                ))?,
+                request_id: self.request_id.ok_or(EventError::ResponseBuilderFailed(
+                    "request_id is required".to_string(),
+                ))?,
+            },
+            parameters,
+        })
+    }
+
+    fn build_failure(self) -> EventResult<Event> {
+        let parameters = if let Some(error) = self.error {
+            let mut params = self.parameters;
+            params.insert("error".to_string(), Value::String(error));
+            params
+        } else {
+            self.parameters
+        };
+        Ok(Event {
+            event_type: EventType::ResponseFailure {
+                request_type: self.request_type.ok_or(EventError::ResponseBuilderFailed(
+                    "request_type is required".to_string(),
+                ))?,
+                requester: self.requester.ok_or(EventError::ResponseBuilderFailed(
+                    "requester is required".to_string(),
+                ))?,
+                responder: self.responder.ok_or(EventError::ResponseBuilderFailed(
+                    "responder is required".to_string(),
+                ))?,
+                request_id: self.request_id.ok_or(EventError::ResponseBuilderFailed(
+                    "request_id is required".to_string(),
+                ))?,
+            },
+            parameters,
+        })
+    }
+}
+
 // eum などを event_type string に変換する
 pub trait ToEventType {
     fn to_event_type(&self) -> String;
@@ -328,6 +589,15 @@ pub enum EventError {
 
     #[error("Event not found: {0}")]
     NotFound(String),
+
+    #[error("request_type is required")]
+    RequestTypeRequired(String),
+
+    #[error("request builder failed: {0}")]
+    RequestBuilderFailed(String),
+
+    #[error("response builder failed: {0}")]
+    ResponseBuilderFailed(String),
 }
 
 pub type EventResult<T> = Result<T, EventError>;

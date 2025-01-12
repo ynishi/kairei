@@ -1,17 +1,34 @@
 use std::{collections::HashMap, time::Duration};
 
 use kairei::config::SecretConfig;
+use kairei::parse_root;
 use kairei::system::SystemResult;
 use kairei::{
     config::SystemConfig, event_bus::Event, event_registry::EventType, parse_micro_agent,
     system::System, MicroAgentDef,
 };
 use tokio::{self, time::sleep};
+use tracing::debug;
 
 #[tokio::test]
 async fn test_system_lifecycle() -> SystemResult<()> {
     // システムの初期化
-    let system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
+    let mut system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
+
+    let root = system
+        .parse_dsl(
+            r#"
+            micro TestAgent {
+                answer {
+                    on request Test() -> Result<String, Error> {
+                        return Ok("test")
+                    }
+                }
+            }
+        "#,
+        )
+        .await?;
+    system.initialize(root).await?;
 
     let agent_name = "test-agent";
 
@@ -23,7 +40,10 @@ async fn test_system_lifecycle() -> SystemResult<()> {
     system.register_agent_ast(&agent_name, &test_ast).await?;
 
     // スケールアップテスト
+    //
+    let initial_status = system.get_system_status().await?;
     let agents = system.scale_up(agent_name, 3, HashMap::new()).await?;
+    debug!("Agents: {:?}", agents);
     assert_eq!(agents.len(), 3);
     assert!(agents.iter().all(|name| name.starts_with(agent_name)));
 
@@ -34,8 +54,11 @@ async fn test_system_lifecycle() -> SystemResult<()> {
 
     // システム状態の確認
     let status = system.get_system_status().await?;
-    assert_eq!(status.agent_count, 3);
-    assert_eq!(status.running_agent_count, 3);
+    assert_eq!(status.agent_count, 3 + initial_status.agent_count);
+    assert_eq!(
+        status.running_agent_count,
+        3 + initial_status.running_agent_count
+    );
     assert!(status.running);
 
     // イベントの送信テスト
@@ -57,8 +80,11 @@ async fn test_system_lifecycle() -> SystemResult<()> {
 
     // 残りのエージェント数確認
     let status = system.get_system_status().await?;
-    assert_eq!(status.agent_count, 3);
-    assert_eq!(status.running_agent_count, 1);
+    assert_eq!(status.agent_count, 3 + initial_status.agent_count);
+    assert_eq!(
+        status.running_agent_count,
+        1 + initial_status.running_agent_count
+    );
 
     // 特定のエージェントの状態確認
     let agent_status = system.get_agent_status(&agents[0]).await?;
@@ -112,7 +138,8 @@ async fn test_error_handling() -> SystemResult<()> {
 
 #[tokio::test]
 async fn test_request_response() -> SystemResult<()> {
-    let system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
+    let mut system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
+    debug!("System created {:?}", SystemConfig::default());
 
     let test_agent_dsl = r#"
         micro Responder {
@@ -123,6 +150,9 @@ async fn test_request_response() -> SystemResult<()> {
             }
         }
     "#;
+
+    let ast = parse_root(test_agent_dsl).unwrap().1;
+    system.initialize(ast).await?;
     let test_ast = parse_micro_agent(test_agent_dsl).unwrap().1;
 
     system.register_agent_ast("Responder", &test_ast).await?;

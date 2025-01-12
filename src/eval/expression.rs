@@ -2,6 +2,7 @@ use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
 use async_recursion::async_recursion;
+use tracing::debug;
 
 use super::context::{ExecutionContext, VariableAccess};
 use super::generator::PromptMeta;
@@ -179,6 +180,7 @@ impl ExpressionEvaluator {
         context.get(access).await.map_err(EvalError::from)
     }
 
+    #[tracing::instrument(skip(self, with_block, context))]
     pub async fn eval_think(
         &self,
         args: &[Argument],
@@ -207,6 +209,7 @@ impl ExpressionEvaluator {
             .generate_prompt(user_content, &policies, meta)
             .await?;
 
+        debug!("Prompt generated: {:?}", prompt);
         let thread_id = provider
             .provider
             .create_thread()
