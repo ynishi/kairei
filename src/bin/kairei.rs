@@ -1,6 +1,6 @@
 use clap::{command, Parser};
 use kairei::{
-    config::{SecretConfig, SystemConfig},
+    config::{self, SecretConfig, SystemConfig},
     system::System,
     Error,
 };
@@ -30,20 +30,14 @@ async fn run(cli: &Cli) -> Result<(), Error> {
     // Load config
     let config_path = cli.config.clone();
     let config: SystemConfig = if config_path.clone().exists() {
-        let content = std::fs::read_to_string(config_path)
-            .map_err(|e| Error::Internal(format!("Failed to read config file: {}", e)))?;
-        serde_json::from_str(&content)
-            .map_err(|e| Error::Internal(format!("Failed to parse config file: {}", e)))?
+        config::from_file(config_path)?
     } else {
         // Default config
         SystemConfig::default()
     };
     let secret_path = cli.secret.clone();
     let secret_config: SecretConfig = if secret_path.clone().exists() {
-        let content = std::fs::read_to_string(secret_path)
-            .map_err(|e| Error::Internal(format!("Failed to read secret file: {}", e)))?;
-        serde_json::from_str(&content)
-            .map_err(|e| Error::Internal(format!("Failed to parse secret file: {}", e)))?
+        config::from_file(secret_path)?
     } else {
         // Default secret config
         SecretConfig::default()

@@ -1,0 +1,20 @@
+{
+  "provider_configs": {
+    "primary_provider": "openai_travel_expert",
+    "providers": {
+      "openai_travel_expert": {
+        "name": "openai_travel_expert",
+        "provider_type": "OpenAIAssistant",
+        "provider_specific": {
+          "assistant_id": "asst_id_123",
+          "deployment_id": "gpt-3.5-turbo"
+        },
+        "common_config": {
+          "model": "gpt-3.5-turbo",
+          "temperature": 0.7,
+          "max_tokens": 500
+        }
+      }
+    }
+  }
+}

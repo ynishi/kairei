@@ -93,7 +93,7 @@ impl Event {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct RequestBuilder {
     request_type: Option<String>,
     requester: Option<String>,
@@ -107,28 +107,34 @@ impl RequestBuilder {
         Default::default()
     }
 
-    pub fn request_type(mut self, request_type: String) -> Self {
-        self.request_type = Some(request_type);
+    pub fn request_type(mut self, request_type: &str) -> Self {
+        self.request_type = Some(request_type.to_string());
         self
     }
 
-    pub fn requester(mut self, requester: String) -> Self {
-        self.requester = Some(requester);
+    pub fn requester(mut self, requester: &str) -> Self {
+        self.requester = Some(requester.to_string());
         self
     }
 
-    pub fn responder(mut self, responder: String) -> Self {
-        self.responder = Some(responder);
+    pub fn responder(mut self, responder: &str) -> Self {
+        self.responder = Some(responder.to_string());
         self
     }
 
-    pub fn request_id(mut self, request_id: String) -> Self {
-        self.request_id = Some(request_id);
+    pub fn request_id(mut self, request_id: &str) -> Self {
+        self.request_id = Some(request_id.to_string());
         self
     }
 
     pub fn parameters(mut self, parameters: HashMap<String, Value>) -> Self {
         self.parameters = parameters;
+        self
+    }
+
+    pub fn parameter(mut self, key: &str, value: &Value) -> Self {
+        let key = key.to_string();
+        self.parameters.insert(key, value.to_owned());
         self
     }
 
@@ -181,23 +187,23 @@ impl ResponseBuilder {
         self
     }
 
-    pub fn request_type(mut self, request_type: String) -> Self {
-        self.request_type = Some(request_type);
+    pub fn request_type(mut self, request_type: &str) -> Self {
+        self.request_type = Some(request_type.to_string());
         self
     }
 
-    pub fn requester(mut self, requester: String) -> Self {
-        self.requester = Some(requester);
+    pub fn requester(mut self, requester: &str) -> Self {
+        self.requester = Some(requester.to_string());
         self
     }
 
-    pub fn responder(mut self, responder: String) -> Self {
-        self.responder = Some(responder);
+    pub fn responder(mut self, responder: &str) -> Self {
+        self.responder = Some(responder.to_string());
         self
     }
 
-    pub fn request_id(mut self, request_id: String) -> Self {
-        self.request_id = Some(request_id);
+    pub fn request_id(mut self, request_id: &str) -> Self {
+        self.request_id = Some(request_id.to_string());
         self
     }
 

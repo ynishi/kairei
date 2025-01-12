@@ -32,6 +32,8 @@ pub enum Error {
     Internal(String),
 }
 
+pub type InternalResult<T> = Result<T, Error>;
+
 // エラー作成用のヘルパー関数
 impl Error {
     pub fn internal<S: Into<String>>(message: S) -> Self {

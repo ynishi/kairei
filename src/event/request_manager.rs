@@ -133,10 +133,10 @@ impl RequestManager {
                     } => {
                         if let Ok(response_failure) = Event::response_builder()
                             .failure()
-                            .request_id(request_id.clone())
-                            .requester(requester.to_owned())
-                            .responder(responder.to_owned())
-                            .request_type(request_type.to_owned())
+                            .request_id(request_id)
+                            .requester(requester)
+                            .responder(responder)
+                            .request_type(request_type)
                             .error(format!("request_cancelled: {}", failure_message).as_str())
                             .build()
                         {
@@ -212,18 +212,18 @@ mod tests {
 
         (
             Event::request_buidler()
-                .request_type(request_type.clone())
-                .requester(requester_name.clone())
-                .responder(target_name.clone())
-                .request_id(request_id.clone())
+                .request_type(&request_type)
+                .requester(&requester_name)
+                .responder(&target_name)
+                .request_id(&request_id)
                 .build()
                 .unwrap(),
             Event::response_builder()
                 .success()
-                .request_type(request_type.clone())
-                .requester(requester_name.clone())
-                .responder(target_name.clone())
-                .request_id(request_id.clone())
+                .request_type(&request_type)
+                .requester(&requester_name)
+                .responder(&target_name)
+                .request_id(&request_id)
                 .response(response)
                 .build()
                 .unwrap(),
