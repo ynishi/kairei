@@ -134,6 +134,23 @@ impl RequiredCapabilities {
     pub fn supported(&self, capabilities: &Capabilities) -> bool {
         capabilities.supports_all(&self.capabilities.iter().cloned().collect::<Vec<_>>())
     }
+
+    pub fn unsupported(&self, capabilities: &Capabilities) -> ProviderResult<()> {
+        let unspported: Vec<CapabilityType> = self
+            .capabilities
+            .iter()
+            .filter(|capability| !capabilities.supports(capability))
+            .cloned()
+            .collect();
+        if !unspported.is_empty() {
+            return Err(ProviderError::MissingCapabilities(unspported));
+        }
+        Ok(())
+    }
+
+    pub fn capabilities(&self) -> &HashSet<CapabilityType> {
+        &self.capabilities
+    }
 }
 
 #[automock]
