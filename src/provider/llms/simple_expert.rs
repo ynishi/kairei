@@ -1,13 +1,12 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use dashmap::DashMap;
+use serde_json::json;
 use tracing::debug;
 
 use crate::{
     config::ProviderConfig,
     provider::{
-        capability::Capabilities,
+        capability::{Capabilities, CapabilityType},
         llm::{LLMResponse, ProviderLLM, ResponseMetadata},
         types::{ProviderError, ProviderResult},
     },
@@ -18,19 +17,44 @@ type Pattern = String;
 
 type Answer = String;
 
-pub type KnowledgeBase = DashMap<Pattern, Answer>;
+pub struct KnowledgeBase {
+    values: DashMap<Pattern, Answer>,
+}
 
 pub struct SimpleExpertProviderLLM {
     name: String,
-    knowledge_base: Arc<KnowledgeBase>,
+}
+
+impl KnowledgeBase {
+    pub fn new(values: DashMap<Pattern, Answer>) -> Self {
+        Self { values }
+    }
 }
 
 impl SimpleExpertProviderLLM {
-    pub fn new(name: String, knowledge_base: Arc<KnowledgeBase>) -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
-            name,
-            knowledge_base,
+            name: name.to_string(),
         }
+    }
+
+    pub fn get_answer(&self, prompt: &str, knowledge_base: KnowledgeBase) -> Vec<String> {
+        knowledge_base
+            .values
+            .iter()
+            .filter(|entry| prompt.contains(entry.key()))
+            .map(|entry| entry.value().clone())
+            .collect()
+    }
+}
+
+impl From<&ProviderConfig> for KnowledgeBase {
+    fn from(config: &ProviderConfig) -> Self {
+        let values = DashMap::new();
+        for (key, value) in config.provider_specific.clone() {
+            values.insert(key, json!(value).to_string());
+        }
+        KnowledgeBase::new(values)
     }
 }
 
@@ -38,16 +62,11 @@ impl SimpleExpertProviderLLM {
 impl ProviderLLM for SimpleExpertProviderLLM {
     async fn send_message(
         &self,
-        prompt: String,
-        _config: &ProviderConfig,
+        prompt: &str,
+        config: &ProviderConfig,
     ) -> ProviderResult<LLMResponse> {
-        // find content include pattern
-        let responses: Vec<String> = self
-            .knowledge_base
-            .iter()
-            .filter(|entry| prompt.contains(entry.key()))
-            .map(|entry| entry.value().clone())
-            .collect::<Vec<String>>();
+        let knowledge_base = KnowledgeBase::from(config);
+        let responses: Vec<String> = self.get_answer(&prompt, knowledge_base);
         if responses.is_empty() {
             return Err(ProviderError::ApiError("No response found".to_string()));
         }
@@ -64,7 +83,7 @@ impl ProviderLLM for SimpleExpertProviderLLM {
     }
 
     fn capabilities(&self) -> Capabilities {
-        Capabilities::default()
+        Capabilities::from(vec![CapabilityType::Generate])
     }
 
     fn name(&self) -> &str {

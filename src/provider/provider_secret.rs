@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use crate::config::SecretConfig;
 
-use super::types::{ProviderError, ProviderResult, ProviderSecret};
+use super::{
+    provider::ProviderSecret,
+    types::{ProviderError, ProviderResult},
+};
 
 pub struct SecretRegistry {
     secrets: HashMap<String, ProviderSecret>,

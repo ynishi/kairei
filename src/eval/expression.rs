@@ -5,10 +5,11 @@ use async_recursion::async_recursion;
 
 use super::context::{ExecutionContext, VariableAccess};
 use crate::eval::evaluator::{EvalError, EvalResult};
+use crate::provider::provider_registry::ProviderInstance;
 use crate::provider::request::{
     ExecutionState, ProviderContext, ProviderRequest, ProviderResponse, RequestInput,
 };
-use crate::provider::types::{ProviderError, ProviderInstance};
+use crate::provider::types::ProviderError;
 use crate::timestamp::Timestamp;
 use crate::{
     ast, Argument, BinaryOperator, Expression, Literal, Policy, RetryDelay, ThinkAttributes,

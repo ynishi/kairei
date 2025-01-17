@@ -19,8 +19,9 @@ use crate::config::{ProviderConfig, SecretConfig};
 use crate::context::AGENT_TYPE_CUSTOM_ALL;
 use crate::event_bus::EventError;
 use crate::native_feature::types::FeatureError;
-use crate::provider::provider_registry::ProviderRegistry;
-use crate::provider::types::{ProviderError, ProviderInstance, ProviderSecret, ProviderType};
+use crate::provider::provider::{ProviderSecret, ProviderType};
+use crate::provider::provider_registry::{ProviderInstance, ProviderRegistry};
+use crate::provider::types::ProviderError;
 use crate::request_manager::{RequestError, RequestManager};
 use crate::runtime::RuntimeError;
 use crate::{

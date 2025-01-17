@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
-use crate::{config::ProviderConfig, expression::Value};
-
-use super::{
-    llm::LLMResponse,
-    types::{ProviderSecret, Timestamp},
+use crate::{
+    config::ProviderConfig, context::AgentInfo, expression::Value, timestamp::Timestamp, Policy,
 };
+
+use super::{llm::LLMResponse, provider::ProviderSecret};
 
 #[derive(Debug, Default)]
 pub struct ProviderRequest {
@@ -30,7 +29,7 @@ pub struct ProviderContext {
 #[derive(Debug, Default)]
 pub struct RequestInput {
     // メインのプロンプト/クエリ
-    pub query: String,
+    pub query: Value,
     // Think式から渡されるパラメータ
     pub parameters: HashMap<String, Value>,
 }
@@ -44,7 +43,10 @@ pub struct ExecutionState {
 
     // エージェントのコンテキスト
     pub agent_name: String,
-    pub agent_state: HashMap<String, Value>,
+    pub agent_info: AgentInfo,
+
+    // Policy
+    pub policies: Vec<Policy>,
 
     // 実行トレース（デバッグ用）
     pub trace_id: String,

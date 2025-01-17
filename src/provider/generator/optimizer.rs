@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::provider::types::{ProviderResult, Section};
+use crate::provider::{provider::Section, types::ProviderResult};
 
 pub type OrderedListSections = Vec<(usize, Section)>;
 
