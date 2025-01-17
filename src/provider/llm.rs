@@ -8,7 +8,7 @@ use async_trait::async_trait;
 pub trait ProviderLLM: Send + Sync {
     async fn send_message(
         &self,
-        prompt: String,
+        prompt: &str,
         config: &ProviderConfig,
     ) -> ProviderResult<LLMResponse>;
     fn capabilities(&self) -> Capabilities;
@@ -37,7 +37,10 @@ mod tests {
     use super::*;
     use crate::{
         config::{CommonConfig, EndpointConfig, ProviderConfig},
-        provider::llms::simple_expert::{KnowledgeBase, SimpleExpertProviderLLM},
+        provider::{
+            llms::simple_expert::{KnowledgeBase, SimpleExpertProviderLLM},
+            provider::ProviderType,
+        },
     };
     use std::{collections::HashMap, sync::Arc};
 
@@ -63,12 +66,9 @@ mod tests {
             endpoint: EndpointConfig::default(),
             plugin_configs: HashMap::new(),
         };
-        let knowledge_base = Arc::new(KnowledgeBase::from(config.clone()));
-        let provider = SimpleExpertProviderLLM::new("test".to_string(), knowledge_base);
-        let response = provider
-            .send_message("Hello".to_string(), &config)
-            .await
-            .unwrap();
+        let knowledge_base = Arc::new(KnowledgeBase::from(&config));
+        let provider = SimpleExpertProviderLLM::new("test");
+        let response = provider.send_message("Hello", &config).await.unwrap();
         assert_eq!(response.content, "World");
     }
 }

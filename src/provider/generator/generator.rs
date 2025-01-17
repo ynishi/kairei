@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::provider::types::{ProviderResult, Section};
+use crate::provider::{provider::Section, types::ProviderResult};
 
 use super::optimizer::Optimizer;
 
@@ -39,9 +39,9 @@ impl PromptGenerator {
 mod tests {
 
     use super::*;
-    use crate::provider::{
-        generator::optimizer::OrderedListSections,
-        types::{SectionMetadata, Timestamp},
+    use crate::{
+        provider::{generator::optimizer::OrderedListSections, provider::SectionMetadata},
+        timestamp::Timestamp,
     };
 
     struct MockOptimizer;

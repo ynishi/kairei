@@ -355,7 +355,7 @@ mod tests {
     use crate::{
         config::ContextConfig,
         eval::context::{AgentInfo, StateAccessMode},
-        provider::types::ProviderInstance,
+        provider::provider_registry::ProviderInstance,
         BinaryOperator, Literal,
     };
 
