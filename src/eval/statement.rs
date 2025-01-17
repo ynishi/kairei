@@ -171,12 +171,16 @@ impl StatementEvaluator {
             .eval_arguments(parameters, context.clone())
             .await?;
         if let Some(to) = target {
-            evaluated_params.insert("to".to_string(), event_bus::Value::String(to.clone()));
+            evaluated_params.insert("to".to_string(), Value::String(to.clone()));
         }
         let event_type = event_registry::EventType::from(event_type);
+        let event_params = evaluated_params
+            .iter()
+            .map(|(k, v)| (k.clone(), event_bus::Value::from(v.clone())))
+            .collect();
 
         // イベントの構築と発行
-        let event = Event::new(&event_type, &evaluated_params);
+        let event = Event::new(&event_type, &event_params);
         context.emit_event(event).await?;
 
         Ok(Value::Unit)
@@ -196,6 +200,11 @@ impl StatementEvaluator {
             .eval_arguments(parameters, context.clone())
             .await?;
 
+        let event_params = evaluated_params
+            .iter()
+            .map(|(k, v)| (k.clone(), event_bus::Value::from(v.clone())))
+            .collect();
+
         // リクエストの構築と送信
         let request = Event {
             event_type: event_registry::EventType::Request {
@@ -204,7 +213,7 @@ impl StatementEvaluator {
                 responder: agent.to_string(),
                 request_type: request_type.to_string(),
             },
-            parameters: evaluated_params,
+            parameters: event_params,
         };
         debug!("Create Request: {:?}", request);
         let response_event = context.send_request(request).await?;

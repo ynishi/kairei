@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use tracing::debug;
+use uuid::Uuid;
 
 use super::expression::Value;
 use super::generator::{PromptGenerator, StandardPromptGenerator};
@@ -83,9 +84,11 @@ impl<T> SafeRwLock<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LockError {
+    #[error("Lock timeout")]
     Timeout,
+    #[error("Deadlock")]
     Deadlock,
     // 他のエラーケース
 }
@@ -104,6 +107,16 @@ pub struct ExecutionContext {
     access_mode: StateAccessMode,
     // config Read/Write timeout
     pub timeout: Duration,
+}
+
+impl ExecutionContext {
+    pub fn generate_trace_id(&self) -> String {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        format!("trace-{}-{}", self.agent_name(), current_time)
+    }
 }
 
 /// Context生成時に追加されて、共有される。更新されない。
@@ -166,7 +179,7 @@ type ParentScopes = Vec<Arc<DashMap<String, Arc<SafeRwLock<Value>>>>>;
 #[derive(Clone)]
 pub struct SharedContext {
     // 状態をRwLockで保護
-    state: Arc<DashMap<String, Arc<SafeRwLock<Value>>>>,
+    pub state: Arc<DashMap<String, Arc<SafeRwLock<Value>>>>,
     event_bus: Arc<EventBus>,
     parent_scopes: Arc<ParentScopes>,
     request_manager: Arc<RequestManager>,
@@ -186,6 +199,8 @@ pub enum StateAccessMode {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ContextError {
+    #[error("Lock timeout: {0}")]
+    Lock(#[from] LockError),
     #[error("Invalid state value for {key}: {message}")]
     InvalidValue { key: String, message: String },
     #[error("State error: {0}")]
@@ -219,6 +234,7 @@ pub enum ContextError {
 impl ToEventType for ContextError {
     fn to_event_type(&self) -> String {
         match self {
+            ContextError::Lock(_) => "LockError".to_string(),
             ContextError::InvalidValue { .. } => "InvalidValue".to_string(),
             ContextError::EventError(_) => "EventError".to_string(),
             ContextError::Request(_) => "RequestError".to_string(),
@@ -445,6 +461,25 @@ impl ExecutionContext {
 
     pub fn agent_name(&self) -> String {
         self.shared.agent_info.agent_name.clone()
+    }
+
+    pub async fn session_id(&self) -> Result<String, ContextError> {
+        let session_id = if let Some(session_id) = self.shared.state.get("session_id") {
+            session_id
+                .value()
+                .read_with_timeout(Duration::from_secs(5))
+                .await
+                .map(|v| match v.clone() {
+                    Value::String(s) => s,
+                    _ => "".to_string(),
+                })
+                .map_err(ContextError::from)?
+        } else {
+            let session_id = Uuid::new_v4().to_string();
+            let _ = self.set_state("session_id", Value::String(session_id.clone()));
+            session_id
+        };
+        Ok(session_id)
     }
 
     // 統一された変数アクセスインターフェース
