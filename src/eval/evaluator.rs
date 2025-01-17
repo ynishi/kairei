@@ -103,6 +103,8 @@ pub enum EvalError {
     Context(#[from] ContextError),
     #[error("Provider error: {0}")]
     Provider(#[from] ProviderError),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("Send response failed: {0}")]
     SendResponseFailed(String),
     #[error("Variable not found: {name}, {messages}")]

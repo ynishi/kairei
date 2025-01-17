@@ -2,19 +2,20 @@ use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
 use async_recursion::async_recursion;
-use tracing::debug;
 
 use super::context::{ExecutionContext, VariableAccess};
-use super::generator::PromptMeta;
 use crate::eval::evaluator::{EvalError, EvalResult};
+use crate::provider::request::{
+    ExecutionState, ProviderContext, ProviderRequest, ProviderResponse, RequestInput,
+};
 use crate::provider::types::{ProviderError, ProviderInstance};
+use crate::timestamp::Timestamp;
 use crate::{
-    ast, event_bus, Argument, BinaryOperator, Expression, Literal, Policy, RetryDelay,
-    ThinkAttributes,
+    ast, Argument, BinaryOperator, Expression, Literal, Policy, RetryDelay, ThinkAttributes,
 };
 
 // 値の型システム
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub enum Value {
     Integer(i64),
     UInteger(u64),
@@ -28,6 +29,7 @@ pub enum Value {
     Tuple(Vec<Value>),
     Unit,          // Return value for statements
     Error(String), // Error name for handling.
+    #[default]
     Null,
 }
 
@@ -36,6 +38,14 @@ pub struct ExpressionEvaluator;
 impl Default for ExpressionEvaluator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl From<ProviderResponse> for Value {
+    fn from(response: ProviderResponse) -> Self {
+        let mut hash_map = HashMap::new();
+        hash_map.insert("output".to_string(), Value::String(response.output));
+        Value::Map(hash_map)
     }
 }
 
@@ -74,7 +84,7 @@ impl ExpressionEvaluator {
         &self,
         arguments: &[Argument],
         context: Arc<ExecutionContext>,
-    ) -> EvalResult<HashMap<String, event_bus::Value>> {
+    ) -> EvalResult<HashMap<String, Value>> {
         self.eval_arguments_inner(arguments, context, false).await
     }
 
@@ -82,7 +92,7 @@ impl ExpressionEvaluator {
         &self,
         arguments: &[Argument],
         context: Arc<ExecutionContext>,
-    ) -> EvalResult<HashMap<String, event_bus::Value>> {
+    ) -> EvalResult<HashMap<String, Value>> {
         self.eval_arguments_inner(arguments, context, true).await
     }
 
@@ -91,7 +101,7 @@ impl ExpressionEvaluator {
         arguments: &[Argument],
         context: Arc<ExecutionContext>,
         is_named: bool,
-    ) -> EvalResult<HashMap<String, event_bus::Value>> {
+    ) -> EvalResult<HashMap<String, Value>> {
         let mut evaluated_params = HashMap::new();
         for (i, param) in arguments.iter().enumerate() {
             let (name, value) = match param {
@@ -113,7 +123,7 @@ impl ExpressionEvaluator {
                     (name, value)
                 }
             };
-            evaluated_params.insert(name, event_bus::Value::from(value));
+            evaluated_params.insert(name, value);
         }
         Ok(evaluated_params)
     }
@@ -195,52 +205,24 @@ impl ExpressionEvaluator {
 
         let provider = self.select_provider(provider_name, context.clone()).await?;
 
-        let user_content = self.build_content_from_args(args, context.clone()).await?;
-
         let policies = self.collect_policies(context.clone(), with_block.as_ref())?;
 
-        let meta = PromptMeta {
-            agent_name: context.agent_name().to_string(),
-        };
-
-        let prompt = context
-            .shared
-            .prompt_generator
-            .generate_prompt(user_content, &policies, meta)
+        let request = self
+            .to_provider_request(provider.as_ref(), args, with_block, context, policies)
             .await?;
 
-        debug!("Prompt generated: {:?}", prompt);
-        let thread_id = provider
+        let context = ProviderContext {
+            config: provider.config.clone(),
+            secret: provider.secret.clone(),
+        };
+
+        let response = provider
             .provider
-            .create_thread()
+            .execute(&context, &request)
             .await
             .map_err(EvalError::from)?;
 
-        let assistant_id_key = "assistant_id";
-        let assistant_id =
-            if let Some(assitant_id) = provider.config.provider_specific.get(assistant_id_key) {
-                if let Some(s) = assitant_id.as_str() {
-                    Ok(s)
-                } else {
-                    Err(EvalError::InvalidParameter {
-                        name: assistant_id_key.to_string(),
-                        value: assitant_id.to_string(),
-                    })
-                }
-            } else {
-                Err(EvalError::ParameterNotFound {
-                    name: assistant_id_key.to_string(),
-                })
-            }?;
-
-        let result = provider
-            .provider
-            .send_message(&thread_id, assistant_id, format!("{:?}", prompt).as_str())
-            .await;
-
-        let _ = provider.provider.delete_thread(&thread_id).await;
-
-        result.map(Value::String).map_err(EvalError::from)
+        Ok(Value::from(response))
     }
 
     async fn select_provider(
@@ -262,15 +244,130 @@ impl ExpressionEvaluator {
         }
     }
 
-    async fn build_content_from_args(
+    async fn build_arg_map_from_args(
         &self,
         args: &[Argument],
         context: Arc<ExecutionContext>,
-    ) -> EvalResult<String> {
+    ) -> EvalResult<HashMap<String, Value>> {
         let evaled = self.eval_arguments_detect_name(args, context).await?;
-        let content = format!("{:?}", evaled);
 
-        Ok(content)
+        Ok(evaled)
+    }
+
+    async fn to_provider_request(
+        &self,
+        provider: &ProviderInstance,
+        args: &[Argument],
+        think_attrs: &Option<ThinkAttributes>,
+        context: Arc<ExecutionContext>,
+        policies: Vec<Policy>,
+    ) -> EvalResult<ProviderRequest> {
+        let (query, tail_args) = self.query_from_args(args, context.clone()).await?;
+        let parameters = self
+            .eval_arguments(tail_args.as_slice(), context.clone())
+            .await?;
+        let input = RequestInput { query, parameters };
+
+        // 実行状態の取得
+        let state = ExecutionState {
+            session_id: context.session_id().await?,
+            policies,
+            timestamp: Timestamp::default(),
+            agent_name: context.agent_name().to_string(),
+            agent_info: context.agent_info().clone(),
+            trace_id: context.generate_trace_id(),
+        };
+
+        let mut config = provider.config.clone();
+        if let Some(attrs) = think_attrs {
+            if let Some(model) = attrs.model.clone() {
+                config.common_config.model = model;
+            }
+            if let Some(temperature) = attrs.temperature {
+                config.common_config.temperature = temperature as f32;
+            }
+            if let Some(max_tokens) = attrs.max_tokens {
+                config.common_config.max_tokens = max_tokens as usize;
+            }
+            if let Some(retry) = attrs.retry.clone() {
+                config.provider_specific.insert(
+                    "retry".to_string(),
+                    serde_json::to_value(retry).map_err(EvalError::from)?,
+                );
+            }
+        }
+
+        Ok(ProviderRequest {
+            input,
+            state,
+            config,
+        })
+    }
+
+    async fn query_from_args(
+        &self,
+        args: &[Argument],
+        context: Arc<ExecutionContext>,
+    ) -> EvalResult<(Value, Vec<Argument>)> {
+        if args.len() == 1 {
+            let content = match args.get(0) {
+                Some(Argument::Positional(expr)) => self.eval_expression(expr, context).await?,
+                Some(Argument::Named { value, .. }) => self.eval_expression(value, context).await?,
+                None => Value::Null,
+            };
+            return Ok((content, vec![]));
+        }
+
+        if let Some(Argument::Named { value, .. }) = args
+            .iter()
+            .find(|arg| matches!(arg, Argument::Named { name, .. } if name == "query"))
+        {
+            let filter_not_query = args
+                .iter()
+                .filter(|arg| !matches!(arg, Argument::Named { name, .. } if name == "query"))
+                .cloned()
+                .collect::<Vec<Argument>>();
+            return Ok((
+                self.eval_expression(value, context).await?,
+                filter_not_query,
+            ));
+        }
+
+        if let Some(Argument::Named { value, .. }) = args
+            .iter()
+            .find(|arg| matches!(arg, Argument::Named { name, .. } if name == "query"))
+        {
+            let filter_not_query = args
+                .iter()
+                .filter(|arg| !matches!(arg, Argument::Named { name, .. } if name == "query"))
+                .cloned()
+                .collect::<Vec<Argument>>();
+            return Ok((
+                self.eval_expression(value, context).await?,
+                filter_not_query,
+            ));
+        }
+        if let Some(Argument::Named { value, .. }) = args
+            .iter()
+            .find(|arg| matches!(arg, Argument::Named { name, .. } if name == "message"))
+        {
+            let filter_not_query = args
+                .iter()
+                .filter(|arg| !matches!(arg, Argument::Named { name, .. } if name == "message"))
+                .cloned()
+                .collect::<Vec<Argument>>();
+            return Ok((
+                self.eval_expression(value, context).await?,
+                filter_not_query,
+            ));
+        }
+        if let Some(arg) = args.get(0) {
+            let tail = args[1..].to_vec();
+            if let Argument::Positional(expr) = arg {
+                return Ok((self.eval_expression(expr, context).await?, tail));
+            }
+        }
+        Ok((Value::Null, args.to_vec()))
     }
 
     fn collect_policies(

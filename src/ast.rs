@@ -367,6 +367,7 @@ use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use proc_macro2::TokenStream;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 // リクエストオプション
@@ -437,13 +438,13 @@ pub enum PromptGeneratorType {
     // Custom(String),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RetryConfig {
     pub max_attempts: u64,
     pub delay: RetryDelay,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RetryDelay {
     Fixed(u64), // ミリ秒
     Exponential {
