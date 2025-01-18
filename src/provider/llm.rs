@@ -34,6 +34,8 @@ type TokenUsage = (usize, usize);
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
     use crate::{
         config::{CommonConfig, EndpointConfig, ProviderConfig},
@@ -56,17 +58,13 @@ mod tests {
             },
             provider_specific: {
                 let mut provider_specific = HashMap::new();
-                provider_specific.insert(
-                    "Hello".to_string(),
-                    serde_json::Value::String("World".to_string()),
-                );
+                provider_specific.insert("Hello".to_string(), json!("World"));
                 provider_specific
             },
             provider_type: ProviderType::SimpleExpert,
             endpoint: EndpointConfig::default(),
             plugin_configs: HashMap::new(),
         };
-        let knowledge_base = Arc::new(KnowledgeBase::from(&config));
         let provider = SimpleExpertProviderLLM::new("test");
         let response = provider.send_message("Hello", &config).await.unwrap();
         assert_eq!(response.content, "World");

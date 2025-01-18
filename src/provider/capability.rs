@@ -49,7 +49,7 @@ pub enum CapabilityType {
 }
 
 /// Capability管理構造体
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Capabilities {
     capabilities: HashSet<CapabilityType>,
 }
@@ -66,14 +66,6 @@ impl From<Vec<CapabilityType>> for Capabilities {
     fn from(capabilities: Vec<CapabilityType>) -> Self {
         Self {
             capabilities: HashSet::from_iter(capabilities),
-        }
-    }
-}
-
-impl Default for Capabilities {
-    fn default() -> Self {
-        Self {
-            capabilities: HashSet::new(),
         }
     }
 }
@@ -115,6 +107,12 @@ impl Capabilities {
         let mut new_capabilities = self.capabilities.clone();
         new_capabilities.extend(s.capabilities.iter().cloned());
         Capabilities::new(new_capabilities)
+    }
+
+    pub(crate) fn default() -> Self {
+        Self {
+            capabilities: HashSet::new(),
+        }
     }
 }
 

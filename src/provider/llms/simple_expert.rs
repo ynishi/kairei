@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use dashmap::DashMap;
-use serde_json::json;
 use tracing::debug;
 
 use crate::{
@@ -52,7 +51,12 @@ impl From<&ProviderConfig> for KnowledgeBase {
     fn from(config: &ProviderConfig) -> Self {
         let values = DashMap::new();
         for (key, value) in config.provider_specific.clone() {
-            values.insert(key, json!(value).to_string());
+            let value = if let Some(value) = value.as_str() {
+                value.to_string()
+            } else {
+                value.to_string()
+            };
+            values.insert(key, value);
         }
         KnowledgeBase::new(values)
     }
@@ -66,7 +70,7 @@ impl ProviderLLM for SimpleExpertProviderLLM {
         config: &ProviderConfig,
     ) -> ProviderResult<LLMResponse> {
         let knowledge_base = KnowledgeBase::from(config);
-        let responses: Vec<String> = self.get_answer(&prompt, knowledge_base);
+        let responses: Vec<String> = self.get_answer(prompt, knowledge_base);
         if responses.is_empty() {
             return Err(ProviderError::ApiError("No response found".to_string()));
         }
