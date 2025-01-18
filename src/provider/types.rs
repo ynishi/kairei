@@ -6,10 +6,7 @@ use thiserror::Error;
 
 use crate::{config::ProviderConfig, timestamp::Timestamp};
 
-use super::{
-    capability::CapabilityType,
-    provider::{Provider, ProviderSecret},
-};
+use super::{capability::CapabilityType, provider::ProviderSecret};
 
 /// LLMプロバイダーの基本トレイト
 #[async_trait]

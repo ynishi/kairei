@@ -36,8 +36,8 @@ impl Default for StandardProvider {
 impl Provider for StandardProvider {
     async fn initialize(
         &self,
-        config: &ProviderConfig,
-        secret: &ProviderSecret,
+        _config: &ProviderConfig,
+        _secret: &ProviderSecret,
     ) -> ProviderResult<()> {
         let required = self.required_capabilities();
         let current = self.capabilities();
@@ -55,7 +55,8 @@ impl Provider for StandardProvider {
         {
             // 1. プラグインによるセクション生成
             let context = PluginContext {
-                request: &request,
+                context,
+                request,
                 configs: &request.config.plugin_configs,
             };
             let sections = self.generate_plugin_sections(&context).await?;

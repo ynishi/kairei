@@ -18,7 +18,7 @@ impl Generator for PromptGenerator {
     async fn generate(&self, sections: Vec<Section>) -> ProviderResult<String> {
         let mut prompt = String::new();
         for section in sections {
-            prompt.push_str(&format!("{}\n\n", section.to_string()));
+            prompt.push_str(&format!("{}\n\n", section));
         }
 
         if let Some(optimizer) = &self.optimizer {

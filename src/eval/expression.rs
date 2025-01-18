@@ -311,7 +311,7 @@ impl ExpressionEvaluator {
         context: Arc<ExecutionContext>,
     ) -> EvalResult<(Value, Vec<Argument>)> {
         if args.len() == 1 {
-            let content = match args.get(0) {
+            let content = match args.first() {
                 Some(Argument::Positional(expr)) => self.eval_expression(expr, context).await?,
                 Some(Argument::Named { value, .. }) => self.eval_expression(value, context).await?,
                 None => Value::Null,
@@ -362,7 +362,7 @@ impl ExpressionEvaluator {
                 filter_not_query,
             ));
         }
-        if let Some(arg) = args.get(0) {
+        if let Some(arg) = args.first() {
             let tail = args[1..].to_vec();
             if let Argument::Positional(expr) = arg {
                 return Ok((self.eval_expression(expr, context).await?, tail));

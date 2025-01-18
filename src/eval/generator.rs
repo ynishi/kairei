@@ -25,6 +25,18 @@ pub struct PromptMeta {
 
 pub struct StandardPromptGenerator;
 
+impl Default for StandardPromptGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StandardPromptGenerator {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
 #[async_trait]
 impl PromptGenerator for StandardPromptGenerator {
     async fn generate_prompt(
