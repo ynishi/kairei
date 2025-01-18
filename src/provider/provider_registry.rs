@@ -7,23 +7,40 @@ use crate::{
     config::{ProviderConfig, ProviderConfigs, SecretConfig},
     event_bus::{ErrorEvent, Event, EventBus, Value},
     event_registry::EventType,
+    provider::llms::simple_expert::SimpleExpertProviderLLM,
+    timestamp::Timestamp,
 };
 
 use super::{
-    openai_assistant::OpenAIAssistantProvider,
+    provider::{Provider, ProviderSecret, ProviderType},
     provider_secret::SecretRegistry,
-    simple_expert::SimpleExpertProvider,
-    types::{
-        LLMProvider, ProviderError, ProviderInstance, ProviderResult, ProviderSecret,
-        ProviderState, ProviderType,
-    },
+    providers::standard::StandardProvider,
+    types::{ProviderError, ProviderMetrix, ProviderResult},
 };
+
+// For Data in Registry
+#[derive(Clone)]
+pub struct ProviderInstance {
+    pub config: ProviderConfig,
+    pub provider: Arc<dyn Provider>,
+    pub secret: ProviderSecret,
+}
+
+impl Default for ProviderInstance {
+    fn default() -> Self {
+        Self {
+            config: ProviderConfig::default(),
+            provider: Arc::new(StandardProvider::default()),
+            secret: ProviderSecret::default(),
+        }
+    }
+}
 
 /// プロバイダーリポジトリ
 pub struct ProviderRegistry {
     configs: ProviderConfigs,
     providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
-    states: Arc<DashMap<String, Arc<RwLock<ProviderState>>>>,
+    states: Arc<DashMap<String, Arc<RwLock<ProviderMetrix>>>>,
     secret_registry: Arc<SecretRegistry>,
     primary_provider: Arc<RwLock<Option<String>>>,
     event_bus: Arc<EventBus>,
@@ -89,7 +106,7 @@ impl ProviderRegistry {
     pub async fn register_provider_with(
         &self,
         name: &str,
-        provider: Arc<dyn LLMProvider>,
+        provider: Arc<dyn Provider>,
     ) -> ProviderResult<()> {
         let secret = self.secret_registry.get_secret(name)?;
         let config = self
@@ -107,20 +124,17 @@ impl ProviderRegistry {
     pub async fn register_provider_with_config(
         &self,
         name: &str,
-        provider: Arc<dyn LLMProvider>,
+        provider: Arc<dyn Provider>,
         config: &ProviderConfig,
         secret: &ProviderSecret,
     ) -> ProviderResult<()> {
-        // 設定のバリデーション
-        provider.validate_config(config).await?;
-
         // プロバイダーの初期化
-        let provider = provider.initialize(config, secret).await?;
+        provider.initialize(config, secret).await?;
 
         // 状態の初期化
-        let state = ProviderState {
+        let state = ProviderMetrix {
             is_healthy: true,
-            last_health_check: std::time::SystemTime::now(),
+            last_health_check: Timestamp::default(),
             error_count: 0,
             last_error: None,
         };
@@ -195,7 +209,7 @@ impl ProviderRegistry {
     pub async fn get_provider_state(
         &self,
         name: &str,
-    ) -> ProviderResult<Arc<RwLock<ProviderState>>> {
+    ) -> ProviderResult<Arc<RwLock<ProviderMetrix>>> {
         self.states
             .get(name)
             .map(|state| state.value().clone())
@@ -222,7 +236,7 @@ impl ProviderRegistry {
         if let Some(state) = self.states.get(name) {
             let mut value = state.write().await;
             value.is_healthy = health_result.is_ok();
-            value.last_health_check = std::time::SystemTime::now();
+            value.last_health_check = Timestamp::now();
             if let Err(err) = &health_result {
                 value.error_count += 1;
                 value.last_error = Some(err.to_string());
@@ -328,7 +342,7 @@ impl ProviderRegistry {
     pub async fn create_provider(
         &self,
         provider_type: &ProviderType,
-    ) -> ProviderResult<Arc<dyn LLMProvider>> {
+    ) -> ProviderResult<Arc<dyn Provider>> {
         match provider_type {
             ProviderType::OpenAIAssistant => self.create_assistant().await,
             ProviderType::SimpleExpert => self.create_simple_expert().await,
@@ -336,12 +350,15 @@ impl ProviderRegistry {
         }
     }
 
-    pub async fn create_assistant(&self) -> ProviderResult<Arc<dyn LLMProvider>> {
-        Ok(Arc::new(OpenAIAssistantProvider::new()))
+    pub async fn create_assistant(&self) -> ProviderResult<Arc<dyn Provider>> {
+        todo!()
+        // Ok(Arc::new(OpenAIAssistantProvider::new()))
     }
 
-    pub async fn create_simple_expert(&self) -> ProviderResult<Arc<dyn LLMProvider>> {
-        Ok(Arc::new(SimpleExpertProvider::default()))
+    pub async fn create_simple_expert(&self) -> ProviderResult<Arc<dyn Provider>> {
+        Ok(Arc::new(StandardProvider::new(Arc::new(
+            SimpleExpertProviderLLM::new("simple_expert"),
+        ))))
     }
 }
 
@@ -353,7 +370,10 @@ mod tests {
 
     use crate::{
         config::{CommonConfig, EndpointConfig, ProviderConfig, ProviderSecretConfig},
-        provider::types::ProviderSecret,
+        provider::{
+            capability::Capabilities,
+            request::{ProviderContext, ProviderRequest, ProviderResponse},
+        },
     };
 
     use super::*;
@@ -364,49 +384,31 @@ mod tests {
     }
 
     #[async_trait]
-    impl LLMProvider for MockProvider {
+    impl Provider for MockProvider {
+        async fn execute(
+            &self,
+            _context: &ProviderContext,
+            _request: &ProviderRequest,
+        ) -> ProviderResult<ProviderResponse> {
+            todo!()
+        }
+        fn capabilities(&self) -> Capabilities {
+            todo!()
+        }
         fn name(&self) -> &str {
             &self.name
         }
 
+        /// 初期化処理
         async fn initialize(
             &self,
             _config: &ProviderConfig,
             _secret: &ProviderSecret,
-        ) -> ProviderResult<Arc<dyn LLMProvider>> {
-            Ok(Arc::new(self.clone()))
+        ) -> ProviderResult<()> {
+            Ok(())
         }
 
         async fn shutdown(&self) -> ProviderResult<()> {
-            Ok(())
-        }
-
-        async fn validate_config(&self, _config: &ProviderConfig) -> ProviderResult<()> {
-            Ok(())
-        }
-
-        async fn create_assistant(&self, _config: &ProviderConfig) -> ProviderResult<String> {
-            Ok("mock_assistant_id".to_string())
-        }
-
-        async fn create_thread(&self) -> ProviderResult<String> {
-            Ok("mock_thread_id".to_string())
-        }
-
-        async fn send_message(
-            &self,
-            _thread_id: &str,
-            _assistant_id: &str,
-            _content: &str,
-        ) -> ProviderResult<String> {
-            Ok("mock_response".to_string())
-        }
-
-        async fn delete_thread(&self, _thread_id: &str) -> ProviderResult<()> {
-            Ok(())
-        }
-
-        async fn health_check(&self) -> ProviderResult<()> {
             Ok(())
         }
     }
@@ -428,6 +430,7 @@ mod tests {
                 },
                 provider_specific: HashMap::new(),
                 endpoint: EndpointConfig::default(),
+                plugin_configs: HashMap::new(),
             };
             provider_configs.insert(name.to_string(), config);
 

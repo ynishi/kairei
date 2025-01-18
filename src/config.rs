@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Duration};
 
-use crate::{provider::types::ProviderType, Error, InternalResult};
+use crate::{provider::provider::ProviderType, Error, InternalResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemConfig {
@@ -171,6 +171,8 @@ pub struct ProviderConfig {
     // プロバイダー固有設定
     #[serde(default)]
     pub provider_specific: HashMap<String, serde_json::Value>,
+
+    pub plugin_configs: HashMap<String, PluginConfig>,
 }
 
 impl Default for ProviderConfig {
@@ -181,8 +183,37 @@ impl Default for ProviderConfig {
             common_config: CommonConfig::default(),
             endpoint: EndpointConfig::default(),
             provider_specific: HashMap::new(),
+            plugin_configs: HashMap::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PluginConfig {
+    Memory(MemoryConfig),
+    Rag(RagConfig),
+    Search(SearchConfig),
+}
+
+// プラグイン固有の設定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryConfig {
+    pub window: Duration,
+    pub max_items: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RagConfig {
+    pub collection_name: String,
+    pub max_results: usize,
+    pub similarity_threshold: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchConfig {
+    pub search_window: Duration,
+    pub max_results: usize,
+    pub filters: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
