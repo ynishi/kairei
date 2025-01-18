@@ -39,12 +39,9 @@ mod tests {
     use super::*;
     use crate::{
         config::{CommonConfig, EndpointConfig, ProviderConfig},
-        provider::{
-            llms::simple_expert::{KnowledgeBase, SimpleExpertProviderLLM},
-            provider::ProviderType,
-        },
+        provider::{llms::simple_expert::SimpleExpertProviderLLM, provider::ProviderType},
     };
-    use std::{collections::HashMap, sync::Arc};
+    use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_send_message() {
