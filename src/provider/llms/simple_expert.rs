@@ -7,6 +7,7 @@ use crate::{
     provider::{
         capability::{Capabilities, CapabilityType},
         llm::{LLMResponse, ProviderLLM, ResponseMetadata},
+        provider::ProviderSecret,
         types::{ProviderError, ProviderResult},
     },
     timestamp::Timestamp,
@@ -31,10 +32,8 @@ impl KnowledgeBase {
 }
 
 impl SimpleExpertProviderLLM {
-    pub fn new(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-        }
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
     }
 
     pub fn get_answer(&self, prompt: &str, knowledge_base: KnowledgeBase) -> Vec<String> {
@@ -92,5 +91,13 @@ impl ProviderLLM for SimpleExpertProviderLLM {
 
     fn name(&self) -> &str {
         &self.name
+    }
+
+    async fn initialize(
+        &mut self,
+        _config: &ProviderConfig,
+        _secret: &ProviderSecret,
+    ) -> ProviderResult<()> {
+        Ok(())
     }
 }

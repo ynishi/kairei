@@ -12,6 +12,7 @@ use crate::{
 };
 
 use super::{
+    llms::{openai_assistant::OpenAIAssistantProviderLLM, openai_chat::OpenAIChatProviderLLM},
     provider::{Provider, ProviderSecret, ProviderType},
     provider_secret::SecretRegistry,
     providers::standard::StandardProvider,
@@ -80,9 +81,15 @@ impl ProviderRegistry {
         name: &str,
         provider_type: ProviderType,
     ) -> ProviderResult<()> {
-        let provider = self.create_provider(&provider_type).await?;
-
-        self.register_provider_with(name, provider).await?;
+        let config = self.configs.providers.get(name).ok_or_else(|| {
+            ProviderError::ProviderNotFound(format!("Provider Config not found: {}", name))
+        })?;
+        let secret = self.secret_registry.get_secret(name)?;
+        let provider = self
+            .create_provider(name, config, &secret, &provider_type)
+            .await?;
+        self.register_provider_with(name, config, &secret, provider)
+            .await?;
 
         let _ = self
             .event_bus
@@ -106,31 +113,10 @@ impl ProviderRegistry {
     pub async fn register_provider_with(
         &self,
         name: &str,
-        provider: Arc<dyn Provider>,
-    ) -> ProviderResult<()> {
-        let secret = self.secret_registry.get_secret(name)?;
-        let config = self
-            .configs
-            .providers
-            .get(name)
-            .ok_or(ProviderError::ProviderNotFound(name.to_string()))?;
-
-        self.register_provider_with_config(name, provider, config, &secret)
-            .await?;
-
-        Ok(())
-    }
-
-    pub async fn register_provider_with_config(
-        &self,
-        name: &str,
-        provider: Arc<dyn Provider>,
         config: &ProviderConfig,
         secret: &ProviderSecret,
+        provider: Arc<dyn Provider>,
     ) -> ProviderResult<()> {
-        // プロバイダーの初期化
-        provider.initialize(config, secret).await?;
-
         // 状態の初期化
         let state = ProviderMetrix {
             is_healthy: true,
@@ -148,7 +134,6 @@ impl ProviderRegistry {
         self.providers.insert(name.to_string(), Arc::new(insance));
         self.states
             .insert(name.to_string(), Arc::new(RwLock::new(state)));
-
         Ok(())
     }
 
@@ -338,27 +323,47 @@ impl ProviderRegistry {
     }
 
     /// Factory method to create a new assistant
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, config, secret))]
     pub async fn create_provider(
         &self,
+        name: &str,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
         provider_type: &ProviderType,
     ) -> ProviderResult<Arc<dyn Provider>> {
         match provider_type {
-            ProviderType::OpenAIAssistant => self.create_assistant().await,
+            ProviderType::OpenAIAssistant => self.create_assistant(config, secret).await,
             ProviderType::SimpleExpert => self.create_simple_expert().await,
+            ProviderType::OpenAIChat => self.create_chat(config, secret).await,
             _ => Err(ProviderError::UnknownProvider(provider_type.to_string())),
         }
     }
 
-    pub async fn create_assistant(&self) -> ProviderResult<Arc<dyn Provider>> {
-        todo!()
-        // Ok(Arc::new(OpenAIAssistantProvider::new()))
+    pub async fn create_assistant(
+        &self,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
+    ) -> ProviderResult<Arc<dyn Provider>> {
+        let llm = OpenAIAssistantProviderLLM::new(ProviderType::OpenAIAssistant);
+        let mut provider = StandardProvider::new(llm, vec![]);
+        provider.initialize(config, secret).await?;
+        Ok(Arc::new(provider))
     }
 
     pub async fn create_simple_expert(&self) -> ProviderResult<Arc<dyn Provider>> {
-        Ok(Arc::new(StandardProvider::new(Arc::new(
-            SimpleExpertProviderLLM::new("simple_expert"),
-        ))))
+        let llm = SimpleExpertProviderLLM::new(ProviderType::SimpleExpert);
+        Ok(Arc::new(StandardProvider::new(llm, vec![])))
+    }
+
+    pub async fn create_chat(
+        &self,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
+    ) -> ProviderResult<Arc<dyn Provider>> {
+        let llm = OpenAIChatProviderLLM::new(ProviderType::OpenAIChat);
+        let mut provider = StandardProvider::new(llm, vec![]);
+        provider.initialize(config, secret).await?;
+        Ok(Arc::new(provider))
     }
 }
 
@@ -392,7 +397,7 @@ mod tests {
         ) -> ProviderResult<ProviderResponse> {
             todo!()
         }
-        fn capabilities(&self) -> Capabilities {
+        async fn capabilities(&self) -> Capabilities {
             todo!()
         }
         fn name(&self) -> &str {
@@ -401,7 +406,7 @@ mod tests {
 
         /// 初期化処理
         async fn initialize(
-            &self,
+            &mut self,
             _config: &ProviderConfig,
             _secret: &ProviderSecret,
         ) -> ProviderResult<()> {
@@ -462,8 +467,11 @@ mod tests {
             name: "mock".to_string(),
         };
 
+        let config = ProviderConfig::default();
+        let secret = ProviderSecret::default();
+
         registry
-            .register_provider_with(&name, Arc::new(provider))
+            .register_provider_with(&name, &config, &secret, Arc::new(provider))
             .await
             .unwrap();
 
@@ -491,15 +499,19 @@ mod tests {
             names.push(format!("mock_{}", i));
         }
         let registry = Arc::new(get_registry(names.as_slice()).await);
+        let config = ProviderConfig::default();
+        let secret = ProviderSecret::default();
 
         // 並行アクセスのテスト
         let mut handles = vec![];
         for name in names.clone() {
             let registry_clone = registry.clone();
+            let config_ref = config.clone();
+            let secret_ref = secret.clone();
             let handle = tokio::spawn(async move {
                 let provider = MockProvider { name: name.clone() };
                 registry_clone
-                    .register_provider_with(&name, Arc::new(provider))
+                    .register_provider_with(&name, &config_ref, &secret_ref, Arc::new(provider))
                     .await
             });
             handles.push(handle);

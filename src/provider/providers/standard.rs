@@ -1,6 +1,8 @@
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use async_trait::async_trait;
+use tracing::debug;
 
 use crate::{
     config::ProviderConfig,
@@ -10,6 +12,7 @@ use crate::{
         llm::{LLMResponse, ProviderLLM},
         llms::simple_expert::SimpleExpertProviderLLM,
         plugin::{PluginContext, ProviderPlugin},
+        plugins::general_prompt::GeneralPromptPlugin,
         provider::{Provider, ProviderSecret, Section},
         request::{ProviderContext, ProviderRequest, ProviderResponse},
         types::ProviderResult,
@@ -17,7 +20,8 @@ use crate::{
 };
 
 pub struct StandardProvider {
-    llm: Arc<dyn ProviderLLM>,
+    name: String,
+    llm: Arc<RwLock<dyn ProviderLLM>>,
     plugins: Vec<Arc<dyn ProviderPlugin>>,
     generator: Arc<dyn Generator>,
 }
@@ -25,8 +29,12 @@ pub struct StandardProvider {
 impl Default for StandardProvider {
     fn default() -> Self {
         Self {
-            llm: Arc::new(SimpleExpertProviderLLM::new("SimpleExpertProviderLLM")),
-            plugins: Vec::new(),
+            name: "StandardProvider".to_string(),
+            llm: Arc::new(RwLock::new(SimpleExpertProviderLLM::new(
+                "SimpleExpertProviderLLM",
+            ))),
+
+            plugins: vec![Arc::new(GeneralPromptPlugin)],
             generator: Arc::new(PromptGenerator::new(None)),
         }
     }
@@ -35,12 +43,14 @@ impl Default for StandardProvider {
 #[async_trait]
 impl Provider for StandardProvider {
     async fn initialize(
-        &self,
-        _config: &ProviderConfig,
-        _secret: &ProviderSecret,
+        &mut self,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
     ) -> ProviderResult<()> {
+        self.llm.write().await.initialize(config, secret).await?;
+
         let required = self.required_capabilities();
-        let current = self.capabilities();
+        let current = self.capabilities().await;
 
         required.unsupported(&current)?;
 
@@ -52,43 +62,49 @@ impl Provider for StandardProvider {
         context: &ProviderContext,
         request: &ProviderRequest,
     ) -> ProviderResult<ProviderResponse> {
-        {
-            // 1. プラグインによるセクション生成
-            let context = PluginContext {
-                context,
-                request,
-                configs: &request.config.plugin_configs,
-            };
-            let sections = self.generate_plugin_sections(&context).await?;
+        // 1. プラグインによるセクション生成
+        let context = Arc::new(PluginContext {
+            context,
+            request,
+            configs: &request.config.plugin_configs,
+        });
+        let sections = self.generate_plugin_sections(&context).await?;
+        debug!("sections: {:?}", sections);
+        // 2. プロンプトの生成
+        let prompt = self.generator.generate(sections).await?;
+        debug!("prompt: {}", prompt);
+        // 3. LLMの実行
+        let llm_response = self
+            .llm
+            .read()
+            .await
+            .send_message(&prompt, &request.config)
+            .await?;
+        debug!("llm_response: {:?}", llm_response);
 
-            // 2. プロンプトの生成
-            let prompt = self.generator.generate(sections).await?;
+        // 4. プラグインの後処理
+        self.process_plugins_response(&context, &llm_response)
+            .await?;
 
-            // 3. LLMの実行
-            let llm_response = self.llm.send_message(&prompt, &request.config).await?;
-
-            // 4. プラグインの後処理
-            self.process_plugins_response(&context, &llm_response)
-                .await?;
-
-            // 5. レスポンスの構築
-            Ok(ProviderResponse::from(llm_response))
-        }
+        // 5. レスポンスの構築
+        Ok(ProviderResponse::from(llm_response))
     }
-    fn capabilities(&self) -> Capabilities {
-        self.llm
-            .capabilities()
-            .or(self.plugins.iter().fold(Capabilities::default(), |acc, p| {
+    async fn capabilities(&self) -> Capabilities {
+        self.llm.read().await.capabilities().or(self
+            .plugins
+            .iter()
+            .fold(Capabilities::default(), |acc, p| {
                 acc.or(Capabilities::from(p.capability()))
             }))
     }
 
     fn name(&self) -> &str {
-        self.llm.name()
+        self.name.as_str()
     }
 
     async fn shutdown(&self) -> ProviderResult<()> {
-        todo!()
+        self.llm.write().await.stop().await?;
+        Ok(())
     }
 }
 
@@ -99,11 +115,23 @@ impl RequiresCapabilities for StandardProvider {
 }
 
 impl StandardProvider {
-    pub fn new(llm: Arc<dyn ProviderLLM>) -> Self {
+    pub fn new<T: ProviderLLM + 'static>(llm: T, plugins: Vec<Arc<dyn ProviderPlugin>>) -> Self {
+        let default = Self::default();
+        let name = llm.name().to_string();
+        let llm = Arc::new(RwLock::new(llm));
+        if plugins.is_empty() {
+            return Self {
+                name,
+                llm,
+                plugins: default.plugins,
+                generator: default.generator,
+            };
+        }
         Self {
+            name,
             llm,
-            plugins: Vec::new(),
-            generator: Arc::new(PromptGenerator::new(None)),
+            plugins,
+            generator: default.generator,
         }
     }
 
@@ -121,7 +149,7 @@ impl StandardProvider {
         let mut plugins = self.plugins.clone();
         plugins.sort_by_key(|p| p.priority());
 
-        let llm_capabilities = self.llm.capabilities();
+        let llm_capabilities = self.llm.read().await.capabilities();
 
         for plugin in &plugins {
             if llm_capabilities.supports(&plugin.capability()) {
@@ -182,6 +210,14 @@ mod tests {
         fn name(&self) -> &str {
             &self.name
         }
+
+        async fn initialize(
+            &mut self,
+            _config: &ProviderConfig,
+            _secret: &ProviderSecret,
+        ) -> ProviderResult<()> {
+            Ok(())
+        }
     }
 
     struct MockPlugin {
@@ -220,10 +256,10 @@ mod tests {
     // response has output
     #[tokio::test]
     async fn test_execute() {
-        let llm = Arc::new(MockLLM {
+        let llm = MockLLM {
             name: "mock_llm".to_string(),
             capabilities: Capabilities::from(CapabilityType::Generate),
-        });
+        };
 
         let plugin = Arc::new(MockPlugin {
             name: "mock_plugin".to_string(),
@@ -231,7 +267,7 @@ mod tests {
             priority: 0,
         });
 
-        let mut provider = StandardProvider::new(llm);
+        let mut provider = StandardProvider::new(llm, vec![]);
         provider.register_plugin(plugin).unwrap();
 
         let contxt = ProviderContext::default();
@@ -246,10 +282,10 @@ mod tests {
     // response has output
     #[tokio::test]
     async fn test_execute_with_plugin() {
-        let llm = Arc::new(MockLLM {
+        let llm = MockLLM {
             name: "mock_llm".to_string(),
             capabilities: Capabilities::from(CapabilityType::Generate),
-        });
+        };
 
         let plugin = Arc::new(MockPlugin {
             name: "mock_plugin".to_string(),
@@ -257,7 +293,7 @@ mod tests {
             priority: 0,
         });
 
-        let mut provider = StandardProvider::new(llm);
+        let mut provider = StandardProvider::new(llm, vec![]);
         provider.register_plugin(plugin).unwrap();
 
         let contxt = ProviderContext::default();
@@ -269,10 +305,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_with_multiple_plugins() {
-        let llm = Arc::new(MockLLM {
+        let llm = MockLLM {
             name: "mock_llm".to_string(),
             capabilities: Capabilities::from(CapabilityType::Generate),
-        });
+        };
 
         let plugin1 = Arc::new(MockPlugin {
             name: "mock_plugin1".to_string(),
@@ -286,7 +322,7 @@ mod tests {
             priority: 1,
         });
 
-        let mut provider = StandardProvider::new(llm);
+        let mut provider = StandardProvider::new(llm, vec![]);
         provider.register_plugin(plugin1).unwrap();
         provider.register_plugin(plugin2).unwrap();
 
@@ -299,10 +335,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_with_llm_plugin() {
-        let llm = Arc::new(MockLLM {
+        let llm = MockLLM {
             name: "mock_llm".to_string(),
             capabilities: Capabilities::from(CapabilityType::Generate),
-        });
+        };
 
         let plugin = Arc::new(MockPlugin {
             name: "mock_plugin".to_string(),
@@ -310,7 +346,7 @@ mod tests {
             priority: 0,
         });
 
-        let mut provider = StandardProvider::new(llm);
+        let mut provider = StandardProvider::new(llm, vec![]);
         provider.register_plugin(plugin).unwrap();
 
         let contxt = ProviderContext::default();
@@ -322,10 +358,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_with_llm_plugin_and_plugin() {
-        let llm = Arc::new(MockLLM {
+        let llm = MockLLM {
             name: "mock_llm".to_string(),
             capabilities: Capabilities::from(CapabilityType::Generate),
-        });
+        };
 
         let plugin1 = Arc::new(MockPlugin {
             name: "mock_plugin1".to_string(),
@@ -339,7 +375,7 @@ mod tests {
             priority: 1,
         });
 
-        let mut provider = StandardProvider::new(llm);
+        let mut provider = StandardProvider::new(llm, vec![]);
         provider.register_plugin(plugin1).unwrap();
         provider.register_plugin(plugin2).unwrap();
 

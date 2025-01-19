@@ -15,11 +15,11 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::agent_registry::AgentError;
-use crate::config::{ProviderConfig, SecretConfig};
+use crate::config::SecretConfig;
 use crate::context::AGENT_TYPE_CUSTOM_ALL;
 use crate::event_bus::EventError;
 use crate::native_feature::types::FeatureError;
-use crate::provider::provider::{ProviderSecret, ProviderType};
+use crate::provider::provider::ProviderType;
 use crate::provider::provider_registry::{ProviderInstance, ProviderRegistry};
 use crate::provider::types::ProviderError;
 use crate::request_manager::{RequestError, RequestManager};
@@ -781,15 +781,13 @@ impl System {
         &self,
         name: &str,
         provider_type: ProviderType,
-        config: ProviderConfig,
-        secret: ProviderSecret,
     ) -> SystemResult<()> {
         let registry = self.provider_registry.write().await;
-        let provider = registry.create_provider(&provider_type).await?;
         registry
-            .register_provider_with_config(name, provider, &config, &secret)
+            .register_provider(name, provider_type)
             .await
-            .map_err(SystemError::from)
+            .map_err(SystemError::from)?;
+        Ok(())
     }
 
     pub async fn get_provider(&self, name: &str) -> SystemResult<Arc<ProviderInstance>> {
@@ -924,8 +922,11 @@ mod tests {
     use std::time::Duration;
 
     use crate::{
-        ast, event_registry::EventType, AnswerDef, EventHandler, Expression, HandlerBlock, Literal,
-        ReactDef, RequestHandler, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
+        ast,
+        config::{ProviderConfig, ProviderConfigs, ProviderSecretConfig},
+        event_registry::EventType,
+        AnswerDef, EventHandler, Expression, HandlerBlock, Literal, ReactDef, RequestHandler,
+        StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
     };
 
     use super::*;
@@ -1021,24 +1022,26 @@ mod tests {
     async fn test_system_integration() {
         let default_name = "default";
         let mut system_config = SystemConfig::default();
-        system_config.provider_configs.primary_provider = Some(default_name.to_string());
+        let mut provider_configs = ProviderConfigs::default();
+        provider_configs.primary_provider = Some(default_name.to_string());
+        provider_configs.providers.insert(
+            default_name.to_string(),
+            ProviderConfig {
+                name: default_name.to_string(),
+                provider_type: ProviderType::SimpleExpert,
+                ..Default::default()
+            },
+        );
+        system_config.provider_configs = provider_configs;
 
-        let secret_config = SecretConfig::default();
+        let mut secret_config = SecretConfig::default();
+        secret_config
+            .providers
+            .insert(default_name.to_string(), ProviderSecretConfig::default());
         let system = System::new(&system_config, &secret_config).await;
 
-        let provider_config = ProviderConfig {
-            provider_type: ProviderType::OpenAIAssistant,
-            name: default_name.to_string(),
-            ..Default::default()
-        };
-
         system
-            .register_provider(
-                default_name,
-                ProviderType::OpenAIAssistant,
-                provider_config,
-                ProviderSecret::default(),
-            )
+            .register_provider(default_name, ProviderType::SimpleExpert)
             .await
             .unwrap();
 

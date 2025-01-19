@@ -1,6 +1,6 @@
 use crate::{config::ProviderConfig, timestamp::Timestamp};
 
-use super::{capability::Capabilities, types::*};
+use super::{capability::Capabilities, provider::ProviderSecret, types::*};
 use async_trait::async_trait;
 
 #[async_trait]
@@ -14,6 +14,17 @@ pub trait ProviderLLM: Send + Sync {
     fn capabilities(&self) -> Capabilities;
 
     fn name(&self) -> &str;
+
+    // ライフサイクル管理
+    async fn initialize(
+        &mut self,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
+    ) -> ProviderResult<()>;
+
+    async fn stop(&self) -> ProviderResult<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default, Clone)]

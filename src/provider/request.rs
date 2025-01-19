@@ -6,7 +6,7 @@ use crate::{
 
 use super::{llm::LLMResponse, provider::ProviderSecret};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ProviderRequest {
     // 1. 基本的な入力データ
     pub input: RequestInput,
@@ -19,14 +19,14 @@ pub struct ProviderRequest {
 type RuntimeConfig = ProviderConfig;
 
 // devide from Instance.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ProviderContext {
     pub config: ProviderConfig,
     pub secret: ProviderSecret,
 }
 
 // 1. 基本的な入力データ
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RequestInput {
     // メインのプロンプト/クエリ
     pub query: Value,
@@ -35,7 +35,7 @@ pub struct RequestInput {
 }
 
 // 2. 実行時の状態
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ExecutionState {
     // セッション管理
     pub session_id: String,
