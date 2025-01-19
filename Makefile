@@ -1,7 +1,10 @@
 .PHONY: build run test clippy fmt
 
 test:
-	cargo test --verbose
+	RUST_LOG=debug cargo test -p kairei $(CASE) --verbose
+
+test_all:
+	RUN_API_TESTS=true RUST_LOG=error cargo test
 
 fmt:
 	cargo clippy -- -D warnings

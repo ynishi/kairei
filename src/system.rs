@@ -8,15 +8,21 @@ use std::{
 };
 use thiserror::Error;
 use tokio::{
-    sync::{broadcast, oneshot, RwLock},
-    time::{sleep, timeout},
+    sync::{broadcast, RwLock},
+    time::sleep,
 };
-use tracing::{debug, info};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::agent_registry::AgentError;
+use crate::config::SecretConfig;
+use crate::context::AGENT_TYPE_CUSTOM_ALL;
 use crate::event_bus::EventError;
 use crate::native_feature::types::FeatureError;
+use crate::provider::provider::ProviderType;
+use crate::provider::provider_registry::{ProviderInstance, ProviderRegistry};
+use crate::provider::types::ProviderError;
+use crate::request_manager::{RequestError, RequestManager};
 use crate::runtime::RuntimeError;
 use crate::{
     agent_registry::AgentRegistry,
@@ -39,10 +45,11 @@ pub struct System {
     agent_registry: Arc<RwLock<AgentRegistry>>,
     ast_registry: Arc<RwLock<AstRegistry>>,
     feature_registry: Arc<RwLock<NativeFeatureRegistry>>,
+    provider_registry: Arc<RwLock<ProviderRegistry>>,
     shutdown_tx: broadcast::Sender<AgentType>, // Systemがシャットダウンシグナルを送信
     _shutdown_rx: broadcast::Receiver<AgentType>, // シャットダウンシグナルを受信
     // event request/response
-    pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
+    request_manager: Arc<RequestManager>,
     filtered_subscriptions: Arc<DashMap<Vec<EventType>, broadcast::Sender<Event>>>, // Vec<EventType>は Sorted　である必要がある
     // metrics
     started_at: DateTime<Utc>,
@@ -53,7 +60,7 @@ pub struct System {
 
 impl System {
     // System Lifecycles
-    pub async fn new(config: &SystemConfig) -> Self {
+    pub async fn new(config: &SystemConfig, secret_config: &SecretConfig) -> Self {
         let capacity = config.event_buffer_size;
         let (shutdown_tx, _) = broadcast::channel::<AgentType>(1); // 容量は1で十分
         let event_registry = Arc::new(RwLock::new(EventRegistry::new()));
@@ -70,25 +77,31 @@ impl System {
             config.native_feature_config.clone(),
         )));
         let _shutdown_rx = shutdown_tx.subscribe();
-        let pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>> =
-            Arc::new(DashMap::new());
-        let pending_requests_ref = pending_requests.clone();
+        let request_manager = Arc::new(RequestManager::new(
+            event_bus.clone(),
+            config.request_timeout,
+        ));
+        let request_manager_ref = request_manager.clone();
         let mut event_rx = event_bus.subscribe().0;
         let filtered_subscriptions = Arc::new(DashMap::new());
+        let provider_registry = Arc::new(RwLock::new(
+            ProviderRegistry::new(
+                config.provider_configs.clone(),
+                secret_config.clone(),
+                event_bus.clone(),
+            )
+            .await,
+        ));
 
         // Receive response.
         tokio::spawn(async move {
             while let Ok(event) = event_rx.recv().await {
-                debug!("event: {:?}", event);
-                if let Some(request_id) = event.event_type.request_id() {
-                    debug!("request_id: {}", request_id);
-                    if let Some((_, sender)) = pending_requests_ref.remove(request_id) {
-                        if let Some(value) = event.parameters.get("response") {
-                            let _ = sender.send(value.clone());
-                        } else {
-                            let _ = sender.send(Value::Null);
-                        }
-                    }
+                if event.event_type.is_response() {
+                    debug!(
+                        "Recv system response: request_id: {:?}",
+                        event.event_type.request_id()
+                    );
+                    let _ = request_manager_ref.handle_event(&event);
                 }
             }
         });
@@ -107,9 +120,10 @@ impl System {
             agent_registry,
             ast_registry,
             feature_registry,
+            provider_registry,
             shutdown_tx,
             _shutdown_rx,
-            pending_requests,
+            request_manager,
             filtered_subscriptions,
             started_at,
             uptime_instant,
@@ -131,6 +145,7 @@ impl System {
     pub async fn initialize(&mut self, root: ast::Root) -> SystemResult<()> {
         // call all registration methods
         self.register_native_features().await?;
+        self.register_providers().await?;
         self.register_world(&root.world_def).await?;
         self.register_builtin_agents().await?;
         self.register_initial_user_agents(root.micro_agent_defs)
@@ -152,6 +167,20 @@ impl System {
         registry.register().await?;
         self.update_system_status(complete_state).await;
         debug!("ended");
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub async fn register_providers(&self) -> SystemResult<()> {
+        let complete_state = EventType::SystemProvidersRegistered;
+        Self::check_start_transition(
+            self.last_status.read().await.last_event_type.clone(),
+            complete_state.clone(),
+        )?;
+
+        let registry = self.provider_registry.write().await;
+        registry.register_providers().await?;
+        self.update_system_status(complete_state).await;
         Ok(())
     }
 
@@ -246,6 +275,8 @@ impl System {
 
         self.start_native_features().await?;
 
+        self.start_providers().await?;
+
         self.start_world().await?;
         self.start_builtin_agents().await?;
         self.start_users_agents().await?;
@@ -258,6 +289,14 @@ impl System {
     async fn start_native_features(&self) -> SystemResult<()> {
         let registry = self.feature_registry.write().await;
         registry.start().await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn start_providers(&self) -> SystemResult<()> {
+        let registry = self.provider_registry.write().await;
+        // No need to start, just check health
+        registry.check_providers_health().await?;
         Ok(())
     }
 
@@ -286,8 +325,8 @@ impl System {
     #[tracing::instrument(skip(self))]
     async fn start_users_agents(&self) -> SystemResult<()> {
         let registry = self.agent_registry().read().await;
-        let agent_names =
-            registry.agent_names_by_types(vec![AgentType::Custom("user".to_string())]);
+        let agent_names = registry
+            .agent_names_by_types(vec![AgentType::User, AgentType::Custom("All".to_string())]);
         drop(registry);
 
         for agent_name in agent_names {
@@ -307,10 +346,9 @@ impl System {
         drop(config);
         // シャットダウンシグナルを送信
         self.shutdown_tx
-            .send(AgentType::Custom("All".to_string()))
+            .send(AgentType::Custom(AGENT_TYPE_CUSTOM_ALL.to_string()))
             .expect("Failed to send shutdown signal");
-        let registry = self.feature_registry.write().await;
-        registry.shutdown().await?;
+        // Agent のシャットダウン
         for agent_type in shutdown_sequence {
             self.shutdown_tx
                 .send(agent_type.clone())
@@ -338,6 +376,13 @@ impl System {
                 break;
             }
         }
+        // Provider のシャットダウン
+        let registry = self.provider_registry.write().await;
+        registry.shutdown().await?;
+
+        // Native Feature のシャットダウン
+        let registry = self.feature_registry.write().await;
+        registry.shutdown().await?;
 
         self.update_system_status(EventType::SystemStopped).await;
         Ok(())
@@ -442,14 +487,30 @@ impl System {
             count
         };
 
+        let primary = self
+            .provider_registry
+            .read()
+            .await
+            .get_primary_provider()
+            .await
+            .map_err(SystemError::from)?;
+
+        let providers = self.provider_registry.read().await.get_providers().clone();
+
         // 指定された数だけエージェントを作成
         for i in 0..count {
             let agent_name = format!("{}-{}-{}", name, request_id, i);
             let agent_def = ast_def.clone();
 
             let agent_data = Arc::new(
-                RuntimeAgentData::new(&agent_def, &self.event_bus(), AgentConfig::default())
-                    .await?,
+                RuntimeAgentData::new(
+                    &agent_def,
+                    &self.event_bus(),
+                    AgentConfig::default(),
+                    primary.clone(),
+                    providers.clone(),
+                )
+                .await?,
             );
 
             let registry = self.agent_registry.write().await;
@@ -528,12 +589,31 @@ impl System {
 
     /// Agent management
     pub async fn register_agent(&self, agent_name: &str) -> SystemResult<()> {
-        info!("register_agent: {}", agent_name);
+        debug!("register_agent: {}", agent_name);
         let ast_registry = self.ast_registry.read().await;
         let agent_def = ast_registry.get_agent_ast(agent_name).await?;
         drop(ast_registry);
+
+        let providers = self.provider_registry.read().await.get_providers().clone();
+
+        // プライマリプロバイダーの取得
+        let primary = self
+            .provider_registry
+            .read()
+            .await
+            .get_primary_provider()
+            .await
+            .map_err(SystemError::from)?;
+
         let runtime = Arc::new(
-            RuntimeAgentData::new(&agent_def, &self.event_bus, AgentConfig::default()).await?,
+            RuntimeAgentData::new(
+                &agent_def,
+                &self.event_bus,
+                AgentConfig::default(),
+                primary,
+                providers,
+            )
+            .await?,
         );
         let agent_registry = self.agent_registry.write().await;
         agent_registry
@@ -584,22 +664,13 @@ impl System {
                 });
             }
         };
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.pending_requests.insert(request_id.clone(), tx);
-        let event_bus = self.event_bus.clone();
-        event_bus.publish(event).await?;
-        let timeout_secs = 30;
-        match timeout(Duration::from_secs(timeout_secs), rx).await {
-            Ok(value) => value.map_err(|e| SystemError::ReceiveResponseFailed {
-                request_id: request_id.to_string(),
-                message: e.to_string(),
-            }),
-            Err(e) => Err(SystemError::ReceiveResponseTimeout {
-                request_id: request_id.to_string(),
-                timeout_secs,
-                message: e.to_string(),
-            }),
-        }
+        debug!("request_id: {}", request_id);
+        let event = self
+            .request_manager
+            .request(&event)
+            .await
+            .map_err(SystemError::from)?;
+        Ok(event.response_value())
     }
 
     pub async fn get_agent_state(
@@ -705,6 +776,31 @@ impl System {
             .await;
     }
 
+    /// provider management
+    pub async fn register_provider(
+        &self,
+        name: &str,
+        provider_type: ProviderType,
+    ) -> SystemResult<()> {
+        let registry = self.provider_registry.write().await;
+        registry
+            .register_provider(name, provider_type)
+            .await
+            .map_err(SystemError::from)?;
+        Ok(())
+    }
+
+    pub async fn get_provider(&self, name: &str) -> SystemResult<Arc<ProviderInstance>> {
+        let registry = self.provider_registry.read().await;
+        registry.get_provider(name).await.map_err(SystemError::from)
+    }
+
+    pub async fn set_primary_provider(&self, name: &str) -> SystemResult<()> {
+        let registry = self.provider_registry.write().await;
+        registry.set_default_provider(name).await?;
+        Ok(())
+    }
+
     /// basic accessors
     pub fn event_bus(&self) -> Arc<EventBus> {
         self.event_bus.clone()
@@ -730,7 +826,11 @@ impl System {
         match (current.clone(), next.clone()) {
             (EventType::SystemCreated, EventType::SystemNativeFeaturesRegistered) => Ok(()),
             (_, EventType::SystemNativeFeaturesRegistered) => err,
-            (EventType::SystemNativeFeaturesRegistered, EventType::SystemWorldRegistered) => Ok(()),
+            (EventType::SystemNativeFeaturesRegistered, EventType::SystemProvidersRegistered) => {
+                Ok(())
+            }
+            (_, EventType::SystemProvidersRegistered) => err,
+            (EventType::SystemProvidersRegistered, EventType::SystemWorldRegistered) => Ok(()),
             (_, EventType::SystemWorldRegistered) => err,
             (EventType::SystemWorldRegistered, EventType::SystemBuiltinAgentsRegistered) => Ok(()),
             (_, EventType::SystemBuiltinAgentsRegistered) => err,
@@ -783,12 +883,14 @@ pub enum SystemError {
     Event(#[from] EventError),
     #[error("Agent error: {0}")]
     Agent(#[from] AgentError),
-    // ast error
     #[error("AST error: {0}")]
     Ast(#[from] ASTError),
-    // feature
     #[error("Feature error: {0}")]
     Feature(#[from] FeatureError),
+    #[error("Provider error: {0}")]
+    Provider(#[from] ProviderError),
+    #[error("Request error: {0}")]
+    Request(#[from] RequestError),
     #[error("Scaling not enough agents: {base_name}, required: {required}, current: {current}")]
     ScalingNotEnoughAgents {
         base_name: String,
@@ -820,8 +922,11 @@ mod tests {
     use std::time::Duration;
 
     use crate::{
-        ast, event_registry::EventType, AnswerDef, EventHandler, Expression, HandlerBlock, Literal,
-        ReactDef, RequestHandler, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
+        ast,
+        config::{ProviderConfig, ProviderConfigs, ProviderSecretConfig},
+        event_registry::EventType,
+        AnswerDef, EventHandler, Expression, HandlerBlock, Literal, ReactDef, RequestHandler,
+        StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
     };
 
     use super::*;
@@ -829,12 +934,12 @@ mod tests {
 
     #[test]
     async fn test_system_creation() {
-        System::new(&SystemConfig::default()).await;
+        System::new(&SystemConfig::default(), &SecretConfig::default()).await;
     }
 
     #[test]
     async fn test_system_shutdown() {
-        let system = System::new(&SystemConfig::default()).await;
+        let system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
         let result = system.shutdown().await;
         sleep(Duration::from_secs(1)).await;
         assert!(result.is_ok());
@@ -842,7 +947,7 @@ mod tests {
 
     #[test]
     async fn test_system_emergency_shutdown() {
-        let system = System::new(&SystemConfig::default()).await;
+        let system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
         let result = system.emergency_shutdown().await;
         sleep(Duration::from_secs(1)).await;
         assert!(result.is_ok());
@@ -915,7 +1020,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_system_integration() {
-        let system = System::new(&SystemConfig::default()).await;
+        let default_name = "default";
+        let mut system_config = SystemConfig::default();
+        let mut provider_configs = ProviderConfigs::default();
+        provider_configs.primary_provider = Some(default_name.to_string());
+        provider_configs.providers.insert(
+            default_name.to_string(),
+            ProviderConfig {
+                name: default_name.to_string(),
+                provider_type: ProviderType::SimpleExpert,
+                ..Default::default()
+            },
+        );
+        system_config.provider_configs = provider_configs;
+
+        let mut secret_config = SecretConfig::default();
+        secret_config
+            .providers
+            .insert(default_name.to_string(), ProviderSecretConfig::default());
+        let system = System::new(&system_config, &secret_config).await;
+
+        system
+            .register_provider(default_name, ProviderType::SimpleExpert)
+            .await
+            .unwrap();
 
         // Ping-Pong AgentのAST作成
         let (ping_ast, pong_ast) = create_ping_pong_asts();

@@ -91,6 +91,7 @@ impl AgentRegistry {
         }
 
         let agent_name = agent.name();
+        let agent_type = agent.agent_type();
         // Agentの登録
         self.agents.insert(id.to_string(), agent);
 
@@ -102,6 +103,10 @@ impl AgentRegistry {
                     let mut params = HashMap::new();
                     params.insert("agent_id".to_string(), Value::String(id.to_string()));
                     params.insert("agent_name".to_string(), Value::String(agent_name));
+                    params.insert(
+                        "agent_type".to_string(),
+                        Value::String(agent_type.to_string()),
+                    );
                     params
                 },
             })
@@ -321,6 +326,8 @@ impl AgentRegistry {
         self.agent_names_by_types(AgentRegistry::builtin_agent_types())
     }
 
+    /// エージェントタイプによるエージェント名の取得.
+    /// CustomエージェントタイプはALLの場合は全てのCustomエージェントを取得する.
     pub fn agent_names_by_types(&self, agent_types: Vec<AgentType>) -> Vec<String> {
         self.agents
             .iter()
@@ -328,7 +335,12 @@ impl AgentRegistry {
                 let entry_agent_type = entry.value().clone().agent_type();
                 agent_types
                     .iter()
-                    .any(|agent_type| agent_type == &entry_agent_type)
+                    .any(|agent_type| match (agent_type, &entry_agent_type) {
+                        (a, b) if a == b => true,
+                        (AgentType::Custom(c), AgentType::Custom(e)) if c == e => true,
+                        (AgentType::Custom(_), AgentType::Custom(_)) if agent_type.is_all() => true,
+                        _ => false,
+                    })
             })
             .map(|entry| entry.key().clone())
             .collect()

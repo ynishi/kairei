@@ -3,7 +3,10 @@ use super::{
     expression::Value,
     statement::{ControlFlow, StatementEvaluator, StatementResult},
 };
-use crate::{event_registry::EventType, runtime::RuntimeError, Expression, HandlerBlock};
+use crate::{
+    event_registry::EventType, provider::types::ProviderError, runtime::RuntimeError, Expression,
+    HandlerBlock,
+};
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -98,10 +101,18 @@ pub enum EvalError {
     Eval(String),
     #[error("Context error: {0}")]
     Context(#[from] ContextError),
+    #[error("Provider error: {0}")]
+    Provider(#[from] ProviderError),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("Send response failed: {0}")]
     SendResponseFailed(String),
     #[error("Variable not found: {name}, {messages}")]
     VariableNotFound { name: String, messages: String },
+    #[error("Parameter not found: {name}")]
+    ParameterNotFound { name: String },
+    #[error("Invalid parameter: {name}, {value}")]
+    InvalidParameter { name: String, value: String },
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
 }

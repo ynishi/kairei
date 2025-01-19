@@ -3,14 +3,16 @@ use nom::{
     branch::{alt, permutation},
     bytes::complete::{tag, take_while, take_while1},
     character::complete::{char, digit1, multispace0},
-    combinator::{map, map_res, opt, recognize},
+    combinator::{map, map_res, not, opt, peek, recognize},
     multi::{fold_many0, many0, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
 };
 use std::{collections::HashMap, time::Duration};
+use tracing::{debug, instrument};
 
 /// Entry point of the parser.
+#[instrument(level = "debug", skip(input))]
 pub fn parse_root(input: &str) -> IResult<&str, Root> {
     map(
         pair(opt(ws(parse_world)), many0(ws(parse_micro_agent))),
@@ -19,11 +21,16 @@ pub fn parse_root(input: &str) -> IResult<&str, Root> {
 }
 
 /// MicroAgentの定義をパースする。
+#[instrument(level = "debug", skip(input))]
 pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
     let (input, _) = ws(tag("micro"))(input)?;
     let (input, name) = ws(identifier)(input)?;
+    let context = PolicyParseContext {
+        scope: PolicyScope::Agent(name.to_string()),
+    };
     let (input, _) = ws(char('{'))(input)?;
 
+    let mut policies = vec![];
     let mut lifecycle = None;
     let mut state = None;
     let mut observe = None;
@@ -31,6 +38,7 @@ pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
     let mut react = None;
 
     let (input, _) = many0(alt((
+        map(|input| parse_policy(input, &context), |p| policies.push(p)),
         map(parse_lifecycle, |l| lifecycle = Some(l)),
         map(parse_state, |s| state = Some(s)),
         map(parse_observe, |o| observe = Some(o)),
@@ -44,6 +52,7 @@ pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
         input,
         MicroAgentDef {
             name: name.to_string(),
+            policies,
             lifecycle,
             state,
             observe,
@@ -54,6 +63,7 @@ pub fn parse_micro_agent(input: &str) -> IResult<&str, MicroAgentDef> {
 }
 
 // Top level blocks
+#[instrument(level = "debug", skip(input))]
 fn parse_lifecycle(input: &str) -> IResult<&str, LifecycleDef> {
     map(
         block(
@@ -67,6 +77,7 @@ fn parse_lifecycle(input: &str) -> IResult<&str, LifecycleDef> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_state(input: &str) -> IResult<&str, StateDef> {
     map(
         block("state", separated_list0(ws(char(',')), parse_state_var)),
@@ -80,18 +91,21 @@ fn parse_state(input: &str) -> IResult<&str, StateDef> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_observe(input: &str) -> IResult<&str, ObserveDef> {
     map(block("observe", many0(parse_event_handler)), |handlers| {
         ObserveDef { handlers }
     })(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_answer(input: &str) -> IResult<&str, AnswerDef> {
     map(block("answer", many0(parse_request_handler)), |handlers| {
         AnswerDef { handlers }
     })(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_react(input: &str) -> IResult<&str, ReactDef> {
     map(block("react", many0(parse_event_handler)), |handlers| {
         ReactDef { handlers }
@@ -99,16 +113,24 @@ fn parse_react(input: &str) -> IResult<&str, ReactDef> {
 }
 
 /// Worldの定義をパースする。
+#[instrument(level = "debug", skip(input))]
 pub fn parse_world(input: &str) -> IResult<&str, WorldDef> {
     let (input, _) = ws(tag("world"))(input)?;
     let (input, name) = ws(identifier)(input)?;
+
+    let context = PolicyParseContext {
+        scope: PolicyScope::World(name.to_string()),
+    };
+
     let (input, _) = ws(char('{'))(input)?;
 
+    let mut policies = vec![];
     let mut config = None;
     let mut events = None;
     let mut handlers = None;
 
     let (input, _) = many0(alt((
+        map(|i| parse_policy(i, &context), |p| policies.push(p)),
         map(parse_config, |c| config = Some(c)),
         map(parse_events, |e| events = Some(e)),
         map(parse_handlers, |h| handlers = Some(h)),
@@ -120,14 +142,16 @@ pub fn parse_world(input: &str) -> IResult<&str, WorldDef> {
         input,
         WorldDef {
             name: name.to_string(),
+            policies,
             config,
-            events: events.unwrap_or_else(|| EventsDef { events: vec![] }),
-            handlers: handlers.unwrap_or_else(|| HandlersDef { handlers: vec![] }),
+            events: events.unwrap_or_default(),
+            handlers: handlers.unwrap_or_default(),
         },
     ))
 }
 
 /// configセクションのパース
+#[instrument(level = "debug", skip(input))]
 pub fn parse_config(input: &str) -> IResult<&str, ConfigDef> {
     let (input, _) = ws(tag("config"))(input)?;
     let (input, _) = ws(char('{'))(input)?;
@@ -165,6 +189,7 @@ pub fn parse_config(input: &str) -> IResult<&str, ConfigDef> {
 }
 
 /// eventsセクションのパース
+#[instrument(level = "debug", skip(input))]
 pub fn parse_events(input: &str) -> IResult<&str, EventsDef> {
     let (input, _) = ws(tag("events"))(input)?;
     let (input, _) = ws(char('{'))(input)?;
@@ -176,6 +201,7 @@ pub fn parse_events(input: &str) -> IResult<&str, EventsDef> {
 }
 
 /// 個別のイベント定義のパース
+#[instrument(level = "debug", skip(input))]
 fn parse_event_def(input: &str) -> IResult<&str, CustomEventDef> {
     let (input, name) = ws(identifier)(input)?;
     let (input, parameters) = opt(delimited(
@@ -192,6 +218,7 @@ fn parse_event_def(input: &str) -> IResult<&str, CustomEventDef> {
 }
 
 /// handlersセクションのパース
+#[instrument(level = "debug", skip(input))]
 pub fn parse_handlers(input: &str) -> IResult<&str, HandlersDef> {
     let (input, _) = ws(tag("handlers"))(input)?;
     let (input, _) = ws(char('{'))(input)?;
@@ -203,6 +230,7 @@ pub fn parse_handlers(input: &str) -> IResult<&str, HandlersDef> {
 }
 
 /// 個別のハンドラ定義のパース
+#[instrument(level = "debug", skip(input))]
 fn parse_handler(input: &str) -> IResult<&str, HandlerDef> {
     map(
         tuple((
@@ -222,6 +250,7 @@ fn parse_handler(input: &str) -> IResult<&str, HandlerDef> {
     )(input)
 }
 
+#[instrument(level = "debug")]
 fn parse_duration_config(key: &'static str) -> impl Fn(&str) -> IResult<&str, Duration> {
     move |input: &str| {
         let (input, _) = ws(tag(key))(input)?;
@@ -232,6 +261,7 @@ fn parse_duration_config(key: &'static str) -> impl Fn(&str) -> IResult<&str, Du
 }
 
 /// 正の整数値設定のパース (例: max_agents: 1000)
+#[instrument(level = "debug")]
 fn parse_int_config(key: &'static str) -> impl Fn(&str) -> IResult<&str, usize> {
     move |input: &str| {
         let (input, _) = ws(tag(key))(input)?;
@@ -242,14 +272,17 @@ fn parse_int_config(key: &'static str) -> impl Fn(&str) -> IResult<&str, usize> 
 }
 
 // Block contents
+#[instrument(level = "debug", skip(input))]
 fn parse_init_handler(input: &str) -> IResult<&str, HandlerBlock> {
     preceded(tag("onInit"), parse_block)(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_destroy_handler(input: &str) -> IResult<&str, HandlerBlock> {
     preceded(ws(tag("onDestroy")), parse_block)(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_event_handler(input: &str) -> IResult<&str, EventHandler> {
     map(
         tuple((
@@ -269,6 +302,7 @@ fn parse_event_handler(input: &str) -> IResult<&str, EventHandler> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_request_handler(input: &str) -> IResult<&str, RequestHandler> {
     map(
         tuple((
@@ -292,6 +326,7 @@ fn parse_request_handler(input: &str) -> IResult<&str, RequestHandler> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_state_var(input: &str) -> IResult<&str, StateVarDef> {
     map(
         tuple((
@@ -308,6 +343,7 @@ fn parse_state_var(input: &str) -> IResult<&str, StateVarDef> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_parameter(input: &str) -> IResult<&str, Parameter> {
     map(
         tuple((ws(identifier), ws(char(':')), parse_type_info)),
@@ -318,6 +354,7 @@ fn parse_parameter(input: &str) -> IResult<&str, Parameter> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_constraints(input: &str) -> IResult<&str, Constraints> {
     map(
         block("with constraints", many0(parse_constraint_item)),
@@ -343,6 +380,7 @@ fn parse_constraints(input: &str) -> IResult<&str, Constraints> {
 }
 
 // Type Definitions
+#[instrument(level = "debug", skip(input))]
 fn parse_event_type(input: &str) -> IResult<&str, EventType> {
     alt((
         map(tag("Tick"), |_| EventType::Tick),
@@ -386,6 +424,7 @@ fn parse_event_type(input: &str) -> IResult<&str, EventType> {
     ))(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_request_type(input: &str) -> IResult<&str, RequestType> {
     alt((
         map(
@@ -410,7 +449,8 @@ fn parse_request_type(input: &str) -> IResult<&str, RequestType> {
     ))(input)
 }
 
-fn parse_request_options(input: &str) -> IResult<&str, RequestOptions> {
+#[instrument(level = "debug", skip(input))]
+fn parse_request_attributes(input: &str) -> IResult<&str, RequestAttributes> {
     map(
         tuple((
             ws(char('.')),
@@ -436,27 +476,30 @@ fn parse_request_options(input: &str) -> IResult<&str, RequestOptions> {
                 ws(char('}')),
             ),
         )),
-        |(_, _, (timeout, retry))| RequestOptions { timeout, retry },
+        |(_, _, (timeout, retry))| RequestAttributes { timeout, retry },
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_constraint_item(input: &str) -> IResult<&str, (String, f64)> {
     terminated(
         tuple((
             map(terminated(identifier, ws(char(':'))), |s: &str| {
                 s.to_string()
             }),
-            parse_float,
+            parse_f64,
         )),
         opt(ws(char(','))),
     )(input)
 }
 
 /// Block and Statement
+#[instrument(level = "debug", skip(input))]
 fn parse_block(input: &str) -> IResult<&str, HandlerBlock> {
     map(parse_statements, |statements| HandlerBlock { statements })(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_statements(input: &str) -> IResult<&str, Vec<Statement>> {
     map(
         delimited(ws(char('{')), many0(parse_statement), ws(char('}'))),
@@ -464,6 +507,7 @@ fn parse_statements(input: &str) -> IResult<&str, Vec<Statement>> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_statement(input: &str) -> IResult<&str, Statement> {
     let (input, base_statement) = alt((
         parse_await,
@@ -477,18 +521,21 @@ fn parse_statement(input: &str) -> IResult<&str, Statement> {
     parse_optional_error_handler(input, base_statement)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_await(input: &str) -> IResult<&str, Statement> {
     map(preceded(ws(tag("await")), parse_statement), |s| {
         Statement::Await(AwaitType::Single(Box::new(s)))
     })(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_await_block(input: &str) -> IResult<&str, Statement> {
     map(preceded(ws(tag("await")), parse_statements), |statements| {
         Statement::Await(AwaitType::Block(statements))
     })(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_optional_error_handler(
     input: &str,
     base_statement: Statement,
@@ -518,6 +565,7 @@ fn parse_optional_error_handler(
     }
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_assignment(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((ws(parse_expression), char('='), parse_expression)),
@@ -525,6 +573,7 @@ fn parse_assignment(input: &str) -> IResult<&str, Statement> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_emit_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
@@ -545,12 +594,13 @@ fn parse_emit_statement(input: &str) -> IResult<&str, Statement> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
             ws(tag("request")),
             parse_request_type,
-            opt(parse_request_options),
+            opt(parse_request_attributes),
             preceded(ws(tag("to")), identifier),
             parse_arguments,
         )),
@@ -563,6 +613,7 @@ fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_arguments(input: &str) -> IResult<&str, Vec<Argument>> {
     delimited(
         ws(char('(')),
@@ -571,6 +622,7 @@ fn parse_arguments(input: &str) -> IResult<&str, Vec<Argument>> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_argument(input: &str) -> IResult<&str, Argument> {
     alt((
         // キーワード付き引数のパース
@@ -586,6 +638,7 @@ fn parse_argument(input: &str) -> IResult<&str, Argument> {
     ))(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_if_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
@@ -602,6 +655,7 @@ fn parse_if_statement(input: &str) -> IResult<&str, Statement> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_return_statement(input: &str) -> IResult<&str, Statement> {
     map(
         preceded(ws(tag("return")), parse_expression),
@@ -610,11 +664,13 @@ fn parse_return_statement(input: &str) -> IResult<&str, Statement> {
 }
 
 // Expressions
+#[instrument(level = "debug", skip(input))]
 fn parse_expression(input: &str) -> IResult<&str, Expression> {
     parse_logical_or(input)
 }
 
 // 論理OR (||)
+#[instrument(level = "debug", skip(input))]
 fn parse_logical_or(input: &str) -> IResult<&str, Expression> {
     let (input, first) = parse_logical_and(input)?;
     let (input, rest) = many0(preceded(ws(tag("||")), parse_logical_and))(input)?;
@@ -631,6 +687,7 @@ fn parse_logical_or(input: &str) -> IResult<&str, Expression> {
 }
 
 // 論理AND (&&)
+#[instrument(level = "debug", skip(input))]
 fn parse_logical_and(input: &str) -> IResult<&str, Expression> {
     let (input, first) = parse_comparison(input)?;
     let (input, rest) = many0(preceded(ws(tag("&&")), parse_comparison))(input)?;
@@ -647,6 +704,7 @@ fn parse_logical_and(input: &str) -> IResult<&str, Expression> {
 }
 
 // 比較演算子 (==, !=, <, >, <=, >=)
+#[instrument(level = "debug", skip(input))]
 fn parse_comparison(input: &str) -> IResult<&str, Expression> {
     let (input, first) = parse_additive(input)?;
     let (input, rest) = opt(tuple((
@@ -686,6 +744,7 @@ fn parse_comparison(input: &str) -> IResult<&str, Expression> {
 }
 
 // 加減算 (+, -)
+#[instrument(level = "debug", skip(input))]
 fn parse_additive(input: &str) -> IResult<&str, Expression> {
     let (input, first) = parse_multiplicative(input)?;
     let first = first.clone(); // 先にクローンを作成
@@ -705,6 +764,7 @@ fn parse_additive(input: &str) -> IResult<&str, Expression> {
 }
 
 // 乗除算 (*, /)
+#[instrument(level = "debug", skip(input))]
 fn parse_multiplicative(input: &str) -> IResult<&str, Expression> {
     let (input, first) = parse_primary(input)?;
     let first = first.clone(); // 先にクローンを作成
@@ -723,11 +783,44 @@ fn parse_multiplicative(input: &str) -> IResult<&str, Expression> {
     )(input)
 }
 
+const RESERVED_KEYWORDS: [&str; 11] = [
+    "think",
+    "emit",
+    "request",
+    "if",
+    "return",
+    "await",
+    "onFail",
+    "on",
+    "onInit",
+    "onDestroy",
+    "with",
+];
+
+fn parse_not_reserved(input: &str) -> IResult<&str, ()> {
+    not(peek(alt((
+        ws(tag(RESERVED_KEYWORDS[0])),
+        ws(tag(RESERVED_KEYWORDS[1])),
+        ws(tag(RESERVED_KEYWORDS[2])),
+        ws(tag(RESERVED_KEYWORDS[3])),
+        ws(tag(RESERVED_KEYWORDS[4])),
+        ws(tag(RESERVED_KEYWORDS[5])),
+        ws(tag(RESERVED_KEYWORDS[6])),
+        ws(tag(RESERVED_KEYWORDS[7])),
+        ws(tag(RESERVED_KEYWORDS[8])),
+        ws(tag(RESERVED_KEYWORDS[9])),
+        ws(tag(RESERVED_KEYWORDS[10])),
+    ))))(input)
+}
+
 // 基本式
+#[instrument(level = "debug", skip(input))]
 fn parse_primary(input: &str) -> IResult<&str, Expression> {
     ws(alt((
         // リテラル
         map(parse_literal, Expression::Literal),
+        // LLM呼び出し
+        parse_think_expression,
         // 関数呼び出し
         map(
             tuple((
@@ -743,24 +836,219 @@ fn parse_primary(input: &str) -> IResult<&str, Expression> {
                 arguments: args,
             },
         ),
-        // 状態アクセス
-        map(separated_list1(char('.'), identifier), |parts| {
-            if parts.len() == 1 {
-                Expression::Variable(parts[0].to_string())
-            } else {
-                Expression::StateAccess(StateAccessPath(
-                    parts.into_iter().map(String::from).collect(),
-                ))
-            }
-        }),
         // 括弧で囲まれた式
         delimited(ws(char('(')), parse_expression, ws(char(')'))),
+        // 状態アクセス
+        parse_state_access,
         // 変数（最後に配置して他のパターンを先に試す）
-        map(identifier, |id| Expression::Variable(id.to_string())),
+        parse_variable,
     )))(input)
 }
 
+#[instrument(level = "debug", skip(input))]
+fn parse_state_access(input: &str) -> IResult<&str, Expression> {
+    preceded(
+        parse_not_reserved,
+        map(
+            tuple((
+                identifier,
+                preceded(char('.'), separated_list1(char('.'), identifier)),
+            )),
+            |(head, tail)| {
+                let mut parts = vec![head];
+                parts.extend(tail);
+                Expression::StateAccess(StateAccessPath(
+                    parts.into_iter().map(String::from).collect(),
+                ))
+            },
+        ),
+    )(input)
+}
+
+fn parse_variable(input: &str) -> IResult<&str, Expression> {
+    preceded(
+        parse_not_reserved,
+        map(identifier, |id| Expression::Variable(id.to_string())),
+    )(input)
+}
+
+#[instrument(level = "debug", skip(input))]
+fn parse_think_expression(input: &str) -> IResult<&str, Expression> {
+    map(
+        tuple((
+            ws(tag("think")),
+            parse_arguments,
+            opt(parse_think_attributes),
+        )),
+        |(_, args, with_block)| Expression::Think { args, with_block },
+    )(input)
+}
+
+#[instrument(level = "debug", skip(input))]
+fn parse_think_attributes(input: &str) -> IResult<&str, ThinkAttributes> {
+    map(
+        tuple((
+            ws(tag("with")),
+            delimited(
+                ws(char('{')),
+                separated_list0(ws(char(',')), parse_think_attribute),
+                ws(char('}')),
+            ),
+        )),
+        |(_, settings)| collect_with_settings(settings),
+    )(input)
+}
+
+#[instrument(level = "debug", skip(input))]
+fn parse_think_attribute(input: &str) -> IResult<&str, ThinkAttributeKV> {
+    map(
+        tuple((ws(identifier), ws(char(':')), parse_literal)),
+        |(key, _, value)| ThinkAttributeKV {
+            key: key.to_string(),
+            value,
+        },
+    )(input)
+}
+
+#[instrument(level = "debug", skip(input))]
+fn parse_retry(input: &str) -> IResult<&str, RetryConfig> {
+    let mut max_attempts = None;
+    let mut delay = None;
+
+    let (input, _) = ws(char('{'))(input)?;
+    let (input, _) = separated_list0(
+        ws(tag(",")),
+        alt((
+            map(
+                preceded(tuple((ws(tag("max_attempts")), ws(char(':')))), parse_u64),
+                |n| max_attempts = Some(n),
+            ),
+            map(
+                preceded(tuple((ws(tag("delay")), ws(char(':')))), parse_retry_delay),
+                |rd| delay = Some(rd),
+            ),
+        )),
+    )(input)?;
+    let (input, _) = ws(char('}'))(input)?;
+
+    let max_attempts = max_attempts.ok_or_else(|| new_verify_error(input))?;
+    let delay = delay.ok_or_else(|| new_verify_error(input))?;
+
+    Ok((
+        input,
+        RetryConfig {
+            max_attempts,
+            delay,
+        },
+    ))
+}
+
+#[instrument(level = "debug", skip(input))]
+fn new_verify_error(input: &str) -> nom::Err<nom::error::Error<&str>> {
+    nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
+}
+
+#[instrument(level = "debug", skip(input))]
+fn parse_retry_delay(input: &str) -> IResult<&str, RetryDelay> {
+    alt((
+        map(preceded(ws(tag("fixed")), parse_u64), RetryDelay::Fixed),
+        map(
+            delimited(
+                preceded(ws(tag("exponential")), ws(tag("{"))),
+                tuple((
+                    tuple((ws(tag("initial")), ws(tag(":")), parse_u64)),
+                    preceded(
+                        tuple((ws(tag(",")), ws(tag("max")), ws(tag(":")))),
+                        parse_u64,
+                    ),
+                )),
+                ws(tag("}")),
+            ),
+            |((_, _, initial), max)| RetryDelay::Exponential { initial, max },
+        ),
+    ))(input)
+}
+
+// パースコンテキストを構造体として定義（ASTの構築時のみ使用）
+#[derive(Debug, Clone)]
+struct PolicyParseContext {
+    scope: PolicyScope,
+}
+
+#[instrument(level = "debug", skip(input, context))]
+fn parse_policy<'a>(input: &'a str, context: &PolicyParseContext) -> IResult<&'a str, Policy> {
+    debug!("parse_policy: input={:?}", input);
+    let (input, _) = ws(tag("policy"))(input)?;
+
+    // policy <text> または policy <name> <text>
+    let (input, (name, text)) = alt((
+        // Named policy: policy <name> <text>
+        map(tuple((identifier, ws(parse_string))), |(name, text)| {
+            (Some(name), text)
+        }),
+        // Anonymous policy: policy <text>
+        map(parse_string, |text| (None, text)),
+    ))(input)?;
+
+    Ok((
+        input,
+        Policy {
+            text,
+            scope: context.scope.clone(),
+            internal_id: match name {
+                Some(name) => PolicyId::builtin(name),
+                None => PolicyId::new(),
+            },
+        },
+    ))
+}
+
+// ヘルパー関数
+fn collect_with_settings(settings: Vec<ThinkAttributeKV>) -> ThinkAttributes {
+    let mut block = ThinkAttributes {
+        provider: None,
+        model: None,
+        temperature: None,
+        max_tokens: None,
+        retry: None,
+        policies: vec![],
+        prompt_generator_type: None,
+    };
+
+    for setting in settings {
+        match (setting.key.as_str(), setting.value) {
+            ("provider", Literal::String(s)) => block.provider = Some(s),
+            ("model", Literal::String(s)) => block.model = Some(s),
+            ("temperature", Literal::Float(f)) => block.temperature = Some(f),
+            ("retry", Literal::Retry(r)) => block.retry = Some(r),
+            ("max_tokens", Literal::Integer(n)) => block.max_tokens = Some(n as u32),
+            ("policies", Literal::List(policies)) => {
+                for policy in policies {
+                    if let Literal::String(text) = policy {
+                        let policy = Policy {
+                            text,
+                            scope: PolicyScope::Think,
+                            internal_id: PolicyId::new(),
+                        };
+                        block.policies.push(policy);
+                    }
+                }
+            }
+            _ => (), // 不明な設定は無視
+        }
+    }
+
+    block
+}
+
+#[derive(Debug)]
+struct ThinkAttributeKV {
+    key: String,
+    value: Literal,
+}
+
 /// Basic Elements
+#[instrument(level = "debug", skip(input))]
 fn parse_type_info(input: &str) -> IResult<&str, TypeInfo> {
     alt((
         // Result型
@@ -831,9 +1119,11 @@ fn parse_type_info(input: &str) -> IResult<&str, TypeInfo> {
     ))(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_literal(input: &str) -> IResult<&str, Literal> {
     alt((
-        // 整数
+        // number(ここは自動で決定するため`.`なしは整数とする)
+        map(parse_f64_strict, Literal::Float),
         map(parse_i64, Literal::Integer),
         // 文字列
         map(
@@ -854,9 +1144,11 @@ fn parse_literal(input: &str) -> IResult<&str, Literal> {
         ),
         // null
         map(tag("null"), |_| Literal::Null),
+        map(parse_retry, Literal::Retry),
     ))(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_string(input: &str) -> IResult<&str, String> {
     map(
         delimited(char('"'), take_while(|c| c != '"'), char('"')),
@@ -864,6 +1156,7 @@ fn parse_string(input: &str) -> IResult<&str, String> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_duration(input: &str) -> IResult<&str, Duration> {
     let (input, value) = parse_u64(input)?;
     let (input, unit) = opt(alt((tag("ms"), tag("s"), tag("m"), tag("h"))))(input)?;
@@ -879,6 +1172,7 @@ fn parse_duration(input: &str) -> IResult<&str, Duration> {
     Ok((input, duration))
 }
 
+#[instrument(level = "debug", skip(input))]
 fn identifier(input: &str) -> IResult<&str, &str> {
     let id_chars = |c: char| c.is_alphanumeric() || c == '_';
     let start_chars = |c: char| c.is_alphabetic() || c == '_';
@@ -889,7 +1183,8 @@ fn identifier(input: &str) -> IResult<&str, &str> {
     })
 }
 
-fn parse_float(input: &str) -> IResult<&str, f64> {
+#[instrument(level = "debug", skip(input))]
+fn parse_f64(input: &str) -> IResult<&str, f64> {
     map_res(
         recognize(tuple((
             opt(char('-')),
@@ -903,20 +1198,36 @@ fn parse_float(input: &str) -> IResult<&str, f64> {
     )(input)
 }
 
+#[instrument(level = "debug", skip(input))]
+fn parse_f64_strict(input: &str) -> IResult<&str, f64> {
+    map_res(
+        recognize(tuple((
+            opt(char('-')),
+            take_while1(|c: char| c.is_ascii_digit()),
+            tuple((char('.'), take_while1(|c: char| c.is_ascii_digit()))),
+        ))),
+        |s: &str| s.parse::<f64>(),
+    )(input)
+}
+
+#[instrument(level = "debug", skip(input))]
 fn parse_usize(input: &str) -> IResult<&str, usize> {
     map_res(digit1, |s: &str| s.parse::<usize>())(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_i64(input: &str) -> IResult<&str, i64> {
     map_res(digit1, |s: &str| s.parse::<i64>())(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_u32(input: &str) -> IResult<&str, u32> {
     map_res(take_while1(|c: char| c.is_ascii_digit()), |s: &str| {
         s.parse::<u32>()
     })(input)
 }
 
+#[instrument(level = "debug", skip(input))]
 fn parse_u64(input: &str) -> IResult<&str, u64> {
     map_res(take_while1(|c: char| c.is_ascii_digit()), |s: &str| {
         s.parse::<u64>()
@@ -924,6 +1235,7 @@ fn parse_u64(input: &str) -> IResult<&str, u64> {
 }
 
 /// キーワードブロックのパーサー
+#[instrument(level = "debug", skip(inner))]
 fn block<'a, F, O>(keyword: &'static str, inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
 where
     F: FnMut(&'a str) -> IResult<&'a str, O>,
@@ -944,6 +1256,7 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
@@ -1023,6 +1336,8 @@ mod tests {
     fn test_parse_micro_agent() {
         let input = r#"
             micro TestAgent {
+                policy "policy text"
+                policy named "named policy text"
                 lifecycle {
                     onInit {
                         counter = 0
@@ -1068,6 +1383,17 @@ mod tests {
         assert!(result.is_ok());
         let agent = result.unwrap().1;
         assert_eq!(agent.name, "TestAgent");
+        assert_eq!(agent.policies[0].text, "policy text".to_string());
+        assert_eq!(
+            agent.policies[0].scope,
+            PolicyScope::Agent("TestAgent".to_string())
+        );
+        assert_eq!(agent.policies[1].text, "named policy text".to_string());
+        assert_eq!(
+            agent.policies[1].scope,
+            PolicyScope::Agent("TestAgent".to_string())
+        );
+
         assert!(agent.lifecycle.is_some());
         assert!(agent.state.is_some());
         assert!(agent.observe.is_some());
@@ -1254,7 +1580,7 @@ mod tests {
         ];
 
         for input in inputs {
-            let result = parse_request_options(input);
+            let result = parse_request_attributes(input);
             assert!(result.is_ok(), "Failed to parse: {}", input);
         }
     }
@@ -1404,6 +1730,7 @@ mod tests {
                         .join(", ")
                 ),
                 Literal::Duration(d) => format!("{:?}", d),
+                Literal::Retry(_) => todo!(),
             },
             Expression::Variable(name) => name.clone(),
             Expression::StateAccess(path) => path.0.join("."),
@@ -1421,6 +1748,7 @@ mod tests {
                         .join(", ")
                 )
             }
+            Expression::Think { .. } => todo!(),
             Expression::BinaryOp { op, left, right } => {
                 let op_str = match op {
                     BinaryOperator::Add => "+",
@@ -1607,6 +1935,28 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_world_with_policies() {
+        let input = r#"
+                world TestWorld {
+                    policy "Global policy"
+                    policy named_policy "Named global policy"
+                }
+            "#;
+
+        let (_, world) = parse_world(input).unwrap();
+        assert_eq!(world.name, "TestWorld");
+        assert_eq!(world.policies.len(), 2);
+        assert_eq!(
+            world.policies[0].scope,
+            PolicyScope::World("TestWorld".to_string())
+        );
+        assert_eq!(
+            world.policies[1].scope,
+            PolicyScope::World("TestWorld".to_string())
+        );
+    }
+
+    #[test]
     fn test_parse_world_errors() {
         // Invalid duration format
         let input = r#"
@@ -1617,5 +1967,238 @@ mod tests {
             }
         "#;
         assert!(parse_world(input).is_err());
+    }
+
+    #[test]
+    fn test_parse_policy() {
+        let context = PolicyParseContext {
+            scope: PolicyScope::World("TestWorld".to_string()),
+        };
+
+        let (rest, policy) = parse_policy(r#"policy "Be concise""#, &context).unwrap();
+        assert!(rest.is_empty());
+        assert_eq!(policy.text, "Be concise");
+        assert_eq!(policy.scope, PolicyScope::World("TestWorld".to_string()));
+    }
+
+    #[test]
+    fn test_parse_named_policy() {
+        let context = PolicyParseContext {
+            scope: PolicyScope::World("TestWorld".to_string()),
+        };
+
+        let (rest, policy) =
+            parse_policy(r#"policy tech_terms "Use technical terms""#, &context).unwrap();
+        assert!(rest.is_empty());
+        assert_eq!(policy.text, "Use technical terms");
+        assert_eq!(policy.scope, PolicyScope::World("TestWorld".to_string()));
+        assert!(matches!(policy.internal_id, PolicyId(id) if id.contains("tech_terms")));
+    }
+
+    #[test]
+    fn test_basic_think() {
+        let input = r#"think("query")"#;
+        let (rem, expr) = parse_expression(input).unwrap();
+        assert!(rem.is_empty());
+
+        match expr {
+            Expression::Think { args, with_block } => {
+                assert_eq!(args.len(), 1);
+                let arg = args[0].clone();
+                assert!(matches!(
+                    arg.clone(),
+                    Argument::Positional(Expression::Literal(Literal::String(_))),
+                ));
+                match arg {
+                    Argument::Positional(Expression::Literal(Literal::String(query))) => {
+                        assert_eq!(query, "query");
+                    }
+                    _ => panic!("Expected string literal"),
+                }
+                assert!(with_block.is_none());
+            }
+            _ => panic!("Expected Think expression"),
+        }
+    }
+
+    #[test]
+    fn test_think_with_multiple_args() {
+        let input = r#"think("query", x + 1, true)"#;
+        let (_, expr) = parse_expression(input).unwrap();
+
+        if let Expression::Think { args, with_block } = expr {
+            assert_eq!(args.len(), 3);
+            assert!(matches!(
+                args[0],
+                Argument::Positional(Expression::Literal(Literal::String(_)))
+            ));
+            // 2番目の引数は加算式
+            assert!(matches!(
+                args[1],
+                Argument::Positional(Expression::BinaryOp { .. })
+            ));
+            assert!(matches!(
+                args[2],
+                Argument::Positional(Expression::Literal(Literal::Boolean(_)))
+            ));
+            assert!(with_block.is_none());
+        } else {
+            panic!("Expected Think expression");
+        }
+    }
+
+    #[test]
+    fn test_think_with_basic_settings() {
+        let input = r#"think("query") with {
+                    provider: "gpt4",
+                    temperature: 0.7,
+                    max_tokens: 1000
+                }"#;
+
+        let (_, expr) = parse_expression(input).unwrap();
+        if let Expression::Think {
+            with_block: Some(block),
+            ..
+        } = expr
+        {
+            assert_eq!(block.provider, Some("gpt4".to_string()));
+            assert_eq!(block.temperature, Some(0.7));
+            assert_eq!(block.max_tokens, Some(1000));
+        } else {
+            panic!("Expected Think expression with settings");
+        }
+    }
+    #[test]
+    fn test_think_with_retry_config() {
+        let input = r#"think("query") with {
+                provider: "gpt4",
+                retry: {
+                    max_attempts: 3,
+                    delay: fixed 1000
+                }
+            }"#;
+
+        let (_, expr) = parse_expression(input).unwrap();
+        if let Expression::Think {
+            with_block: Some(block),
+            ..
+        } = expr
+        {
+            if let Some(retry) = block.retry {
+                assert_eq!(retry.max_attempts, 3);
+                assert!(matches!(retry.delay, RetryDelay::Fixed(1000)));
+            } else {
+                panic!("Expected retry config");
+            }
+        } else {
+            panic!("Expected Think expression with retry");
+        }
+    }
+
+    #[test]
+    fn test_think_with_exponential_retry() {
+        let input = r#"think("query") with {
+                retry: {
+                    max_attempts: 3,
+                    delay: exponential {
+                        initial: 1000,
+                        max: 5000
+                    }
+                }
+            }"#;
+
+        let (_, expr) = parse_expression(input).unwrap();
+        if let Expression::Think {
+            with_block: Some(block),
+            ..
+        } = expr
+        {
+            if let Some(retry) = block.retry {
+                assert_eq!(retry.max_attempts, 3);
+                if let RetryDelay::Exponential { initial, max } = retry.delay {
+                    assert_eq!(initial, 1000);
+                    assert_eq!(max, 5000);
+                } else {
+                    panic!("Expected exponential delay");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_think_in_expressions() {
+        // 乗算との組み合わせ
+        let input = r#"2 * think("value")"#;
+        let (_, expr) = parse_expression(input).unwrap();
+        assert!(matches!(expr, Expression::BinaryOp { .. }));
+
+        // 関数呼び出しの引数として
+        let input = r#"format("{}", think("query"))"#;
+        let (_, expr) = parse_expression(input).unwrap();
+        assert!(matches!(expr, Expression::FunctionCall { .. }));
+
+        // 括弧内での使用
+        let input = r#"(think("q1") + think("q2")) / 2"#;
+        let (_, expr) = parse_expression(input).unwrap();
+        assert!(matches!(expr, Expression::BinaryOp { .. }));
+    }
+    #[test]
+    fn test_think_whitespace_handling() {
+        let inputs = vec![
+            r#"think ( "query" )"#,
+            r#"think("query")  with  {  provider:  "gpt4"  }"#,
+            r#"think("query")with{provider:"gpt4"}"#,
+        ];
+
+        for input in inputs {
+            assert!(parse_expression(input).is_ok());
+        }
+    }
+
+    #[test]
+    fn test_think_error_like_cases() {
+        // 閉じていない括弧
+        assert!(parse_think_expression(r#"think("query""#).is_err());
+
+        // パーシャルなwithブロックは、エラーにならない(withが残りのinputとして残る)
+        assert!(parse_think_expression(r#"think("query") with {"#).is_ok());
+
+        // with ブロック内のリトライがエラーでも、with ブロックのエラーになるのでパースは成功する
+        assert!(parse_think_expression(
+            r#"think("query") with {
+                retry: {
+                    max_attempts: true  // should be number
+                }
+            }"#
+        )
+        .is_ok());
+
+        // 不正なリトライの値はエラーになる
+        assert!(parse_retry(
+            r#"{
+                    max_attempts: true  // should be number
+            }"#
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_think_nested() {
+        // Think式の入れ子
+        let input = r#"think(format("Result: {}", think("inner query")))"#;
+        assert!(parse_expression(input).is_ok());
+    }
+
+    #[test]
+    fn test_think_with_variable_arguments() {
+        let input = r#"think(query_text + " additional context")"#;
+        let (_, expr) = parse_expression(input).unwrap();
+        if let Expression::Think { args, .. } = expr {
+            assert_eq!(args.len(), 1);
+            assert!(matches!(
+                args[0],
+                Argument::Positional(Expression::BinaryOp { .. })
+            ));
+        }
     }
 }
