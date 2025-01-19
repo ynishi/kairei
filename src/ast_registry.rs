@@ -3,9 +3,10 @@ use std::{collections::HashMap, sync::Arc};
 use dashmap::DashMap;
 
 use crate::{
-    ast, config::AgentConfig, parse_root, ASTError, ASTResult, AnswerDef, EventsDef, Expression,
-    HandlerBlock, HandlersDef, Literal, MicroAgentDef, RequestHandler, RequestType,
-    StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo, WorldDef,
+    ast, config::AgentConfig, parse_root, preprocessor::Preprocessor, ASTError, ASTResult,
+    AnswerDef, EventsDef, Expression, HandlerBlock, HandlersDef, Literal, MicroAgentDef,
+    RequestHandler, RequestType, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
+    WorldDef,
 };
 #[derive(Debug, Clone, Default)]
 pub struct AstRegistry {
@@ -14,7 +15,10 @@ pub struct AstRegistry {
 
 impl AstRegistry {
     pub async fn create_ast_from_dsl(&self, dsl: &str) -> ASTResult<ast::Root> {
-        let (_, root) = parse_root(dsl).map_err(|e| ASTError::ParseError {
+        let preprocessor = Preprocessor::new();
+        let dsl = preprocessor.process(dsl);
+
+        let (_, root) = parse_root(&dsl).map_err(|e| ASTError::ParseError {
             message: format!("failed to parse DSL {}", e),
             target: "root".to_string(),
         })?;

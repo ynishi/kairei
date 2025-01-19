@@ -66,6 +66,9 @@ pub enum ProviderError {
     #[error("API error: {0}")]
     ApiError(String),
 
+    #[error("Fetch Failed: {0}")]
+    FetchFailed(String),
+
     #[error("Rate limit exceeded: {0}")]
     RateLimit(String),
 

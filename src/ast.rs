@@ -411,6 +411,8 @@ pub enum Expression {
         left: Box<Expression>,
         right: Box<Expression>,
     },
+    Ok(Box<Expression>),
+    Err(Box<Expression>),
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -427,6 +429,9 @@ pub struct ThinkAttributes {
 
     // リトライ設定
     pub retry: Option<RetryConfig>,
+
+    // Plugin用の拡張項目
+    pub plugins: HashMap<String, HashMap<String, Literal>>,
 }
 
 // プロンプトジェネレータータイプ
@@ -453,7 +458,6 @@ pub enum RetryDelay {
     },
 }
 
-// ==== AST Definitions ====
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Policy {
     pub text: String,

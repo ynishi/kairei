@@ -9,7 +9,7 @@ use nom::{
     IResult,
 };
 use std::{collections::HashMap, time::Duration};
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 /// Entry point of the parser.
 #[instrument(level = "debug", skip(input))]
@@ -783,7 +783,7 @@ fn parse_multiplicative(input: &str) -> IResult<&str, Expression> {
     )(input)
 }
 
-const RESERVED_KEYWORDS: [&str; 11] = [
+const RESERVED_KEYWORDS: [&str; 13] = [
     "think",
     "emit",
     "request",
@@ -795,6 +795,8 @@ const RESERVED_KEYWORDS: [&str; 11] = [
     "onInit",
     "onDestroy",
     "with",
+    "Ok",
+    "Err",
 ];
 
 fn parse_not_reserved(input: &str) -> IResult<&str, ()> {
@@ -810,6 +812,8 @@ fn parse_not_reserved(input: &str) -> IResult<&str, ()> {
         ws(tag(RESERVED_KEYWORDS[8])),
         ws(tag(RESERVED_KEYWORDS[9])),
         ws(tag(RESERVED_KEYWORDS[10])),
+        ws(tag(RESERVED_KEYWORDS[11])),
+        ws(tag(RESERVED_KEYWORDS[12])),
     ))))(input)
 }
 
@@ -821,6 +825,8 @@ fn parse_primary(input: &str) -> IResult<&str, Expression> {
         map(parse_literal, Expression::Literal),
         // LLM呼び出し
         parse_think_expression,
+        // Result式
+        parse_result_expression,
         // 関数呼び出し
         map(
             tuple((
@@ -901,13 +907,59 @@ fn parse_think_attributes(input: &str) -> IResult<&str, ThinkAttributes> {
 
 #[instrument(level = "debug", skip(input))]
 fn parse_think_attribute(input: &str) -> IResult<&str, ThinkAttributeKV> {
-    map(
-        tuple((ws(identifier), ws(char(':')), parse_literal)),
-        |(key, _, value)| ThinkAttributeKV {
-            key: key.to_string(),
-            value,
-        },
-    )(input)
+    alt((
+        // ネストされたオブジェクトをパースする
+        map(
+            tuple((
+                ws(identifier),
+                ws(char(':')),
+                delimited(
+                    ws(char('{')),
+                    separated_list0(ws(char(',')), parse_think_attribute),
+                    ws(char('}')),
+                ),
+            )),
+            |(key, _, nested_attrs)| ThinkAttributeKV {
+                key: key.to_string(),
+                value: Literal::Map(
+                    nested_attrs
+                        .into_iter()
+                        .map(|attr| (attr.key, attr.value))
+                        .collect(),
+                ),
+            },
+        ),
+        // 通常のキー・バリューをパースする
+        map(
+            tuple((ws(identifier), ws(char(':')), parse_literal)),
+            |(key, _, value)| ThinkAttributeKV {
+                key: key.to_string(),
+                value,
+            },
+        ),
+    ))(input)
+}
+
+#[instrument(level = "debug", skip(input))]
+fn parse_result_expression(input: &str) -> IResult<&str, Expression> {
+    alt((
+        // Ok(expr)のパース
+        map(
+            tuple((
+                ws(tag("Ok")),
+                preceded(ws(tag("(")), terminated(parse_expression, ws(tag(")")))),
+            )),
+            |(_, expr)| Expression::Ok(Box::new(expr)),
+        ),
+        // Err(expr)のパース
+        map(
+            tuple((
+                ws(tag("Err")),
+                preceded(ws(tag("(")), terminated(parse_expression, ws(tag(")")))),
+            )),
+            |(_, expr)| Expression::Err(Box::new(expr)),
+        ),
+    ))(input)
 }
 
 #[instrument(level = "debug", skip(input))]
@@ -1013,6 +1065,7 @@ fn collect_with_settings(settings: Vec<ThinkAttributeKV>) -> ThinkAttributes {
         retry: None,
         policies: vec![],
         prompt_generator_type: None,
+        plugins: HashMap::new(),
     };
 
     for setting in settings {
@@ -1034,7 +1087,17 @@ fn collect_with_settings(settings: Vec<ThinkAttributeKV>) -> ThinkAttributes {
                     }
                 }
             }
-            _ => (), // 不明な設定は無視
+            // プラグイン設定の処理
+            (plugin_name, Literal::Map(configs)) => {
+                let mut plugin_config = HashMap::new();
+                for (key, value) in configs {
+                    plugin_config.insert(key, value);
+                }
+                block.plugins.insert(plugin_name.to_string(), plugin_config);
+            }
+            (key, value) => {
+                warn!("Unknown think attribute: {}={:?}", key, value);
+            }
         }
     }
 
@@ -1771,6 +1834,8 @@ mod tests {
                     format_expression(right)
                 )
             }
+            Expression::Ok(expression) => format!("Ok({})", format_expression(expression)),
+            Expression::Err(expression) => format!("Err({})", format_expression(expression)),
         }
     }
     #[test]
@@ -2199,6 +2264,116 @@ mod tests {
                 args[0],
                 Argument::Positional(Expression::BinaryOp { .. })
             ));
+        }
+    }
+
+    #[test]
+    fn test_think_with_nested_attributes() {
+        let input = r#"think(query_text) with {
+            provider: "openai",
+            model: "gpt-4",
+            my_plugin: {
+                version : "v1",
+                settings: {
+                    timeout: 30,
+                    retries: 3
+                }
+            }
+        }"#;
+
+        let (_, expr) = parse_expression(input).unwrap();
+
+        if let Expression::Think {
+            args, with_block, ..
+        } = expr
+        {
+            assert_eq!(args.len(), 1);
+            assert!(matches!(
+                args[0],
+                Argument::Positional(Expression::Variable { .. })
+            ));
+
+            // 属性のチェック
+            if let Some(attrs) = with_block {
+                assert_eq!(attrs.provider, Some("openai".to_string()));
+                assert_eq!(attrs.model, Some("gpt-4".to_string()));
+
+                // プラグイン設定のチェック
+                let plugin_config = attrs
+                    .plugins
+                    .get("my_plugin")
+                    .expect("my_plugin should exist");
+
+                assert_eq!(
+                    plugin_config.get("version"),
+                    Some(&Literal::String("v1".to_string()))
+                );
+
+                if let Some(Literal::Map(settings)) = plugin_config.get("settings") {
+                    assert_eq!(settings.get("timeout"), Some(&Literal::Integer(30)));
+                    assert_eq!(settings.get("retries"), Some(&Literal::Integer(3)));
+                } else {
+                    panic!("settings should be a map");
+                }
+            } else {
+                panic!("attributes should exist");
+            }
+        } else {
+            panic!("should be a think expression");
+        }
+    }
+
+    #[test]
+    fn test_think_with_mixed_attributes() {
+        let input = r#"think(query_text) with {
+            provider: "openai",
+            temperature: 0.7,
+            plugin_one: {
+                enabled: true
+            },
+            plugin_two: {
+                config: {
+                    value: "nested"
+                }
+            }
+        }"#;
+
+        let (_, expr) = parse_expression(input).unwrap();
+
+        if let Expression::Think {
+            args, with_block, ..
+        } = expr
+        {
+            assert_eq!(args.len(), 1);
+
+            if let Some(attrs) = with_block {
+                assert_eq!(attrs.provider, Some("openai".to_string()));
+                assert_eq!(attrs.temperature, Some(0.7));
+
+                // プラグイン設定のチェック
+                let plugin_one = attrs
+                    .plugins
+                    .get("plugin_one")
+                    .expect("plugin_one should exist");
+                assert_eq!(plugin_one.get("enabled"), Some(&Literal::Boolean(true)));
+
+                let plugin_two = attrs
+                    .plugins
+                    .get("plugin_two")
+                    .expect("plugin_two should exist");
+                if let Some(Literal::Map(config)) = plugin_two.get("config") {
+                    assert_eq!(
+                        config.get("value"),
+                        Some(&Literal::String("nested".to_string()))
+                    );
+                } else {
+                    panic!("config should be a map");
+                }
+            } else {
+                panic!("attributes should exist");
+            }
+        } else {
+            panic!("should be a think expression");
         }
     }
 }

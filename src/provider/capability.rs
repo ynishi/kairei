@@ -1,6 +1,7 @@
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use tracing::warn;
 
 use super::types::{ProviderError, ProviderResult};
 
@@ -168,7 +169,7 @@ pub trait RequiresCapabilities {
             .cloned()
             .collect();
 
-        println!("missing_capabilities: {:?}", missing_capabilities);
+        warn!("missing_capabilities: {:?}", missing_capabilities);
         if !missing_capabilities.is_empty() {
             return Err(ProviderError::MissingCapabilities(
                 missing_capabilities.clone(),
