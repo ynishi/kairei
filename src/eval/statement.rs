@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use async_recursion::async_recursion;
 
@@ -9,11 +9,14 @@ use super::{
     context::{ExecutionContext, StateAccessMode, VariableAccess},
     expression::{ExpressionEvaluator, Value},
 };
-use crate::eval::evaluator::{EvalError, EvalResult};
+use crate::{
+    eval::evaluator::{EvalError, EvalResult},
+    RequestAttributes,
+};
 use crate::{
     event_bus::{self, Event},
-    event_registry, Argument, AwaitType, ErrorHandlerBlock, EventType, Expression, RequestOptions,
-    RequestType, Statement,
+    event_registry, Argument, AwaitType, ErrorHandlerBlock, EventType, Expression, RequestType,
+    Statement,
 };
 
 /// 文の評価結果を表す型
@@ -163,45 +166,24 @@ impl StatementEvaluator {
         context: Arc<ExecutionContext>,
     ) -> EvalResult<Value> {
         // パラメータの評価
-        let mut evaluated_params = self.eval_arguments(parameters, context.clone()).await?;
+        let mut evaluated_params = self
+            .expression_evaluator
+            .eval_arguments(parameters, context.clone())
+            .await?;
         if let Some(to) = target {
-            evaluated_params.insert("to".to_string(), event_bus::Value::String(to.clone()));
+            evaluated_params.insert("to".to_string(), Value::String(to.clone()));
         }
         let event_type = event_registry::EventType::from(event_type);
+        let event_params = evaluated_params
+            .iter()
+            .map(|(k, v)| (k.clone(), event_bus::Value::from(v.clone())))
+            .collect();
 
         // イベントの構築と発行
-        let event = Event::new(&event_type, &evaluated_params);
+        let event = Event::new(&event_type, &event_params);
         context.emit_event(event).await?;
 
         Ok(Value::Unit)
-    }
-
-    async fn eval_arguments(
-        &self,
-        arguments: &[Argument],
-        context: Arc<ExecutionContext>,
-    ) -> EvalResult<HashMap<String, event_bus::Value>> {
-        let mut evaluated_params = HashMap::new();
-        for (i, param) in arguments.iter().enumerate() {
-            let (name, value) = match param {
-                Argument::Named { name, value } => {
-                    let value = self
-                        .expression_evaluator
-                        .eval_expression(value, context.clone())
-                        .await?;
-                    (name.clone(), value)
-                }
-                Argument::Positional(value) => {
-                    let value = self
-                        .expression_evaluator
-                        .eval_expression(value, context.clone())
-                        .await?;
-                    ((i + 1).to_string(), value)
-                }
-            };
-            evaluated_params.insert(name, event_bus::Value::from(value));
-        }
-        Ok(evaluated_params)
     }
 
     async fn eval_request(
@@ -209,11 +191,19 @@ impl StatementEvaluator {
         agent: &str,
         request_type: &RequestType,
         parameters: &[Argument],
-        _options: &Option<RequestOptions>,
+        _options: &Option<RequestAttributes>,
         context: Arc<ExecutionContext>,
     ) -> EvalResult<Value> {
         // パラメータの評価
-        let evaluated_params = self.eval_arguments(parameters, context.clone()).await?;
+        let evaluated_params = self
+            .expression_evaluator
+            .eval_arguments(parameters, context.clone())
+            .await?;
+
+        let event_params = evaluated_params
+            .iter()
+            .map(|(k, v)| (k.clone(), event_bus::Value::from(v.clone())))
+            .collect();
 
         // リクエストの構築と送信
         let request = Event {
@@ -223,7 +213,7 @@ impl StatementEvaluator {
                 responder: agent.to_string(),
                 request_type: request_type.to_string(),
             },
-            parameters: evaluated_params,
+            parameters: event_params,
         };
         debug!("Create Request: {:?}", request);
         let response_event = context.send_request(request).await?;
@@ -359,11 +349,13 @@ impl StatementEvaluator {
 
 #[cfg(test)]
 mod tests {
+    use dashmap::DashMap;
     use event_bus::EventBus;
 
     use crate::{
         config::ContextConfig,
         eval::context::{AgentInfo, StateAccessMode},
+        provider::provider_registry::ProviderInstance,
         BinaryOperator, Literal,
     };
 
@@ -378,6 +370,8 @@ mod tests {
             AgentInfo::default(),
             StateAccessMode::ReadWrite,
             ContextConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
         ))
     }
 

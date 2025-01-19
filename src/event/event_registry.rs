@@ -59,6 +59,7 @@ pub enum EventType {
     // SystemLifecycle
     SystemCreated,
     SystemNativeFeaturesRegistered,
+    SystemProvidersRegistered,
     SystemWorldRegistered,
     SystemBuiltinAgentsRegistered,
     SystemUserAgentsRegistered,
@@ -73,6 +74,11 @@ pub enum EventType {
     FeatureFailure {
         error: String,
     },
+    // Provider
+    ProviderRegistered,
+    ProviderStatusUpdated,
+    ProviderShutdown,
+    ProviderPrimarySet,
     Custom(String), // 拡張性のために残す
 }
 
@@ -89,7 +95,14 @@ impl EventType {
         )
     }
 
-    pub fn is_for_me(&self, agent_name: &str) -> bool {
+    pub fn request_for_me(&self, agent_name: &str) -> bool {
+        match self {
+            EventType::Request { responder, .. } => responder == agent_name,
+            _ => false,
+        }
+    }
+
+    pub fn response_for_me(&self, agent_name: &str) -> bool {
         match self {
             EventType::ResponseSuccess { requester, .. }
             | EventType::ResponseFailure { requester, .. } => requester == agent_name,
@@ -103,6 +116,16 @@ impl EventType {
             EventType::ResponseSuccess { request_id, .. } => Some(request_id),
             EventType::ResponseFailure { request_id, .. } => Some(request_id),
             _ => None,
+        }
+    }
+
+    pub fn is_response_to(&self, request_id: &str) -> bool {
+        if !self.is_response() {
+            false
+        } else if let Some(response_id) = self.request_id() {
+            response_id == request_id
+        } else {
+            false
         }
     }
 
@@ -130,6 +153,7 @@ impl std::fmt::Display for EventType {
                 agent_name,
                 state_name,
             } => write!(f, "StateUpdated({}.{})", agent_name, state_name),
+            EventType::Custom(name) => write!(f, "{}", name),
             EventType::Message { content_type } => write!(f, "{}", content_type),
             EventType::Failure { error_type } => write!(f, "{}", error_type),
             EventType::Request { request_type, .. } => write!(f, "{}", request_type),
@@ -146,6 +170,7 @@ impl std::fmt::Display for EventType {
             EventType::SystemNativeFeaturesRegistered => {
                 write!(f, "SystemNativeFeaturesRegistered")
             }
+            EventType::SystemProvidersRegistered => write!(f, "SystemProvidersRegistered"),
             EventType::SystemWorldRegistered => write!(f, "SystemWorldRegistered"),
             EventType::SystemBuiltinAgentsRegistered => write!(f, "SystemBuiltinAgentsRegistered"),
             EventType::SystemUserAgentsRegistered => write!(f, "SystemUserAgentsRegistered"),
@@ -156,8 +181,10 @@ impl std::fmt::Display for EventType {
 
             EventType::FeatureStatusUpdated { .. } => write!(f, "FeatureStatusUpdated"),
             EventType::FeatureFailure { .. } => write!(f, "FeatureFailure"),
-
-            EventType::Custom(name) => write!(f, "{}", name),
+            EventType::ProviderRegistered => write!(f, "ProviderRegistered"),
+            EventType::ProviderStatusUpdated => write!(f, "ProviderStatusUpdated"),
+            EventType::ProviderShutdown => write!(f, "ProviderShutdown"),
+            EventType::ProviderPrimarySet => write!(f, "ProviderPrimarySet"),
         }
     }
 }

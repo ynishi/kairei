@@ -21,6 +21,7 @@ impl Root {
 #[derive(Debug, Clone, Default)]
 pub struct MicroAgentDef {
     pub name: String,
+    pub policies: Vec<Policy>,
     pub lifecycle: Option<LifecycleDef>,
     pub state: Option<StateDef>,
     pub observe: Option<ObserveDef>,
@@ -64,6 +65,71 @@ pub struct AnswerDef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReactDef {
     pub handlers: Vec<EventHandler>,
+}
+
+// Worldの定義
+// World全体の定義
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorldDef {
+    pub name: String,
+    pub policies: Vec<Policy>,
+    pub config: Option<ConfigDef>,
+    pub events: EventsDef,
+    pub handlers: HandlersDef,
+}
+
+// 設定定義
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfigDef {
+    pub tick_interval: Duration,
+    pub max_agents: usize,
+    pub event_buffer_size: usize,
+}
+
+impl Default for ConfigDef {
+    fn default() -> Self {
+        Self {
+            tick_interval: Duration::from_secs(1),
+            max_agents: 1000,
+            event_buffer_size: 1000,
+        }
+    }
+}
+
+// イベント定義のコレクション
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct EventsDef {
+    pub events: Vec<CustomEventDef>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CustomEventDef {
+    pub name: String,
+    pub parameters: Vec<Parameter>,
+}
+
+impl From<EventsDef> for Vec<EventType> {
+    fn from(events_def: EventsDef) -> Self {
+        events_def
+            .events
+            .into_iter()
+            .map(|event| EventType::Custom(event.name))
+            .collect()
+    }
+}
+
+// ハンドラー定義のコレクション
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct HandlersDef {
+    pub handlers: Vec<HandlerDef>,
+}
+
+// 個別のハンドラー定義
+#[derive(Debug, Clone, PartialEq)]
+pub struct HandlerDef {
+    pub event_name: String,
+    pub parameters: Vec<Parameter>,
+    pub block: HandlerBlock,
 }
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
@@ -258,7 +324,7 @@ pub enum Statement {
         agent: String,
         request_type: RequestType,
         parameters: Vec<Argument>,
-        options: Option<RequestOptions>,
+        options: Option<RequestAttributes>,
     },
     // grouping
     Block(Statements),
@@ -301,11 +367,12 @@ use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use proc_macro2::TokenStream;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 // リクエストオプション
 #[derive(Debug, Clone, PartialEq)]
-pub struct RequestOptions {
+pub struct RequestAttributes {
     pub timeout: Option<Duration>,
     pub retry: Option<u32>, // 回数
 }
@@ -335,11 +402,87 @@ pub enum Expression {
         function: String,
         arguments: Vec<Expression>,
     },
+    Think {
+        args: Vec<Argument>,
+        with_block: Option<ThinkAttributes>,
+    },
     BinaryOp {
         op: BinaryOperator,
         left: Box<Expression>,
         right: Box<Expression>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ThinkAttributes {
+    // 必須項目
+    pub provider: Option<String>, // Noneの場合はデフォルトプロバイダー
+    pub prompt_generator_type: Option<PromptGeneratorType>,
+    pub policies: Vec<Policy>,
+
+    // オプション項目
+    pub model: Option<String>,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+
+    // リトライ設定
+    pub retry: Option<RetryConfig>,
+}
+
+// プロンプトジェネレータータイプ
+#[derive(Debug, Clone, PartialEq)]
+pub enum PromptGeneratorType {
+    Standard,
+    // 将来の拡張用
+    // Detailed,
+    // Custom(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RetryConfig {
+    pub max_attempts: u64,
+    pub delay: RetryDelay,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum RetryDelay {
+    Fixed(u64), // ミリ秒
+    Exponential {
+        initial: u64, // ミリ秒
+        max: u64,     // ミリ秒
+    },
+}
+
+// ==== AST Definitions ====
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Policy {
+    pub text: String,
+    pub scope: PolicyScope,
+    // 内部的なID - ビルトインポリシーやシステムでの追跡用
+    pub internal_id: PolicyId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+pub struct PolicyId(pub String);
+
+impl PolicyId {
+    // ビルトインポリシー用のID生成
+    pub fn builtin(name: &str) -> Self {
+        PolicyId(format!("builtin:{}", name))
+    }
+
+    // 通常のポリシー用のID生成（自動生成）
+    pub fn new() -> Self {
+        use uuid::Uuid;
+        PolicyId(format!("policy:{}", Uuid::new_v4()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub enum PolicyScope {
+    World(String), // World名
+    Agent(String), // Agent名
+    Think,         // Think式スコープ
 }
 
 // リテラル
@@ -352,6 +495,7 @@ pub enum Literal {
     Duration(Duration),
     List(Vec<Literal>),
     Map(HashMap<String, Literal>),
+    Retry(RetryConfig),
     Null,
 }
 
@@ -377,70 +521,6 @@ pub enum BinaryOperator {
     GreaterThanEqual,
     And,
     Or,
-}
-
-// Worldの定義
-// World全体の定義
-#[derive(Debug, Clone, PartialEq)]
-pub struct WorldDef {
-    pub name: String,
-    pub config: Option<ConfigDef>,
-    pub events: EventsDef,
-    pub handlers: HandlersDef,
-}
-
-// 設定定義
-#[derive(Debug, Clone, PartialEq)]
-pub struct ConfigDef {
-    pub tick_interval: Duration,
-    pub max_agents: usize,
-    pub event_buffer_size: usize,
-}
-
-impl Default for ConfigDef {
-    fn default() -> Self {
-        Self {
-            tick_interval: Duration::from_secs(1),
-            max_agents: 1000,
-            event_buffer_size: 1000,
-        }
-    }
-}
-
-// イベント定義のコレクション
-#[derive(Debug, Clone, PartialEq)]
-pub struct EventsDef {
-    pub events: Vec<CustomEventDef>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CustomEventDef {
-    pub name: String,
-    pub parameters: Vec<Parameter>,
-}
-
-impl From<EventsDef> for Vec<EventType> {
-    fn from(events_def: EventsDef) -> Self {
-        events_def
-            .events
-            .into_iter()
-            .map(|event| EventType::Custom(event.name))
-            .collect()
-    }
-}
-
-// ハンドラー定義のコレクション
-#[derive(Debug, Clone, PartialEq)]
-pub struct HandlersDef {
-    pub handlers: Vec<HandlerDef>,
-}
-
-// 個別のハンドラー定義
-#[derive(Debug, Clone, PartialEq)]
-pub struct HandlerDef {
-    pub event_name: String,
-    pub parameters: Vec<Parameter>,
-    pub block: HandlerBlock,
 }
 
 // 文（MicroAgentと共通だが、World用に制限される）
@@ -512,6 +592,7 @@ impl From<WorldDef> for (MicroAgentDef, EventsDef) {
         );
         let agent = MicroAgentDef {
             name: "world".to_string(),
+            policies: vec![],
             state: Some(StateDef { variables }),
             observe: Some(ObserveDef {
                 handlers: world
@@ -562,6 +643,7 @@ mod tests {
     fn test_world_conversion() {
         let world = WorldDef {
             name: "TestWorld".to_string(),
+            policies: vec![],
             config: Some(ConfigDef {
                 tick_interval: Duration::from_millis(100),
                 max_agents: 1000,

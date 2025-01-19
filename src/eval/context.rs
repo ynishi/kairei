@@ -5,14 +5,21 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use tokio::sync::{oneshot, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use tracing::{debug, warn};
+use serde::{Deserialize, Serialize};
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tracing::debug;
+use uuid::Uuid;
 
 use super::expression::Value;
+use super::generator::{PromptGenerator, StandardPromptGenerator};
 use crate::config::ContextConfig;
-use crate::event_bus::{self, Event, EventBus, EventError, ToEventType};
+use crate::event::event_bus::{self, Event, EventBus, EventError, ToEventType};
 use crate::event_registry::EventType;
+use crate::provider::provider_registry::ProviderInstance;
+use crate::provider::types::ProviderError;
+use crate::request_manager::{RequestError, RequestManager};
 use crate::runtime::RuntimeError;
+use crate::Policy;
 
 pub struct SafeRwLock<T> {
     inner: RwLock<T>,
@@ -79,9 +86,11 @@ impl<T> SafeRwLock<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LockError {
+    #[error("Lock timeout")]
     Timeout,
+    #[error("Deadlock")]
     Deadlock,
     // 他のエラーケース
 }
@@ -95,30 +104,44 @@ pub enum VariableAccess {
 /// 実行コンテキスト
 #[derive(Clone)]
 pub struct ExecutionContext {
-    shared: SharedContext,
+    pub shared: SharedContext,
     current_scope: DashMap<String, Arc<SafeRwLock<Value>>>,
     access_mode: StateAccessMode,
     // config Read/Write timeout
     pub timeout: Duration,
 }
 
+impl ExecutionContext {
+    pub fn generate_trace_id(&self) -> String {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        format!("trace-{}-{}", self.agent_name(), current_time)
+    }
+}
+
 /// Context生成時に追加されて、共有される。更新されない。
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AgentInfo {
     pub agent_name: String,
     pub agent_type: AgentType,
+    #[serde(skip)]
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 pub enum AgentType {
     World,
     ScaleManager,
     Monitor,
+    User,
     Custom(String),
     #[default]
     Unknown,
 }
+
+pub const AGENT_TYPE_CUSTOM_ALL: &str = "all";
 
 impl AgentType {
     pub fn same(&self, target: AgentType) -> bool {
@@ -126,8 +149,16 @@ impl AgentType {
             AgentType::World
             | AgentType::ScaleManager
             | AgentType::Monitor
+            | AgentType::User
             | AgentType::Unknown => self == &target,
             AgentType::Custom(..) => matches!(target, AgentType::Custom(..)),
+        }
+    }
+    pub fn is_all(&self) -> bool {
+        if let AgentType::Custom(name) = self {
+            name.to_lowercase() == AGENT_TYPE_CUSTOM_ALL
+        } else {
+            false
         }
     }
 }
@@ -138,6 +169,7 @@ impl std::fmt::Display for AgentType {
             Self::World => write!(f, "World"),
             Self::ScaleManager => write!(f, "ScaleManager"),
             Self::Monitor => write!(f, "Monitor"),
+            Self::User => write!(f, "User"),
             Self::Custom(name) => write!(f, "{}", name),
             Self::Unknown => write!(f, "Unknown"),
         }
@@ -146,17 +178,20 @@ impl std::fmt::Display for AgentType {
 
 type ParentScopes = Vec<Arc<DashMap<String, Arc<SafeRwLock<Value>>>>>;
 
-type RequestId = String; // リクエストID, UUIDを使用
-
 /// 共有可能なコンテキストの状態
 #[derive(Clone)]
 pub struct SharedContext {
     // 状態をRwLockで保護
-    state: Arc<DashMap<String, Arc<SafeRwLock<Value>>>>,
+    pub state: Arc<DashMap<String, Arc<SafeRwLock<Value>>>>,
     event_bus: Arc<EventBus>,
     parent_scopes: Arc<ParentScopes>,
-    pending_requests: Arc<DashMap<RequestId, oneshot::Sender<Event>>>,
+    request_manager: Arc<RequestManager>,
     agent_info: AgentInfo, // システム提供の情報を追加
+    // LLM 関連
+    pub primary: Arc<ProviderInstance>,
+    pub providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
+    pub prompt_generator: Arc<dyn PromptGenerator>,
+    pub policies: Vec<Policy>,
 }
 
 #[derive(Copy, Clone)]
@@ -167,10 +202,15 @@ pub enum StateAccessMode {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ContextError {
+    #[error("Lock timeout: {0}")]
+    Lock(#[from] LockError),
     #[error("Invalid state value for {key}: {message}")]
     InvalidValue { key: String, message: String },
     #[error("State error: {0}")]
     EventError(EventError),
+    // request error
+    #[error("Requst error: {0}")]
+    Request(#[from] RequestError),
     // アクセス制御のエラーを追加
     #[error("Access error: {0}")]
     AccessError(String),
@@ -188,6 +228,8 @@ pub enum ContextError {
     EventSendFailed(String),
     #[error("State not found: {0}")]
     StateNotFound(String),
+    #[error("Provider error: {0}")]
+    Provider(#[from] ProviderError),
     #[error("Failure: {0}")]
     Failure(String),
 }
@@ -195,8 +237,10 @@ pub enum ContextError {
 impl ToEventType for ContextError {
     fn to_event_type(&self) -> String {
         match self {
+            ContextError::Lock(_) => "LockError".to_string(),
             ContextError::InvalidValue { .. } => "InvalidValue".to_string(),
             ContextError::EventError(_) => "EventError".to_string(),
+            ContextError::Request(_) => "RequestError".to_string(),
             ContextError::AccessError(_) => "AccessError".to_string(),
             ContextError::LockTimeout(_) => "LockTimeout".to_string(),
             ContextError::Deadlock(_) => "Deadlock".to_string(),
@@ -205,12 +249,52 @@ impl ToEventType for ContextError {
             ContextError::NoParentScope => "NoParentScope".to_string(),
             ContextError::EventSendFailed(_) => "EventSendFailed".to_string(),
             ContextError::StateNotFound(_) => "StateNotFound".to_string(),
+            ContextError::Provider(_) => "ProviderError".to_string(),
             ContextError::Failure(_) => "Failure".to_string(),
         }
     }
 }
 
 impl ExecutionContext {
+    pub fn new(
+        event_bus: Arc<EventBus>,
+        agent_info: AgentInfo,
+        access_mode: StateAccessMode,
+        config: ContextConfig,
+        primary: Arc<ProviderInstance>,
+        providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
+    ) -> Self {
+        let (mut event_rx, _) = event_bus.subscribe();
+        let request_manager = Arc::new(RequestManager::new(
+            event_bus.clone(),
+            config.request_timeout,
+        ));
+        let new_self = Self {
+            shared: SharedContext {
+                state: Arc::new(DashMap::new()),
+                event_bus,
+                parent_scopes: Arc::new(Vec::new()),
+                request_manager,
+                agent_info,
+                primary,
+                providers,
+                // only 1 variant, when appended type, inject here.
+                prompt_generator: Arc::new(StandardPromptGenerator),
+                policies: vec![],
+            },
+            current_scope: DashMap::new(),
+            access_mode,
+            timeout: config.access_timeout,
+        };
+        let self_ref = new_self.clone();
+        tokio::spawn(async move {
+            while let Ok(event) = event_rx.recv().await {
+                let _ = self_ref.shared.request_manager.handle_event(&event);
+            }
+        });
+        new_self
+    }
+
     pub async fn fork(&self, access_mode: Option<StateAccessMode>) -> Self {
         // 現在のスコープの内容を新しいスコープにコピー
         let new_scope = {
@@ -230,13 +314,8 @@ impl ExecutionContext {
         }
 
         // 新しい共有コンテキストを作成
-        let new_shared = SharedContext {
-            state: self.shared.state.clone(),         // グローバル状態は共有
-            event_bus: self.shared.event_bus.clone(), // イベントバスは共有
-            parent_scopes: Arc::new(new_parents),     // 新しい親スコープチェーン
-            pending_requests: self.shared.pending_requests.clone(),
-            agent_info: self.shared.agent_info.clone(),
-        };
+        let mut new_shared = self.shared.clone();
+        new_shared.parent_scopes = Arc::new(new_parents);
 
         Self {
             shared: new_shared,
@@ -387,42 +466,23 @@ impl ExecutionContext {
         self.shared.agent_info.agent_name.clone()
     }
 
-    pub fn new(
-        event_bus: Arc<EventBus>,
-        agent_info: AgentInfo,
-        access_mode: StateAccessMode,
-        config: ContextConfig,
-    ) -> Self {
-        let name = agent_info.agent_name.clone();
-        let (mut event_rx, _) = event_bus.subscribe();
-        let new_self = Self {
-            shared: SharedContext {
-                state: Arc::new(DashMap::new()),
-                event_bus,
-                parent_scopes: Arc::new(Vec::new()),
-                pending_requests: Arc::new(DashMap::new()),
-                agent_info,
-            },
-            current_scope: DashMap::new(),
-            access_mode,
-            timeout: config.access_timeout,
+    pub async fn session_id(&self) -> Result<String, ContextError> {
+        let session_id = if let Some(session_id) = self.shared.state.get("session_id") {
+            session_id
+                .value()
+                .read_with_timeout(Duration::from_secs(5))
+                .await
+                .map(|v| match v.clone() {
+                    Value::String(s) => s,
+                    _ => "".to_string(),
+                })
+                .map_err(ContextError::from)?
+        } else {
+            let session_id = Uuid::new_v4().to_string();
+            let _ = self.set_state("session_id", Value::String(session_id.clone()));
+            session_id
         };
-        let self_ref = new_self.clone();
-        tokio::spawn(async move {
-            while let Ok(event) = event_rx.recv().await {
-                debug!("Received Event in context: {:?}", event);
-                if event.event_type.is_for_me(&name) {
-                    if let Some(request_id) = event.event_type.clone().request_id() {
-                        debug!(
-                            "Received response in cotext: I'm {}, {}, {:?}",
-                            name, request_id, event
-                        );
-                        self_ref.handle_response(request_id, event).await;
-                    }
-                }
-            }
-        });
-        new_self
+        Ok(session_id)
     }
 
     // 統一された変数アクセスインターフェース
@@ -568,83 +628,20 @@ impl ExecutionContext {
 
     pub async fn send_request(&self, request: Event) -> Result<Event, ContextError> {
         debug!("Send Request, I'm {}", self.agent_name());
-        let (tx, rx) = oneshot::channel();
-        let request_id = request
-            .event_type
-            .request_id()
-            .ok_or(ContextError::EventSendFailed(
-                "EventType is not Specified RequestId".to_string(),
-            ))?;
-
-        // 内部でリクエスト管理
         self.shared
-            .pending_requests
-            .insert(request_id.to_string(), tx);
-
-        // リクエストイベントの発行
-        self.shared.event_bus.publish(request).await.map_err(|e| {
-            ContextError::EventError(EventError::SendFailed {
-                message: e.to_string(),
-            })
-        })?;
-
-        // レスポンス待機
-        let ret = rx.await.map_err(|e| {
-            ContextError::EventError(EventError::SendFailed {
-                message: e.to_string(),
-            })
-        });
-        debug!("Got in send_requst: {:?}", ret);
-        ret
+            .request_manager
+            .request(&request)
+            .await
+            .map_err(ContextError::from)
     }
 
     pub async fn cancel_pending_requests(&self) -> Result<(), ContextError> {
-        for entry in self.shared.pending_requests.iter() {
-            let request_id = entry.key();
-            let (_, tx) = self.shared.pending_requests.remove(request_id).ok_or({
-                ContextError::EventError(EventError::NotFound(request_id.to_string()))
-            })?;
-            let error_response = Event {
-                event_type: EventType::ResponseFailure {
-                    request_type: "cancelled".to_string(),
-                    requester: "unknown".to_string(),
-                    responder: self.shared.agent_info.agent_name.clone(),
-                    request_id: request_id.clone(),
-                },
-                parameters: {
-                    let mut params = HashMap::new();
-                    params.insert(
-                        "error".to_string(),
-                        event_bus::Value::String("Agent shutdown".to_string()),
-                    );
-                    params
-                },
-            };
-            let _ = tx.send(error_response);
-        }
-        self.shared.pending_requests.clear();
+        self.shared
+            .request_manager
+            .cancel_waiting_requests("Agent shutdown")
+            .await
+            .map_err(ContextError::from)?;
         Ok(())
-    }
-
-    // レスポンスの処理（内部メソッド）
-    async fn handle_response(&self, request_id: &str, response: Event) {
-        debug!(
-            "Handsle Response: {:?}",
-            self.shared
-                .pending_requests
-                .iter()
-                .map(|e| e.key().clone())
-                .collect::<Vec<_>>()
-        );
-        if let Some((_, tx)) = self.shared.pending_requests.remove(request_id) {
-            let _ = tx.send(response);
-        } else {
-            warn!(
-                "handle_response in {}, {} is not found",
-                self.agent_name(),
-                request_id
-            );
-        }
     }
 }
 
@@ -652,13 +649,15 @@ impl ExecutionContext {
 mod tests {
     use super::*;
 
-    async fn setup_readwrite_test_context() -> ExecutionContext {
+    pub async fn setup_readwrite_test_context() -> ExecutionContext {
         let event_bus = Arc::new(EventBus::new(10));
         ExecutionContext::new(
             event_bus,
             AgentInfo::default(),
             StateAccessMode::ReadWrite,
             ContextConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
         )
     }
 
@@ -669,6 +668,8 @@ mod tests {
             AgentInfo::default(),
             StateAccessMode::ReadOnly,
             ContextConfig::default(),
+            Arc::new(ProviderInstance::default()),
+            Arc::new(DashMap::new()),
         )
     }
 

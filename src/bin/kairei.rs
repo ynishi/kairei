@@ -1,5 +1,9 @@
 use clap::{command, Parser};
-use kairei::{config::SystemConfig, system::System, Error};
+use kairei::{
+    config::{self, SecretConfig, SystemConfig},
+    system::System,
+    Error,
+};
 use std::path::PathBuf;
 use tracing::{debug, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -14,6 +18,9 @@ struct Cli {
     #[arg(short, long, default_value = "data/default.kairei")]
     dsl: PathBuf,
 
+    #[arg(short, long, default_value = "secret.json")]
+    secret: PathBuf,
+
     /// Enable debug mode
     #[arg(short, long)]
     verbose: bool,
@@ -23,21 +30,27 @@ async fn run(cli: &Cli) -> Result<(), Error> {
     // Load config
     let config_path = cli.config.clone();
     let config: SystemConfig = if config_path.clone().exists() {
-        let content = std::fs::read_to_string(config_path)
-            .map_err(|e| Error::Internal(format!("Failed to read config file: {}", e)))?;
-        serde_json::from_str(&content)
-            .map_err(|e| Error::Internal(format!("Failed to parse config file: {}", e)))?
+        config::from_file(config_path)?
     } else {
         // Default config
         SystemConfig::default()
+    };
+    let secret_path = cli.secret.clone();
+    let secret_config: SecretConfig = if secret_path.clone().exists() {
+        config::from_file(secret_path)?
+    } else {
+        // Default secret config
+        SecretConfig::default()
     };
 
     info!("config loaded.");
 
     debug!("config: {:?}", config);
 
+    debug!("secret_config: {:?}", secret_config);
+
     // Initialize system
-    let mut system = System::new(&config).await;
+    let mut system = System::new(&config, &secret_config).await;
 
     // Load and parse DSL
     let dsl = std::fs::read_to_string(&cli.dsl)
