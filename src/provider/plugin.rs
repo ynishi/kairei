@@ -10,6 +10,7 @@ use super::{
     types::*,
 };
 use async_trait::async_trait;
+use serde::Serialize;
 
 #[async_trait]
 #[mockall::automock]
@@ -31,6 +32,7 @@ pub trait ProviderPlugin: Send + Sync {
     ) -> ProviderResult<()>;
 }
 
+#[derive(Clone, Serialize)]
 pub struct PluginContext<'a> {
     pub request: &'a ProviderRequest,
     pub configs: &'a HashMap<String, PluginConfig>,

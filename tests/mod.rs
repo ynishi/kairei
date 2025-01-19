@@ -1,5 +1,15 @@
 mod provider_tests;
 
+use std::collections::HashMap;
+
+use kairei::{
+    config::PluginConfig,
+    expression,
+    provider::{
+        plugin::PluginContext,
+        request::{ProviderContext, ProviderRequest, RequestInput},
+    },
+};
 use lazy_static::lazy_static;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
@@ -29,4 +39,40 @@ lazy_static! {
 
 pub fn should_run_external_api_tests() -> bool {
     *EXTERNAL_API_TESTS_ENABLED
+}
+
+// TODO: Unit test とまとめる
+// テストコンテキストのホルダー構造体
+#[derive(Clone)]
+pub struct TestContextHolder {
+    request: ProviderRequest,
+    context: ProviderContext,
+    configs: HashMap<String, PluginConfig>,
+}
+
+impl TestContextHolder {
+    pub fn new(request_content: &str) -> Self {
+        let input = RequestInput {
+            query: expression::Value::String(request_content.to_string()),
+            ..Default::default()
+        };
+        let request = ProviderRequest {
+            input,
+            ..Default::default()
+        };
+
+        Self {
+            request,
+            context: ProviderContext::default(),
+            configs: HashMap::new(),
+        }
+    }
+
+    pub fn get_plugin_context(&self) -> PluginContext<'_> {
+        PluginContext {
+            request: &self.request,
+            context: &self.context,
+            configs: &self.configs,
+        }
+    }
 }

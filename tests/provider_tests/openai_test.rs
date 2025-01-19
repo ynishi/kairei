@@ -1,11 +1,20 @@
-use std::{ptr::read, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use futures::future::join_all;
 use kairei::{
     config::{self, ProviderConfig, SecretConfig, SystemConfig},
+    context::AgentInfo,
     event_bus::{Event, Value},
-    parse_root,
+    expression, parse_root,
+    provider::{
+        llm::ProviderLLM,
+        llms::{openai_assistant::OpenAIAssistantProviderLLM, openai_chat::OpenAIChatProviderLLM},
+        provider::{Provider, ProviderSecret},
+        providers::standard::StandardProvider,
+        request::{ExecutionState, ProviderContext, ProviderRequest, RequestInput},
+    },
     system::System,
+    timestamp::Timestamp,
 };
 use tokio::time::sleep;
 use tracing::debug;
@@ -13,17 +22,13 @@ use uuid::Uuid;
 
 use crate::should_run_external_api_tests;
 
-const TEST_CONFIG_PATH: &str = "tests/provider_tests/test_config.json";
-const TEST_SECRET_PATH: &str = "tests/provider_tests/test_secret.json";
+use super::setup_config;
 
 const PROVIDER_NAME: &str = "openai_travel_expert";
 
 // テスト用のヘルパー関数
 async fn setup_openai_provider() -> (SystemConfig, SecretConfig) {
-    let config: SystemConfig = config::from_file(TEST_CONFIG_PATH).unwrap();
-    let secret_config: SecretConfig = config::from_file(TEST_SECRET_PATH).unwrap();
-
-    (config, secret_config)
+    setup_config()
 }
 
 async fn setup_system(
@@ -79,6 +84,64 @@ fn create_request(request_id: &Uuid, requests: Vec<(&str, &str)>, timeout: Optio
     builder.build().unwrap()
 }
 
+fn create_test_request(
+    query: &str,
+    agent_name: &str,
+    session_id: Option<String>,
+) -> ProviderRequest {
+    ProviderRequest {
+        input: RequestInput {
+            query: expression::Value::String(query.to_string()),
+            parameters: HashMap::new(),
+        },
+        state: ExecutionState {
+            session_id: session_id.unwrap_or_else(|| "test-session".to_string()),
+            timestamp: Timestamp::now(),
+            agent_name: agent_name.to_string(),
+            agent_info: AgentInfo::default(),
+            policies: vec![],
+            trace_id: "test-trace".to_string(),
+        },
+        config: ProviderConfig::default(),
+    }
+}
+
+async fn setup_standard_provider(provider_name: &str) -> (StandardProvider, ProviderContext) {
+    let (system_config, secret_config) = setup_openai_provider().await;
+
+    let (config, secret) = setup_openai_provider().await;
+    let mut llm = OpenAIAssistantProviderLLM::new(provider_name);
+
+    // 初期化
+    llm.initialize(
+        &config
+            .provider_configs
+            .providers
+            .get(provider_name)
+            .unwrap(),
+        &kairei::provider::provider::ProviderSecret::from(
+            secret.providers.get(provider_name).unwrap().clone(),
+        ),
+    )
+    .await
+    .unwrap();
+
+    // StandardProviderの構築
+    let provider = StandardProvider::new(llm, vec![]);
+
+    let context = ProviderContext {
+        config: system_config
+            .provider_configs
+            .providers
+            .get(provider_name)
+            .unwrap()
+            .clone(),
+        secret: ProviderSecret::from(secret_config.providers.get(provider_name).unwrap().clone()),
+    };
+
+    (provider, context)
+}
+
 #[test]
 fn test_create_request() {
     let request_id = uuid::Uuid::new_v4();
@@ -92,42 +155,116 @@ fn test_create_request() {
 }
 
 #[tokio::test]
+async fn test_openai_chat_provider() {
+    if !should_run_external_api_tests() {
+        return;
+    }
+
+    let (config, secret) = setup_openai_provider().await;
+    let mut provider = OpenAIChatProviderLLM::new("test");
+
+    // 初期化
+    provider
+        .initialize(
+            &config
+                .provider_configs
+                .providers
+                .get("openai_chat_4mini")
+                .unwrap(),
+            &kairei::provider::provider::ProviderSecret::from(
+                secret.providers.get("openai_chat_4mini").unwrap().clone(),
+            ),
+        )
+        .await
+        .unwrap();
+
+    // メッセージ送信テスト
+    let response = provider
+        .send_message(
+            "Test message",
+            &config
+                .provider_configs
+                .providers
+                .get("openai_chat_4mini")
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(!response.content.is_empty());
+}
+
+#[tokio::test]
+async fn test_assistant_provider() {
+    if !should_run_external_api_tests() {
+        return;
+    }
+
+    let (config, secret) = setup_openai_provider().await;
+    let mut provider = OpenAIAssistantProviderLLM::new("openai_travel_expert");
+
+    // 初期化
+    provider
+        .initialize(
+            &config
+                .provider_configs
+                .providers
+                .get("openai_travel_expert")
+                .unwrap(),
+            &kairei::provider::provider::ProviderSecret::from(
+                secret
+                    .providers
+                    .get("openai_travel_expert")
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await
+        .unwrap();
+
+    // メッセージ送信テスト
+    let response = provider
+        .send_message(
+            "What is the capital of France?",
+            &config
+                .provider_configs
+                .providers
+                .get("openai_travel_expert")
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(!response.content.is_empty());
+
+    // クリーンアップ
+    provider.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn test_openai_assistant_basic_interaction() {
     if !should_run_external_api_tests() {
         return;
     }
 
-    let (system_config, secret_config) = setup_openai_provider().await;
+    let (mut provider, context) = setup_standard_provider(PROVIDER_NAME).await;
 
-    let (system, provider_config, _) = setup_system(system_config, secret_config, false).await;
-
-    let provider = system
-        .get_provider(PROVIDER_NAME)
-        .await
-        .unwrap()
-        .provider
-        .clone();
-
-    let thread_id = provider.create_thread().await.unwrap();
-
-    // 基本的な質問でテスト
-    let response = provider
-        .send_message(
-            &thread_id,
-            provider_config
-                .provider_specific
-                .get("assistant_id")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "What is the capital of France?",
-        )
+    provider
+        .initialize(&context.config, &context.secret)
         .await
         .unwrap();
 
-    let _ = provider.delete_thread(&thread_id).await;
+    // リクエストの作成と実行
+    let request = create_test_request("What is the capital of France?", "test-agent", None);
 
-    assert!(response.contains("Paris"));
+    let response = provider.execute(&context, &request).await.unwrap();
+
+    // レスポンスの検証
+    let content = response.output;
+    assert!(content.contains("Paris"));
+
+    // クリーンアップ
+    provider.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -173,9 +310,13 @@ async fn test_travel_agent_with_assistant() {
 
     let response = system.send_request(request).await.unwrap();
 
-    if let Value::String(content) = response {
-        debug!("response: {:?}", content);
-        assert!(content.contains("Tokyo"));
+    if let Value::Map(content_map) = response {
+        if let Some(Value::String(s)) = content_map.get("output") {
+            debug!("response: {:?}", s);
+            assert!(s.contains("Tokyo"));
+        } else {
+            panic!("Output content not found");
+        }
     } else {
         panic!("Invalid response type");
     }
@@ -211,11 +352,15 @@ async fn test_travel_agent_detailed_request() {
 
     let response = system.send_request(request).await.unwrap();
 
-    if let Value::String(content) = response {
-        debug!("response: {:?}", content);
-        let content = content.to_lowercase();
-        assert!(content.contains("temple"));
-        assert!(content.contains("traditional"));
+    if let Value::Map(content_map) = response {
+        if let Some(Value::String(s)) = content_map.get("output") {
+            debug!("response: {:?}", s);
+            let content = s.to_lowercase();
+            assert!(content.contains("temple"));
+            assert!(content.contains("traditional"));
+        } else {
+            panic!("Output content not found");
+        }
     } else {
         panic!("Invalid response type");
     }
@@ -258,8 +403,12 @@ async fn test_travel_agent_concurrent_requests() {
     let results = join_all(handles).await;
     for result in results {
         let response = result.unwrap().unwrap();
-        if let Value::String(content) = response {
-            assert!(!content.is_empty());
+        if let Value::Map(content_map) = response {
+            if let Some(Value::String(s)) = content_map.get("output") {
+                assert!(!s.is_empty());
+            } else {
+                panic!("Output content not found");
+            }
         } else {
             panic!("Invalid response type");
         }

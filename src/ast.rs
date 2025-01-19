@@ -454,7 +454,7 @@ pub enum RetryDelay {
 }
 
 // ==== AST Definitions ====
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Policy {
     pub text: String,
     pub scope: PolicyScope,
@@ -462,7 +462,7 @@ pub struct Policy {
     pub internal_id: PolicyId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct PolicyId(pub String);
 
 impl PolicyId {
@@ -478,7 +478,7 @@ impl PolicyId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum PolicyScope {
     World(String), // World名
     Agent(String), // Agent名
