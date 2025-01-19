@@ -195,11 +195,28 @@ pub enum PluginConfig {
     Search(SearchConfig),
 }
 
-// プラグイン固有の設定
+/// メモリプラグインの設定
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryConfig {
-    pub window: Duration,
+    #[serde(default = "default_max_short_term")]
+    pub max_short_term: usize,
+    #[serde(default = "default_max_long_term")]
+    pub max_long_term: usize,
+    #[serde(default = "default_importance_threshold")]
+    pub importance_threshold: f32,
+    #[serde(default = "default_max_items")]
     pub max_items: usize,
+}
+
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            max_short_term: default_max_short_term(),
+            max_long_term: default_max_long_term(),
+            importance_threshold: default_importance_threshold(),
+            max_items: default_max_items(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -357,6 +374,22 @@ fn default_endpoint() -> Option<String> {
 
 fn default_api_version() -> Option<String> {
     Some("v1".to_string())
+}
+
+fn default_max_short_term() -> usize {
+    5
+}
+
+fn default_max_long_term() -> usize {
+    10
+}
+
+fn default_importance_threshold() -> f32 {
+    0.5
+}
+
+fn default_max_items() -> usize {
+    100
 }
 
 // Duration型のシリアライズ/デシリアライズヘルパー

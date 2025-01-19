@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, instrument};
 
 use crate::{
-    config::{ProviderConfig, ProviderConfigs, SecretConfig},
+    config::{PluginConfig, ProviderConfig, ProviderConfigs, SecretConfig},
     event_bus::{ErrorEvent, Event, EventBus, Value},
     event_registry::EventType,
     provider::llms::simple_expert::SimpleExpertProviderLLM,
@@ -13,6 +13,7 @@ use crate::{
 
 use super::{
     llms::{openai_assistant::OpenAIAssistantProviderLLM, openai_chat::OpenAIChatProviderLLM},
+    plugins::{memory::MemoryPlugin, web_search_serper::WebSearchPlugin},
     provider::{Provider, ProviderSecret, ProviderType},
     provider_secret::SecretRegistry,
     providers::standard::StandardProvider,
@@ -362,6 +363,21 @@ impl ProviderRegistry {
     ) -> ProviderResult<Arc<dyn Provider>> {
         let llm = OpenAIChatProviderLLM::new(ProviderType::OpenAIChat);
         let mut provider = StandardProvider::new(llm, vec![]);
+        let memory_config = config
+            .plugin_configs
+            .get("memory")
+            .and_then(|c| match c {
+                PluginConfig::Memory(mc) => Some(mc),
+                _ => None,
+            })
+            .cloned()
+            .unwrap_or_default();
+        let memory_plugin = MemoryPlugin::new(memory_config);
+        provider.register_plugin(Arc::new(memory_plugin))?;
+        // secretが適切に設定してあれば採用する
+        if let Ok(web_search_serper_plugin) = WebSearchPlugin::try_new(secret) {
+            provider.register_plugin(Arc::new(web_search_serper_plugin))?;
+        }
         provider.initialize(config, secret).await?;
         Ok(Arc::new(provider))
     }

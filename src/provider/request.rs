@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     config::ProviderConfig, context::AgentInfo, expression::Value, timestamp::Timestamp, Policy,
 };
 
 use super::{llm::LLMResponse, provider::ProviderSecret};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct ProviderRequest {
     // 1. 基本的な入力データ
     pub input: RequestInput,
@@ -19,14 +21,15 @@ pub struct ProviderRequest {
 type RuntimeConfig = ProviderConfig;
 
 // devide from Instance.
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Deserialize, Serialize)]
 pub struct ProviderContext {
     pub config: ProviderConfig,
+    #[serde(skip)]
     pub secret: ProviderSecret,
 }
 
 // 1. 基本的な入力データ
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct RequestInput {
     // メインのプロンプト/クエリ
     pub query: Value,
@@ -35,7 +38,7 @@ pub struct RequestInput {
 }
 
 // 2. 実行時の状態
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct ExecutionState {
     // セッション管理
     pub session_id: String,

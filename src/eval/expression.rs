@@ -1,7 +1,9 @@
+use core::fmt;
 use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
 use async_recursion::async_recursion;
+use serde::{Deserialize, Serialize};
 
 use super::context::{ExecutionContext, VariableAccess};
 use crate::eval::evaluator::{EvalError, EvalResult};
@@ -16,7 +18,7 @@ use crate::{
 };
 
 // 値の型システム
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
 pub enum Value {
     Integer(i64),
     UInteger(u64),
@@ -32,6 +34,15 @@ pub enum Value {
     Error(String), // Error name for handling.
     #[default]
     Null,
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Value::String(s) => write!(f, "{}", s),
+            _ => write!(f, "{:?}", self),
+        }
+    }
 }
 
 pub struct ExpressionEvaluator;

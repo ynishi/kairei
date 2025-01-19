@@ -5,6 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use tracing::debug;
 use uuid::Uuid;
@@ -121,14 +122,15 @@ impl ExecutionContext {
 }
 
 /// Context生成時に追加されて、共有される。更新されない。
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AgentInfo {
     pub agent_name: String,
     pub agent_type: AgentType,
+    #[serde(skip)]
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 pub enum AgentType {
     World,
     ScaleManager,
