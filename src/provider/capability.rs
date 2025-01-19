@@ -10,6 +10,8 @@ pub enum CapabilityType {
     // Core Capabilities
     /// 基本的な文章生成機能
     Generate,
+    /// 基本的なプロンプト生成
+    GeneralPrompt,
     /// ポリシーベースの制御機能
     Policy,
 
@@ -146,7 +148,7 @@ impl RequiredCapabilities {
         Ok(())
     }
 
-    pub fn capabilities(&self) -> &HashSet<CapabilityType> {
+    pub async fn capabilities(&self) -> &HashSet<CapabilityType> {
         &self.capabilities
     }
 }

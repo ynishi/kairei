@@ -96,6 +96,9 @@ pub enum ProviderError {
     //lack of capability
     #[error("Missing Capabilities: {0:?}")]
     MissingCapabilities(Vec<CapabilityType>),
+
+    #[error("Internal error: {0}")]
+    InternalError(String),
 }
 
 pub type ProviderResult<T> = Result<T, ProviderError>;

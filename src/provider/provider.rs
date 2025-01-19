@@ -24,13 +24,13 @@ pub trait Provider: Send + Sync {
         context: &ProviderContext,
         request: &ProviderRequest,
     ) -> ProviderResult<ProviderResponse>;
-    fn capabilities(&self) -> Capabilities;
+    async fn capabilities(&self) -> Capabilities;
 
     fn name(&self) -> &str;
 
     // validate the provider configuration
     async fn initialize(
-        &self,
+        &mut self,
         config: &ProviderConfig,
         secret: &ProviderSecret,
     ) -> ProviderResult<()>;
@@ -100,7 +100,14 @@ pub enum ProviderType {
     #[default]
     OpenAIAssistant,
     SimpleExpert,
+    OpenAIChat,
     Unknown,
+}
+
+impl From<ProviderType> for String {
+    fn from(provider_type: ProviderType) -> Self {
+        provider_type.to_string()
+    }
 }
 
 #[derive(Clone, Default)]
