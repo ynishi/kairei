@@ -334,6 +334,12 @@ impl CodeGen for Expression {
             Expression::Think { .. } => {
                 todo!()
             }
+            Expression::Ok { .. } => {
+                todo!()
+            }
+            Expression::Err { .. } => {
+                todo!()
+            }
         }
     }
 }

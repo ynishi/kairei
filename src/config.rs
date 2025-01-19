@@ -228,9 +228,25 @@ pub struct RagConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchConfig {
+    #[serde(default = "default_search_window")]
     pub search_window: Duration,
+    #[serde(default = "default_max_results")]
     pub max_results: usize,
+    #[serde(default = "default_search_filters")]
     pub filters: Vec<String>,
+    #[serde(default = "default_max_fetch_per_result")]
+    pub max_fetch_per_result: usize,
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            search_window: default_search_window(),
+            max_results: default_max_results(),
+            filters: default_search_filters(),
+            max_fetch_per_result: default_max_fetch_per_result(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -295,6 +311,12 @@ pub fn from_file<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(path: P) -> Inter
         .map_err(|e| Error::Internal(format!("Failed to open secret file: {}", e)))?;
     let reader = BufReader::new(file);
     let config = serde_json::from_reader(reader)
+        .map_err(|e| Error::Internal(format!("Failed to parse secret file: {}", e)))?;
+    Ok(config)
+}
+
+pub fn from_str<T: for<'de> Deserialize<'de>>(s: &str) -> InternalResult<T> {
+    let config = serde_json::from_str(s)
         .map_err(|e| Error::Internal(format!("Failed to parse secret file: {}", e)))?;
     Ok(config)
 }
@@ -390,6 +412,22 @@ fn default_importance_threshold() -> f32 {
 
 fn default_max_items() -> usize {
     100
+}
+
+fn default_search_window() -> Duration {
+    Duration::from_secs(60)
+}
+
+fn default_max_results() -> usize {
+    10
+}
+
+fn default_search_filters() -> Vec<String> {
+    vec![]
+}
+
+fn default_max_fetch_per_result() -> usize {
+    3
 }
 
 // Duration型のシリアライズ/デシリアライズヘルパー

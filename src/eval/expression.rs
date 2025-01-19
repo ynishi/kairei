@@ -32,6 +32,8 @@ pub enum Value {
     Tuple(Vec<Value>),
     Unit,          // Return value for statements
     Error(String), // Error name for handling.
+    Ok(Box<Value>),
+    Err(Box<Value>),
     #[default]
     Null,
 }
@@ -85,6 +87,12 @@ impl ExpressionEvaluator {
             Expression::Think { args, with_block } => {
                 self.eval_think(args, with_block, context).await
             }
+            Expression::Ok(expression) => Ok(Value::Ok(Box::new(
+                self.eval_expression(expression, context).await?,
+            ))),
+            Expression::Err(expression) => Ok(Value::Err(Box::new(
+                self.eval_expression(expression, context).await?,
+            ))),
         }
     }
 

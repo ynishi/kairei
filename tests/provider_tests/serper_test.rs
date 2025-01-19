@@ -1,5 +1,9 @@
-use kairei::provider::{
-    plugin::ProviderPlugin, plugins::web_search_serper::WebSearchPlugin, provider::ProviderSecret,
+use kairei::{
+    config::SearchConfig,
+    provider::{
+        plugin::ProviderPlugin, plugins::web_search_serper::WebSearchPlugin,
+        provider::ProviderSecret,
+    },
 };
 
 use crate::{provider_tests::setup_config, should_run_external_api_tests, TestContextHolder};
@@ -14,13 +18,16 @@ async fn test_web_search() {
 
     let (_system_config, secret_config) = setup_config();
 
-    let plugin = WebSearchPlugin::new(&ProviderSecret::from(
-        secret_config
-            .providers
-            .get(WEB_SEARCH_TEST_PROVIDER)
-            .unwrap()
-            .to_owned(),
-    ));
+    let plugin = WebSearchPlugin::new(
+        &SearchConfig::default(),
+        &ProviderSecret::from(
+            secret_config
+                .providers
+                .get(WEB_SEARCH_TEST_PROVIDER)
+                .unwrap()
+                .to_owned(),
+        ),
+    );
     let context_holder = TestContextHolder::new("What is Rust programming language?");
     let context = context_holder.get_plugin_context();
 

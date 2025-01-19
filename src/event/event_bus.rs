@@ -370,6 +370,8 @@ impl From<expression::Value> for Value {
                 }
                 Value::Map(map)
             }
+            expression::Value::Ok(value) => Value::from(*value),
+            expression::Value::Err(value) => Value::from(*value),
         }
     }
 }

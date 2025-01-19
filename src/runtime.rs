@@ -546,6 +546,7 @@ impl RuntimeAgentData {
     #[tracing::instrument(skip(self, event))]
     async fn handle_event(&self, event: &Event) -> RuntimeResult<()> {
         debug!("Event received: name: {}, event: {:?}", self.name(), event);
+
         match &event.category() {
             // リクエストイベント
             EventCategory::Request { request_type, .. } => {
@@ -646,6 +647,10 @@ pub enum RuntimeError {
     // eval
     #[error("Evaluation error: {0}")]
     Eval(#[from] EvalError),
+
+    // failure value
+    #[error("Evaluation result is failure: {0}")]
+    EvalFailure(expression::Value),
 
     #[error("Handler not found for {handler_type}: {name}")]
     HandlerNotFound { handler_type: String, name: String },

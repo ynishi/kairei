@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use futures::future::join_all;
 use html2text::from_read;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -7,13 +8,17 @@ use reqwest::{
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tracing::debug;
 
-use crate::provider::{
-    capability::CapabilityType,
-    llm::LLMResponse,
-    plugin::{PluginContext, ProviderPlugin},
-    provider::{ProviderSecret, Section},
-    types::{ProviderError, ProviderResult},
+use crate::{
+    config::{PluginConfig, SearchConfig},
+    provider::{
+        capability::CapabilityType,
+        llm::LLMResponse,
+        plugin::{PluginContext, ProviderPlugin},
+        provider::{ProviderSecret, Section},
+        types::{ProviderError, ProviderResult},
+    },
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -45,24 +50,26 @@ struct SearchParameters {
 
 #[derive(Debug, Clone)]
 pub struct WebSearchPlugin {
+    config: SearchConfig,
     api_key: String,
     client: Client,
 }
 
 impl WebSearchPlugin {
-    pub fn new(secret: &ProviderSecret) -> Self {
+    pub fn new(config: &SearchConfig, secret: &ProviderSecret) -> Self {
         let api_key = secret
             .additional_auth
             .get("web_search_serper_api_key")
             .map(|v| v.expose_secret().to_string())
             .unwrap_or_default();
         Self {
+            config: config.clone(),
             api_key,
             client: Client::new(),
         }
     }
 
-    pub fn try_new(secret: &ProviderSecret) -> ProviderResult<Self> {
+    pub fn try_new(config: &SearchConfig, secret: &ProviderSecret) -> ProviderResult<Self> {
         let api_key = secret
             .additional_auth
             .get("web_search_serper_api_key")
@@ -71,12 +78,18 @@ impl WebSearchPlugin {
                 "api key not found in additional_auth.web_search_serper_api_key".to_string(),
             ))?;
         Ok(Self {
+            config: config.clone(),
             api_key,
             client: Client::new(),
         })
     }
 
-    async fn search(&self, query: &str) -> ProviderResult<Vec<SearchResult>> {
+    #[tracing::instrument(skip(self))]
+    async fn search(
+        &self,
+        query: &str,
+        config: &SearchConfig,
+    ) -> ProviderResult<Vec<SearchResult>> {
         let mut headers = HeaderMap::new();
         headers.insert(
             "X-API-KEY",
@@ -90,7 +103,7 @@ impl WebSearchPlugin {
             .headers(headers)
             .json(&json!({
                 "q": query,
-                "num": 3
+                "num": config.max_results,
             }))
             .send()
             .await
@@ -99,20 +112,35 @@ impl WebSearchPlugin {
             .await
             .map_err(|e| ProviderError::ApiError(e.to_string()))?;
 
-        let mut results = Vec::new();
-        for result in &response.organic {
-            let content = Self::fetch_content(&result.link).await?;
-            results.push(SearchResult {
-                title: result.title.clone(),
-                link: result.link.clone(),
-                snippet: result.snippet.clone(),
-                content,
+        let futures = response
+            .organic
+            .iter()
+            .take(config.max_fetch_per_result)
+            .map(|result| async move {
+                debug!("Fetching content from {}", result.link);
+                let content_result = Self::fetch_content(&result.link).await;
+                let content = match content_result {
+                    Ok(content) => content,
+                    Err(ProviderError::FetchFailed(_)) => "Failed to fetch content".to_string(),
+                    Err(e) => {
+                        tracing::warn!("Failed to fetch content: {}", e);
+                        format!("Failed to fetch content: {}", e)
+                    }
+                };
+                SearchResult {
+                    title: result.title.clone(),
+                    link: result.link.clone(),
+                    snippet: result.snippet.clone(),
+                    content,
+                }
             });
-        }
+
+        let results = join_all(futures).await;
 
         Ok(results)
     }
 
+    #[tracing::instrument]
     async fn fetch_content(url: &str) -> ProviderResult<String> {
         let client = Client::new();
         let response = client
@@ -123,12 +151,27 @@ impl WebSearchPlugin {
             )
             .send()
             .await
-            .map_err(|e| ProviderError::ApiError(e.to_string()))?;
+            .map_err(|e| ProviderError::FetchFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(ProviderError::FetchFailed(format!(
+                "Failed to fetch content from {}: {}",
+                url,
+                response.status()
+            )));
+        }
 
         let html_text = response
             .text()
             .await
             .map_err(|e| ProviderError::ApiError(e.to_string()))?;
+
+        if html_text.is_empty() {
+            return Err(ProviderError::FetchFailed(format!(
+                "Failed to fetch content from {}: empty response",
+                url
+            )));
+        }
 
         let text = from_read(html_text.as_bytes(), 80)
             .map_err(|e| ProviderError::ApiError(e.to_string()))?;
@@ -191,8 +234,16 @@ impl ProviderPlugin for WebSearchPlugin {
         // リクエストから検索クエリを取得
         let query = context.request.input.query.to_string();
 
+        // WebConfigを取得
+        let config =
+            if let Some(PluginConfig::Search(search_config)) = context.configs.get("search") {
+                search_config
+            } else {
+                &self.config
+            };
+
         // 検索を実行
-        let results = self.search(&query).await?;
+        let results = self.search(&query, config).await?;
 
         // 結果をフォーマット
         let content = self.format_results(&results);
@@ -230,7 +281,7 @@ mod tests {
             api_key: secrecy::SecretString::from("api_key"),
             additional_auth,
         };
-        let plugin = WebSearchPlugin::new(&secret_config);
+        let plugin = WebSearchPlugin::new(&SearchConfig::default(), &secret_config);
 
         assert!(plugin.api_key == "test_web_search_serper_api_key");
         assert_eq!(plugin.capability(), CapabilityType::Search);
