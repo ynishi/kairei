@@ -978,12 +978,12 @@ mod tests {
                     parameters: vec![],
                     block: HandlerBlock {
                         statements: vec![
-                            Statement::Request {
+                            Statement::Expression(Expression::Request {
                                 agent: "pong".to_string(),
                                 request_type: "ping".into(),
                                 parameters: vec![],
                                 options: None,
-                            },
+                            }),
                             Statement::Assignment {
                                 target: Expression::StateAccess(StateAccessPath(vec![
                                     "received_pong".to_string(),

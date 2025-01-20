@@ -42,12 +42,21 @@ pub struct AgentConfig {
     pub monitor: Option<MonitorConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextConfig {
     #[serde(default = "default_access_timeout")]
     pub access_timeout: Duration,
     #[serde(default = "default_request_timeout", with = "duration_ms")]
     pub request_timeout: Duration,
+}
+
+impl Default for ContextConfig {
+    fn default() -> Self {
+        Self {
+            access_timeout: default_access_timeout(),
+            request_timeout: default_request_timeout(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -360,7 +369,7 @@ fn default_shutdown_timeout() -> Duration {
     Duration::from_secs(30)
 }
 fn default_request_timeout() -> Duration {
-    Duration::from_secs(30)
+    Duration::from_secs(60)
 }
 fn default_true() -> bool {
     true

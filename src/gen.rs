@@ -251,10 +251,6 @@ impl CodeGen for Statement {
                 // 今は利用しない
                 quote! {}
             }
-            Statement::Request { .. } => {
-                // 今は利用しない
-                quote! {}
-            }
             Statement::If {
                 condition,
                 then_block,
@@ -340,6 +336,12 @@ impl CodeGen for Expression {
             Expression::Err { .. } => {
                 todo!()
             }
+            Expression::Request {
+                agent,
+                request_type,
+                parameters,
+                options,
+            } => todo!(),
         }
     }
 }

@@ -67,15 +67,6 @@ impl StatementEvaluator {
                 self.eval_emit(event_type, parameters, target, context)
                     .await?,
             )),
-            Statement::Request {
-                agent,
-                request_type,
-                parameters,
-                options,
-            } => Ok(StatementResult::Value(
-                self.eval_request(agent, request_type, parameters, options, context)
-                    .await?,
-            )),
             Statement::Block(block) => self.eval_block(block, context).await,
             Statement::If {
                 condition,
@@ -184,47 +175,6 @@ impl StatementEvaluator {
         context.emit_event(event).await?;
 
         Ok(Value::Unit)
-    }
-
-    async fn eval_request(
-        &self,
-        agent: &str,
-        request_type: &RequestType,
-        parameters: &[Argument],
-        _options: &Option<RequestAttributes>,
-        context: Arc<ExecutionContext>,
-    ) -> EvalResult<Value> {
-        // パラメータの評価
-        let evaluated_params = self
-            .expression_evaluator
-            .eval_arguments(parameters, context.clone())
-            .await?;
-
-        let event_params = evaluated_params
-            .iter()
-            .map(|(k, v)| (k.clone(), event_bus::Value::from(v.clone())))
-            .collect();
-
-        // リクエストの構築と送信
-        let request = Event {
-            event_type: event_registry::EventType::Request {
-                request_id: Uuid::new_v4().to_string(),
-                requester: context.agent_name().clone(),
-                responder: agent.to_string(),
-                request_type: request_type.to_string(),
-            },
-            parameters: event_params,
-        };
-        debug!("Create Request: {:?}", request);
-        let response_event = context.send_request(request).await?;
-        debug!("Got Response: {:?}", response_event);
-        let response = response_event
-            .parameters
-            .get("response")
-            .ok_or(EvalError::Eval("response not found".to_string()))?
-            .clone()
-            .into();
-        Ok(response)
     }
 
     async fn eval_if(
