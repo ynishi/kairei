@@ -1,8 +1,10 @@
 use core::fmt;
+use std::collections::HashSet;
 use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
 use async_recursion::async_recursion;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use super::context::{ExecutionContext, VariableAccess};
@@ -283,10 +285,19 @@ impl ExpressionEvaluator {
         context: Arc<ExecutionContext>,
         policies: Vec<Policy>,
     ) -> EvalResult<ProviderRequest> {
-        let (query, tail_args) = self.query_from_args(args, context.clone()).await?;
+        let (query_template, tail_args) = self.query_from_args(args, context.clone()).await?;
+        let mut query_str = query_template.to_string();
+        let vars = self.extract_variables_from_template(&query_str);
+        for var in vars {
+            let value = context.get_variable(&var).await?;
+            query_str = query_str.replace(&format!("${{{}}}", var), &value.to_string());
+        }
+        let query = Value::String(query_str);
+
         let parameters = self
-            .eval_arguments(tail_args.as_slice(), context.clone())
+            .build_arg_map_from_args(tail_args.as_slice(), context.clone())
             .await?;
+
         let input = RequestInput { query, parameters };
 
         // 実行状態の取得
@@ -397,6 +408,13 @@ impl ExpressionEvaluator {
             }
         }
         Ok((Value::Null, args.to_vec()))
+    }
+
+    fn extract_variables_from_template(&self, template: &str) -> HashSet<String> {
+        let re = Regex::new(r"\$\{([^}]+)\}").unwrap();
+        re.captures_iter(template)
+            .map(|cap| cap[1].to_string())
+            .collect()
     }
 
     fn collect_policies(
