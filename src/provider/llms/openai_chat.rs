@@ -42,6 +42,7 @@ impl OpenAIChatProviderLLM {
         }
     }
 
+    #[tracing::instrument(skip(self, config))]
     async fn chat_completion(
         &self,
         prompt: &str,
