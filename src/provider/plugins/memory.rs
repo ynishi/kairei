@@ -17,7 +17,7 @@ use crate::provider::types::ProviderResult;
 pub struct Memory {
     content: String,
     timestamp: DateTime<Utc>,
-    importance: f32,
+    importance: f64,
     metadata: HashMap<String, serde_json::Value>, // contextをそのまま保存
 }
 
@@ -120,7 +120,7 @@ impl MemoryPlugin {
     }
 
     /// レスポンスの重要度を計算
-    fn calculate_importance(&self, response: &LLMResponse) -> f32 {
+    fn calculate_importance(&self, response: &LLMResponse) -> f64 {
         // 基本スコア (0.0-1.0)
         let mut importance = 0.5;
 
@@ -161,7 +161,7 @@ impl MemoryPlugin {
                 .iter()
                 .filter(|&k| content.contains(k))
                 .count();
-            (keyword_count as f32) * 0.1
+            (keyword_count as f64) * 0.1
         };
 
         // 重要度の計算

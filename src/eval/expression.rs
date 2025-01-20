@@ -6,6 +6,7 @@ use async_recursion::async_recursion;
 use serde::{Deserialize, Serialize};
 
 use super::context::{ExecutionContext, VariableAccess};
+use crate::config::{MemoryConfig, PluginConfig, RagConfig, SearchConfig};
 use crate::eval::evaluator::{EvalError, EvalResult};
 use crate::provider::provider_registry::ProviderInstance;
 use crate::provider::request::{
@@ -315,6 +316,14 @@ impl ExpressionEvaluator {
                     serde_json::to_value(retry).map_err(EvalError::from)?,
                 );
             }
+            // attersのその他のフィールドは、plugin_configに適用可能なものは追加する
+            config.plugin_configs.extend(
+                attrs
+                    .plugins
+                    .iter()
+                    .filter(|(key, _)| key.parse::<PluginConfig>().is_ok())
+                    .map(|(key, value)| (key.to_owned(), PluginConfig::new(key, value.clone()))),
+            );
         }
 
         Ok(ProviderRequest {
@@ -672,6 +681,116 @@ impl ExpressionEvaluator {
             ))),
             (Value::String(l), Value::String(r)) => Ok(Value::Boolean(compare(l.cmp(r)))),
             _ => Err(EvalError::Eval(format!("{:?} <=> {:?}", left, right))),
+        }
+    }
+}
+
+impl PluginConfig {
+    fn new(name: &str, map: HashMap<String, ast::Literal>) -> Self {
+        match name.parse::<PluginConfig>() {
+            Ok(PluginConfig::Memory(_)) => PluginConfig::Memory(MemoryConfig::from(map)),
+            Ok(PluginConfig::Search(_)) => PluginConfig::Search(SearchConfig::from(map)),
+            Ok(PluginConfig::Rag(_)) => PluginConfig::Rag(RagConfig::from(map)),
+            _ => {
+                let mut hash_map = HashMap::new();
+                for (key, value) in map {
+                    let json_value = serde_json::Value::from(value);
+                    hash_map.insert(key, json_value);
+                }
+                PluginConfig::Unknown(hash_map)
+            }
+        }
+    }
+}
+
+impl From<HashMap<String, ast::Literal>> for SearchConfig {
+    fn from(map: HashMap<String, ast::Literal>) -> Self {
+        let mut config = SearchConfig::default();
+        if let Some(ast::Literal::Duration(d)) = map.get("search_window") {
+            config.search_window = *d;
+        }
+        if let Some(ast::Literal::Integer(i)) = map.get("max_results") {
+            config.max_results = *i as usize;
+        }
+        if let Some(ast::Literal::List(l)) = map.get("filters") {
+            config.filters = l
+                .iter()
+                .filter_map(|v| match v {
+                    ast::Literal::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .collect();
+        }
+        if let Some(ast::Literal::Integer(i)) = map.get("max_fetch_per_result") {
+            config.max_fetch_per_result = *i as usize;
+        }
+        config
+    }
+}
+
+impl From<HashMap<String, ast::Literal>> for MemoryConfig {
+    fn from(map: HashMap<String, ast::Literal>) -> Self {
+        let mut config = MemoryConfig::default();
+        if let Some(ast::Literal::Integer(i)) = map.get("max_short_term") {
+            config.max_short_term = *i as usize;
+        }
+        if let Some(ast::Literal::Integer(i)) = map.get("max_long_term") {
+            config.max_long_term = *i as usize;
+        }
+        if let Some(ast::Literal::Float(f)) = map.get("importance_threshold") {
+            config.importance_threshold = *f;
+        }
+        if let Some(ast::Literal::Integer(i)) = map.get("max_items") {
+            config.max_items = *i as usize;
+        }
+        config
+    }
+}
+
+#[allow(clippy::assigning_clones)]
+impl From<HashMap<String, ast::Literal>> for RagConfig {
+    fn from(map: HashMap<String, ast::Literal>) -> Self {
+        let mut config = RagConfig::default();
+        if let Some(ast::Literal::String(s)) = map.get("collection_name") {
+            // ignore assignment of clone
+            config.collection_name = s.to_owned();
+        }
+        if let Some(ast::Literal::Integer(i)) = map.get("max_results") {
+            config.max_results = *i as usize;
+        }
+        if let Some(ast::Literal::Float(f)) = map.get("similarity_threshold") {
+            config.similarity_threshold = *f;
+        }
+        config
+    }
+}
+
+impl From<ast::Literal> for serde_json::Value {
+    fn from(value: ast::Literal) -> serde_json::Value {
+        match value {
+            ast::Literal::String(s) => serde_json::Value::String(s),
+            ast::Literal::Integer(i) => serde_json::Value::Number(i.into()),
+            ast::Literal::Float(f) => serde_json::Value::Number(
+                serde_json::Number::from_f64(f).unwrap_or(serde_json::Number::from(0)),
+            ),
+            ast::Literal::Boolean(b) => serde_json::Value::Bool(b),
+            ast::Literal::Duration(d) => serde_json::Value::Number(d.as_secs().into()),
+            ast::Literal::List(l) => {
+                let mut vec = Vec::new();
+                for item in l {
+                    vec.push(serde_json::Value::from(item));
+                }
+                serde_json::Value::Array(vec)
+            }
+            ast::Literal::Map(m) => {
+                let mut map = serde_json::Map::new();
+                for (key, value) in m {
+                    map.insert(key, serde_json::Value::from(value));
+                }
+                serde_json::Value::Object(map)
+            }
+            ast::Literal::Null => serde_json::Value::Null,
+            _ => serde_json::Value::Null,
         }
     }
 }
@@ -1049,5 +1168,344 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(result, Value::Boolean(true)));
+    }
+
+    #[test]
+    fn test_search_config_from_hashmap() {
+        let mut map = HashMap::new();
+
+        // 基本的なケース：全てのフィールドが設定されている場合
+        map.insert(
+            "search_window".to_string(),
+            ast::Literal::Duration(Duration::from_secs(3600)),
+        );
+        map.insert("max_results".to_string(), ast::Literal::Integer(100));
+        map.insert(
+            "filters".to_string(),
+            ast::Literal::List(vec![
+                ast::Literal::String("filter1".to_string()),
+                ast::Literal::String("filter2".to_string()),
+            ]),
+        );
+        map.insert(
+            "max_fetch_per_result".to_string(),
+            ast::Literal::Integer(50),
+        );
+
+        let config = SearchConfig::from(map);
+
+        assert_eq!(config.search_window, Duration::from_secs(3600));
+        assert_eq!(config.max_results, 100);
+        assert_eq!(
+            config.filters,
+            vec!["filter1".to_string(), "filter2".to_string()]
+        );
+        assert_eq!(config.max_fetch_per_result, 50);
+    }
+
+    #[test]
+    fn test_search_config_from_empty_hashmap() {
+        // 空のマップからデフォルト値が設定されることを確認
+        let map = HashMap::new();
+        let config = SearchConfig::from(map);
+
+        assert_eq!(config, SearchConfig::default());
+    }
+
+    #[test]
+    fn test_search_config_with_invalid_types() {
+        let mut map = HashMap::new();
+
+        // 不正な型を設定
+        map.insert(
+            "search_window".to_string(),
+            ast::Literal::String("invalid".to_string()),
+        );
+        map.insert(
+            "max_results".to_string(),
+            ast::Literal::String("invalid".to_string()),
+        );
+        map.insert(
+            "filters".to_string(),
+            ast::Literal::List(vec![
+                ast::Literal::Integer(123), // 数値は無視されるはず
+                ast::Literal::String("valid_filter".to_string()),
+            ]),
+        );
+
+        let config = SearchConfig::from(map);
+        let default = SearchConfig::default();
+
+        // 不正な型は無視されデフォルト値が維持されるはず
+        assert_eq!(config.search_window, default.search_window);
+        assert_eq!(config.max_results, default.max_results);
+        assert_eq!(config.filters, vec!["valid_filter".to_string()]);
+    }
+
+    #[test]
+    fn test_search_config_partial_update() {
+        let mut map = HashMap::new();
+
+        // 一部のフィールドのみ設定
+        map.insert("max_results".to_string(), ast::Literal::Integer(200));
+        map.insert(
+            "filters".to_string(),
+            ast::Literal::List(vec![ast::Literal::String("test_filter".to_string())]),
+        );
+
+        let config = SearchConfig::from(map);
+        let default = SearchConfig::default();
+
+        // 設定したフィールドは更新され、それ以外はデフォルト値が維持される
+        assert_eq!(config.search_window, default.search_window);
+        assert_eq!(config.max_results, 200);
+        assert_eq!(config.filters, vec!["test_filter".to_string()]);
+        assert_eq!(config.max_fetch_per_result, default.max_fetch_per_result);
+    }
+
+    #[test]
+    fn test_memory_config_from_hashmap() {
+        let mut map = HashMap::new();
+
+        // 基本的なケース：全てのフィールドが設定されている場合
+        map.insert("max_short_term".to_string(), ast::Literal::Integer(100));
+        map.insert("max_long_term".to_string(), ast::Literal::Integer(1000));
+        map.insert(
+            "importance_threshold".to_string(),
+            ast::Literal::Float(0.75),
+        );
+        map.insert("max_items".to_string(), ast::Literal::Integer(500));
+
+        let config = MemoryConfig::from(map);
+
+        assert_eq!(config.max_short_term, 100);
+        assert_eq!(config.max_long_term, 1000);
+        assert_eq!(config.importance_threshold, 0.75);
+        assert_eq!(config.max_items, 500);
+    }
+
+    #[test]
+    fn test_memory_config_from_empty_hashmap() {
+        // 空のマップからデフォルト値が設定されることを確認
+        let map = HashMap::new();
+        let config = MemoryConfig::from(map);
+
+        assert_eq!(config, MemoryConfig::default());
+    }
+
+    #[test]
+    fn test_memory_config_with_invalid_types() {
+        let mut map = HashMap::new();
+
+        // 不正な型を設定
+        map.insert(
+            "max_short_term".to_string(),
+            ast::Literal::String("invalid".to_string()),
+        );
+        map.insert(
+            "max_long_term".to_string(),
+            ast::Literal::String("invalid".to_string()),
+        );
+        map.insert(
+            "importance_threshold".to_string(),
+            ast::Literal::String("invalid".to_string()),
+        );
+        map.insert(
+            "max_items".to_string(),
+            ast::Literal::String("invalid".to_string()),
+        );
+
+        let config = MemoryConfig::from(map);
+        let default = MemoryConfig::default();
+
+        // 不正な型は無視されデフォルト値が維持されるはず
+        assert_eq!(config, default);
+    }
+
+    #[test]
+    fn test_memory_config_partial_update() {
+        let mut map = HashMap::new();
+
+        // 一部のフィールドのみ設定
+        map.insert("max_short_term".to_string(), ast::Literal::Integer(200));
+        map.insert("importance_threshold".to_string(), ast::Literal::Float(0.9));
+
+        let config = MemoryConfig::from(map);
+        let default = MemoryConfig::default();
+
+        // 設定したフィールドは更新され、それ以外はデフォルト値が維持される
+        assert_eq!(config.max_short_term, 200);
+        assert_eq!(config.max_long_term, default.max_long_term);
+        assert_eq!(config.importance_threshold, 0.9);
+        assert_eq!(config.max_items, default.max_items);
+    }
+
+    #[test]
+    fn test_memory_config_boundary_values() {
+        let mut map = HashMap::new();
+
+        // 境界値のテスト
+        map.insert("max_short_term".to_string(), ast::Literal::Integer(0));
+        map.insert("max_long_term".to_string(), ast::Literal::Integer(i64::MAX));
+        map.insert("importance_threshold".to_string(), ast::Literal::Float(0.0));
+        map.insert("max_items".to_string(), ast::Literal::Integer(i64::MAX));
+
+        let config = MemoryConfig::from(map);
+
+        assert_eq!(config.max_short_term, 0);
+        assert_eq!(config.max_long_term, i64::MAX as usize);
+        assert_eq!(config.importance_threshold, 0.0);
+        assert_eq!(config.max_items, i64::MAX as usize);
+    }
+
+    #[test]
+    fn test_rag_config_from_hashmap() {
+        let mut map = HashMap::new();
+
+        // 基本的なケース：全てのフィールドが設定されている場合
+        map.insert(
+            "collection_name".to_string(),
+            ast::Literal::String("test_collection".to_string()),
+        );
+        map.insert("max_results".to_string(), ast::Literal::Integer(50));
+        map.insert(
+            "similarity_threshold".to_string(),
+            ast::Literal::Float(0.85),
+        );
+
+        let config = RagConfig::from(map);
+
+        assert_eq!(config.collection_name, "test_collection");
+        assert_eq!(config.max_results, 50);
+        assert_eq!(config.similarity_threshold, 0.85);
+    }
+
+    #[test]
+    fn test_rag_config_from_empty_hashmap() {
+        // 空のマップからデフォルト値が設定されることを確認
+        let map = HashMap::new();
+        let config = RagConfig::from(map);
+
+        assert_eq!(config, RagConfig::default());
+    }
+
+    #[test]
+    fn test_rag_config_with_invalid_types() {
+        let mut map = HashMap::new();
+
+        // 不正な型を設定
+        map.insert("collection_name".to_string(), ast::Literal::Integer(123));
+        map.insert(
+            "max_results".to_string(),
+            ast::Literal::String("invalid".to_string()),
+        );
+        map.insert(
+            "similarity_threshold".to_string(),
+            ast::Literal::String("invalid".to_string()),
+        );
+
+        let config = RagConfig::from(map);
+        let default = RagConfig::default();
+
+        // 不正な型は無視されデフォルト値が維持されるはず
+        assert_eq!(config, default);
+    }
+
+    #[test]
+    fn test_rag_config_partial_update() {
+        let mut map = HashMap::new();
+
+        // 一部のフィールドのみ設定
+        map.insert(
+            "collection_name".to_string(),
+            ast::Literal::String("partial_collection".to_string()),
+        );
+        map.insert("max_results".to_string(), ast::Literal::Integer(30));
+
+        let config = RagConfig::from(map);
+        let default = RagConfig::default();
+
+        // 設定したフィールドは更新され、それ以外はデフォルト値が維持される
+        assert_eq!(config.collection_name, "partial_collection");
+        assert_eq!(config.max_results, 30);
+        assert_eq!(config.similarity_threshold, default.similarity_threshold);
+    }
+
+    #[test]
+    fn test_rag_config_boundary_values() {
+        let mut map = HashMap::new();
+
+        // 境界値のテスト
+        map.insert(
+            "collection_name".to_string(),
+            ast::Literal::String("".to_string()),
+        ); // 空文字列
+        map.insert("max_results".to_string(), ast::Literal::Integer(0));
+        map.insert("similarity_threshold".to_string(), ast::Literal::Float(0.0));
+
+        let config = RagConfig::from(map);
+
+        assert_eq!(config.collection_name, "");
+        assert_eq!(config.max_results, 0);
+        assert_eq!(config.similarity_threshold, 0.0);
+
+        // 上限値のテスト
+        let mut map = HashMap::new();
+        map.insert("max_results".to_string(), ast::Literal::Integer(i64::MAX));
+        map.insert("similarity_threshold".to_string(), ast::Literal::Float(1.0));
+
+        let config = RagConfig::from(map);
+        assert_eq!(config.max_results, i64::MAX as usize);
+        assert_eq!(config.similarity_threshold, 1.0);
+    }
+
+    #[test]
+    fn test_rag_config_special_strings() {
+        let mut map = HashMap::new();
+
+        // 特殊な文字列のテスト
+        map.insert(
+            "collection_name".to_string(),
+            ast::Literal::String("特殊文字!@#$%^&*()_+".to_string()),
+        );
+
+        let config = RagConfig::from(map);
+        assert_eq!(config.collection_name, "特殊文字!@#$%^&*()_+");
+    }
+
+    #[test]
+    fn test_plugin_config_new() {
+        // 正常系: 適切な形式のObject
+        // memory map is HashMap<String, ast::Literal>
+        let mut meomry_map = HashMap::new();
+        meomry_map.insert("max_items".to_string(), ast::Literal::Integer(100));
+
+        match PluginConfig::new("memory", meomry_map) {
+            PluginConfig::Memory(config) => assert_eq!(config.max_items, 100),
+            _ => panic!("Expected Memory config"),
+        }
+
+        // search map is HashMap<String, ast::Literal>
+        let mut search_map = HashMap::new();
+        search_map.insert("max_results".to_string(), ast::Literal::Integer(100));
+        match PluginConfig::new("search", search_map) {
+            PluginConfig::Search(config) => assert_eq!(config.max_results, 100),
+            _ => panic!("Expected Search config"),
+        }
+
+        // rag map is HashMap<String, ast::Literal>
+        let mut rag_map = HashMap::new();
+        rag_map.insert("max_results".to_string(), ast::Literal::Integer(100));
+        match PluginConfig::new("rag", rag_map) {
+            PluginConfig::Rag(config) => assert_eq!(config.max_results, 100),
+            _ => panic!("Expected Rag config"),
+        }
+
+        // 異常系: 無効なキー
+        let map = HashMap::new();
+        match PluginConfig::new("invalid", map) {
+            PluginConfig::Unknown(_) => {}
+            _ => panic!("Expected Unknown config"),
+        }
     }
 }
