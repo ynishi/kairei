@@ -320,12 +320,6 @@ pub enum Statement {
         parameters: Vec<Argument>,
         target: Option<String>, // Noneの場合はブロードキャスト
     },
-    Request {
-        agent: String,
-        request_type: RequestType,
-        parameters: Vec<Argument>,
-        options: Option<RequestAttributes>,
-    },
     // grouping
     Block(Statements),
     Await(AwaitType),
@@ -405,6 +399,12 @@ pub enum Expression {
     Think {
         args: Vec<Argument>,
         with_block: Option<ThinkAttributes>,
+    },
+    Request {
+        agent: String,
+        request_type: RequestType,
+        parameters: Vec<Argument>,
+        options: Option<RequestAttributes>,
     },
     BinaryOp {
         op: BinaryOperator,

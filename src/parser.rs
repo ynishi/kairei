@@ -514,7 +514,6 @@ fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_await_block,
         parse_assignment,
         parse_emit_statement,
-        parse_request_statement,
         parse_if_statement,
         parse_return_statement,
     ))(input)?;
@@ -595,7 +594,7 @@ fn parse_emit_statement(input: &str) -> IResult<&str, Statement> {
 }
 
 #[instrument(level = "debug", skip(input))]
-fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
+fn parse_request_statement(input: &str) -> IResult<&str, Expression> {
     map(
         tuple((
             ws(tag("request")),
@@ -604,7 +603,7 @@ fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
             preceded(ws(tag("to")), identifier),
             parse_arguments,
         )),
-        |(_, request_type, options, target, parameters)| Statement::Request {
+        |(_, request_type, options, target, parameters)| Expression::Request {
             agent: target.to_string(),
             request_type,
             parameters,
@@ -827,6 +826,8 @@ fn parse_primary(input: &str) -> IResult<&str, Expression> {
         parse_think_expression,
         // Result式
         parse_result_expression,
+        // Resuest呼び出し
+        parse_request_statement,
         // 関数呼び出し
         map(
             tuple((
@@ -1547,6 +1548,7 @@ mod tests {
     fn test_parse_statement() {
         let cases = [
             "count = count + 1",
+            r#"c = request GetCount to counter()"#,
             "emit Updated to manager",
             "if (count > 10) { return count }",
             "await count = count + 2",
@@ -1836,6 +1838,30 @@ mod tests {
             }
             Expression::Ok(expression) => format!("Ok({})", format_expression(expression)),
             Expression::Err(expression) => format!("Err({})", format_expression(expression)),
+            Expression::Request {
+                agent,
+                request_type,
+                parameters,
+                options,
+            } => {
+                format!(
+                    "request {} {}{}",
+                    agent,
+                    request_type,
+                    if parameters.is_empty() {
+                        "".to_string()
+                    } else {
+                        format!(
+                            "({})",
+                            parameters
+                                .iter()
+                                .map(|arg| format!("{:?}", arg))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                )
+            }
         }
     }
     #[test]
@@ -2375,5 +2401,22 @@ mod tests {
         } else {
             panic!("should be a think expression");
         }
+    }
+
+    #[test]
+    fn test_parse_request_statement() {
+        let input = "request GetCount to counter(last_updated)";
+        let (_, statement) = parse_request_statement(input).unwrap();
+        assert_eq!(
+            statement,
+            Expression::Request {
+                agent: "counter".to_string(),
+                request_type: RequestType::Custom("GetCount".to_string()),
+                parameters: vec![Argument::Positional(Expression::Variable(
+                    "last_updated".to_string()
+                ))],
+                options: None
+            }
+        );
     }
 }

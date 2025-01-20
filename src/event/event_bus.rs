@@ -325,9 +325,12 @@ pub enum Value {
     Null,
 }
 
-impl From<String> for Value {
-    fn from(value: String) -> Self {
-        Value::String(value)
+impl<T: Into<String>> From<T> for Value
+where
+    T: AsRef<str>,
+{
+    fn from(value: T) -> Self {
+        Value::String(value.into())
     }
 }
 

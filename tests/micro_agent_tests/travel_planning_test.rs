@@ -23,11 +23,34 @@ micro TravelPlanner {
     answer {
         // create a comprehensive travel plan
         on request PlanTrip(destination: String, start: String, end: String, budget: Float) -> Result<String, Error> {
+            /*
             (hotels, flights) = await {
-                FindHotels(location: destination, start_date: start, end_date: end, budget: budget) to HotelFinder,
-                FindFlight(departure_location: "NewYork", arrival_location: destination, departure_date: start, back_date: end, budget: budget) to FlightFinder
+                FindHotels(destination, start, end, budget) to HotelFinder,
+                FindFlight("NewYork", destination, start, end, budget) to FlightFinder
             }
-            plan = think("Create a comprehensive travel plan", destination, start, end, budget, hotels, flights)
+            */
+            hotels = request FindHotels to HotelFinder(location: destination, start_date: start,end_date: end, budget: budget)
+            flights = request FindFlight to FlightFinder(departure_location: "NewYork", arrival_location: destination, departure_date: start, back_date: end, budget :budget)
+            plan = think("Create a comprehensive travel plan by combining this flight and hotel information:
+
+                            Destination: ${destination}
+                            Dates: ${start} to ${end}
+                            Total Budget: $${budget}
+
+                            Flight Information:
+                            ${flights}
+
+                            Hotel Information:
+                            ${hotels}
+
+                            Please create a detailed itinerary that includes:
+                            1. Transportation details (arrival and departure flights)
+                            2. Accommodation details
+                            3. Daily budget breakdown
+                            4. Important logistical notes (check-in/out times, airport transfers)
+                            5. Remaining budget for activities and meals
+
+                            Format the response in clear sections with specific dates and times.")
             return Ok(plan)
         }
     }
@@ -62,7 +85,6 @@ micro FlightFinder {
                             2. Airlines and routes
                             3. Expected price ranges
                             4. Booking recommendations")
-            }
             return Ok(flights)
         }
     }
@@ -125,7 +147,7 @@ fn create_request(
     agnent_name: &str,
     request_id: &Uuid,
     request_type: &str,
-    requests: Vec<(&str, &str)>,
+    requests: Vec<(&str, Value)>,
     timeout: Option<u64>,
 ) -> Event {
     let mut builder = Event::request_buidler()
@@ -135,12 +157,12 @@ fn create_request(
         .request_id(request_id.to_string().as_str());
 
     for request in requests.clone() {
-        builder = builder
-            .clone()
-            .parameter(request.0, &Value::String(request.1.to_string()));
+        builder = builder.clone().parameter(request.0, &request.1);
     }
     if let Some(timeout) = timeout {
         builder = builder.parameter("timeout", &Value::Duration(Duration::from_secs(timeout)));
+    } else {
+        builder = builder.parameter("timeout", &Value::Duration(Duration::from_secs(60)));
     }
 
     builder.build().unwrap()
@@ -154,10 +176,17 @@ async fn setup_system() -> System {
     let mut system = System::new(&system_config, &secret).await;
 
     let root = system.parse_dsl(TRAVEL_PLANNING_DSL).await.unwrap();
-    println!("Root: {:?}", root);
+    debug!("Root: {:?}", root);
+    let required = vec!["TravelPlanner", "HotelFinder", "FlightFinder"];
     root.micro_agent_defs
         .is_empty()
         .then(|| panic!("No micro agents found"));
+    root.micro_agent_defs
+        .iter()
+        .map(|x| x.name.as_str())
+        .any(|name| !required.contains(&name))
+        .then(|| panic!("Missing required micro agents"));
+
     system.initialize(root).await.unwrap();
     system
 }
@@ -165,7 +194,7 @@ async fn setup_system() -> System {
 #[tokio::test]
 async fn test_travel_planner() {
     if !should_run_external_api_tests() {
-        return;
+        // return;
     }
 
     let system = setup_system().await;
@@ -173,15 +202,16 @@ async fn test_travel_planner() {
     sleep(Duration::from_millis(100)).await;
 
     let request_data = vec![
-        ("destination", "Tokyo"),
-        ("start", "2024-06-01"),
-        ("end", "2024-06-07"),
-        ("budget", "3000.0"),
+        ("destination", Value::from("Tokyo")),
+        ("start", Value::from("2024-06-01")),
+        ("end", Value::from("2024-06-07")),
+        ("budget", Value::Float(3000.0)),
     ];
     let request_id = Uuid::new_v4();
     let request = create_request("TravelPlanner", &request_id, "PlanTrip", request_data, None);
 
     let result = system.send_request(request).await.unwrap();
+    debug!("Result: {:?}", result);
     assert!(format!("{:?}", result).contains("travel plan"));
     assert!(format!("{:?}", result).contains("Tokyo"));
 }
@@ -198,10 +228,10 @@ async fn test_hotel_finder() {
 
     // リクエストデータの構築
     let request_data = vec![
-        ("location", "Tokyo"),
-        ("start_date", "2024-06-01"),
-        ("end_date", "2024-06-07"),
-        ("budget", "3000.0"),
+        ("location", Value::from("Tokyo")),
+        ("start_date", Value::from("2024-06-01")),
+        ("end_date", Value::from("2024-06-07")),
+        ("budget", Value::Float(3000.0)),
     ];
 
     let request_id = Uuid::new_v4();
@@ -222,7 +252,7 @@ async fn test_hotel_finder() {
 #[tokio::test]
 async fn test_flight_finder() {
     if !should_run_external_api_tests() {
-        // return;
+        return;
     }
 
     let system = setup_system().await;
@@ -231,11 +261,11 @@ async fn test_flight_finder() {
 
     // リクエストデータの構築
     let request_data = vec![
-        ("departure_location", "NewYork"),
-        ("arrival_location", "Tokyo"),
-        ("departure_date", "2024-06-01"),
-        ("back_date", "2024-06-07"),
-        ("budget", "3000.0"),
+        ("departure_location", Value::from("NewYork")),
+        ("arrival_location", Value::from("Tokyo")),
+        ("departure_date", Value::from("2024-06-01")),
+        ("back_date", Value::from("2024-06-07")),
+        ("budget", Value::Float(3000.0)),
     ];
     // panic!("request_data: {:?}", request_data);
 
@@ -251,7 +281,7 @@ async fn test_flight_finder() {
 
     // 結果の検証
     let result_str = format!("{:?}", result);
-    println!("result_str: {}", result_str);
+    debug!("result_str: {}", result_str);
 
     // 必須要素の確認
     assert!(result_str.contains("flight")); // フライト情報が含まれている

@@ -6,10 +6,13 @@ use std::{collections::HashMap, sync::Arc};
 use async_recursion::async_recursion;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use tracing::debug;
+use uuid::Uuid;
 
 use super::context::{ExecutionContext, VariableAccess};
 use crate::config::{MemoryConfig, PluginConfig, RagConfig, SearchConfig};
 use crate::eval::evaluator::{EvalError, EvalResult};
+use crate::event_bus::Event;
 use crate::provider::provider_registry::ProviderInstance;
 use crate::provider::request::{
     ExecutionState, ProviderContext, ProviderRequest, ProviderResponse, RequestInput,
@@ -17,7 +20,8 @@ use crate::provider::request::{
 use crate::provider::types::ProviderError;
 use crate::timestamp::Timestamp;
 use crate::{
-    ast, Argument, BinaryOperator, Expression, Literal, Policy, RetryDelay, ThinkAttributes,
+    ast, event_bus, event_registry, Argument, BinaryOperator, Expression, Literal, Policy,
+    RequestAttributes, RequestType, RetryDelay, ThinkAttributes,
 };
 
 // 値の型システム
@@ -89,6 +93,15 @@ impl ExpressionEvaluator {
             }
             Expression::Think { args, with_block } => {
                 self.eval_think(args, with_block, context).await
+            }
+            Expression::Request {
+                agent,
+                request_type,
+                parameters,
+                options,
+            } => {
+                self.eval_request(agent, request_type, parameters, options, context)
+                    .await
             }
             Expression::Ok(expression) => Ok(Value::Ok(Box::new(
                 self.eval_expression(expression, context).await?,
@@ -438,6 +451,44 @@ impl ExpressionEvaluator {
                     .collect::<Vec<ast::Policy>>()
             })
             .unwrap_or_default())
+    }
+
+    async fn eval_request(
+        &self,
+        agent: &str,
+        request_type: &RequestType,
+        parameters: &[Argument],
+        _options: &Option<RequestAttributes>,
+        context: Arc<ExecutionContext>,
+    ) -> EvalResult<Value> {
+        // パラメータの評価
+        let evaluated_params = self.eval_arguments(parameters, context.clone()).await?;
+
+        let event_params = evaluated_params
+            .iter()
+            .map(|(k, v)| (k.clone(), event_bus::Value::from(v.clone())))
+            .collect();
+
+        // リクエストの構築と送信
+        let request = Event {
+            event_type: event_registry::EventType::Request {
+                request_id: Uuid::new_v4().to_string(),
+                requester: context.agent_name().clone(),
+                responder: agent.to_string(),
+                request_type: request_type.to_string(),
+            },
+            parameters: event_params,
+        };
+        debug!("Create Request: {:?}", request);
+        let response_event = context.send_request(request).await?;
+        debug!("Got Response: {:?}", response_event);
+        let response = response_event
+            .parameters
+            .get("response")
+            .ok_or(EvalError::Eval("response not found".to_string()))?
+            .clone()
+            .into();
+        Ok(response)
     }
 
     // 関数呼び出しの評価
