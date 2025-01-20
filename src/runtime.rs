@@ -552,6 +552,7 @@ impl RuntimeAgentData {
             EventCategory::Request { request_type, .. } => {
                 if event.event_type.request_for_me(&self.name) {
                     if let Some(handler) = self.answer_handlers.get(request_type) {
+                        debug!("Handler found: {:?}", request_type);
                         handler(event).await
                     } else {
                         Err(RuntimeError::HandlerNotFound {
@@ -696,9 +697,9 @@ mod tests {
                     parameters: vec![],
                     block: HandlerBlock {
                         statements: vec![Statement::Assignment {
-                            target: Expression::StateAccess(StateAccessPath(vec![
+                            target: vec![Expression::StateAccess(StateAccessPath(vec![
                                 "count".to_string()
-                            ])),
+                            ]))],
                             value: Expression::BinaryOp {
                                 op: BinaryOperator::Add,
                                 left: Box::new(Expression::StateAccess(StateAccessPath(vec![
@@ -828,7 +829,7 @@ mod tests {
                     block: HandlerBlock {
                         statements: vec![
                             Statement::Assignment {
-                                target: Expression::Variable("last_result".into()),
+                                target: vec![Expression::Variable("last_result".into())],
                                 value: Expression::BinaryOp {
                                     op: BinaryOperator::Add,
                                     left: Box::new(Expression::Variable("a".into())),
@@ -836,7 +837,7 @@ mod tests {
                                 },
                             },
                             Statement::Assignment {
-                                target: Expression::Variable("last_result".into()),
+                                target: vec![Expression::Variable("last_result".into())],
                                 value: Expression::BinaryOp {
                                     op: BinaryOperator::Add,
                                     left: Box::new(Expression::StateAccess(StateAccessPath(vec![
@@ -938,9 +939,9 @@ mod tests {
                     block: HandlerBlock {
                         statements: vec![
                             Statement::Assignment {
-                                target: Expression::StateAccess(StateAccessPath(vec![
+                                target: vec![Expression::StateAccess(StateAccessPath(vec![
                                     "event_count".into(),
-                                ])),
+                                ]))],
                                 value: Expression::BinaryOp {
                                     op: BinaryOperator::Add,
                                     left: Box::new(Expression::StateAccess(StateAccessPath(vec![
@@ -950,9 +951,9 @@ mod tests {
                                 },
                             },
                             Statement::Assignment {
-                                target: Expression::StateAccess(StateAccessPath(vec![
+                                target: vec![Expression::StateAccess(StateAccessPath(vec![
                                     "last_value".into(),
-                                ])),
+                                ]))],
                                 value: Expression::Variable("value".into()),
                             },
                         ],

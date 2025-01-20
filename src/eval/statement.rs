@@ -3,19 +3,15 @@ use std::sync::Arc;
 use async_recursion::async_recursion;
 
 use tracing::debug;
-use uuid::Uuid;
 
 use super::{
     context::{ExecutionContext, StateAccessMode, VariableAccess},
     expression::{ExpressionEvaluator, Value},
 };
-use crate::{
-    eval::evaluator::{EvalError, EvalResult},
-    RequestAttributes, StateAccessPath,
-};
+use crate::eval::evaluator::{EvalError, EvalResult};
 use crate::{
     event_bus::{self, Event},
-    event_registry, Argument, ErrorHandlerBlock, EventType, Expression, RequestType, Statement,
+    event_registry, Argument, ErrorHandlerBlock, EventType, Expression, Statement,
 };
 
 /// 文の評価結果を表す型
