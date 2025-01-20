@@ -310,7 +310,7 @@ pub enum Statement {
     // expressions
     Expression(Expression),
     Assignment {
-        target: Expression,
+        target: Vec<Expression>,
         value: Expression,
     },
     Return(Expression),
@@ -322,7 +322,6 @@ pub enum Statement {
     },
     // grouping
     Block(Statements),
-    Await(AwaitType),
     WithError {
         statement: Box<Statement>,
         error_handler_block: ErrorHandlerBlock,
@@ -347,14 +346,6 @@ impl StatementExt for Statement {
             error_handler_block,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum AwaitType {
-    // 複数のStatementを並列実行して全ての完了を待つ
-    Block(Statements),
-    // 単一のStatementの完了を待つ
-    Single(Box<Statement>),
 }
 
 use std::fmt::{Display, Formatter};
@@ -406,6 +397,7 @@ pub enum Expression {
         parameters: Vec<Argument>,
         options: Option<RequestAttributes>,
     },
+    Await(Vec<Expression>),
     BinaryOp {
         op: BinaryOperator,
         left: Box<Expression>,

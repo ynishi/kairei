@@ -985,9 +985,9 @@ mod tests {
                                 options: None,
                             }),
                             Statement::Assignment {
-                                target: Expression::StateAccess(StateAccessPath(vec![
+                                target: vec![Expression::StateAccess(StateAccessPath(vec![
                                     "received_pong".to_string(),
-                                ])),
+                                ]))],
                                 value: Expression::Literal(Literal::Boolean(true)),
                             },
                         ],

@@ -260,6 +260,9 @@ pub struct SearchConfig {
     pub filters: Vec<String>,
     #[serde(default = "default_max_fetch_per_result")]
     pub max_fetch_per_result: usize,
+    // fetch_timeout
+    #[serde(default = "default_fetch_timeout", with = "duration_ms")]
+    pub fetch_timeout: Duration,
 }
 
 impl Default for SearchConfig {
@@ -269,6 +272,7 @@ impl Default for SearchConfig {
             max_results: default_max_results(),
             filters: default_search_filters(),
             max_fetch_per_result: default_max_fetch_per_result(),
+            fetch_timeout: default_fetch_timeout(),
         }
     }
 }
@@ -464,6 +468,10 @@ fn default_similarity_threshold() -> f64 {
 
 fn default_rag_max_results() -> usize {
     10
+}
+
+fn default_fetch_timeout() -> Duration {
+    Duration::from_secs(5)
 }
 
 // Duration型のシリアライズ/デシリアライズヘルパー
