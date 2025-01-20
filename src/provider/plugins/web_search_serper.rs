@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 use futures::future::join_all;
 use html2text::from_read;
@@ -90,6 +92,7 @@ impl WebSearchPlugin {
         query: &str,
         config: &SearchConfig,
     ) -> ProviderResult<Vec<SearchResult>> {
+        debug!("Searching for {}", query);
         let mut headers = HeaderMap::new();
         headers.insert(
             "X-API-KEY",
@@ -111,6 +114,7 @@ impl WebSearchPlugin {
             .json()
             .await
             .map_err(|e| ProviderError::ApiError(e.to_string()))?;
+        let timeout = self.config.fetch_timeout;
 
         let futures = response
             .organic
@@ -118,7 +122,7 @@ impl WebSearchPlugin {
             .take(config.max_fetch_per_result)
             .map(|result| async move {
                 debug!("Fetching content from {}", result.link);
-                let content_result = Self::fetch_content(&result.link).await;
+                let content_result = Self::fetch_content(&result.link, &timeout).await;
                 let content = match content_result {
                     Ok(content) => content,
                     Err(ProviderError::FetchFailed(_)) => "Failed to fetch content".to_string(),
@@ -141,10 +145,11 @@ impl WebSearchPlugin {
     }
 
     #[tracing::instrument]
-    async fn fetch_content(url: &str) -> ProviderResult<String> {
+    async fn fetch_content(url: &str, timeout: &Duration) -> ProviderResult<String> {
         let client = Client::new();
         let response = client
             .get(url)
+            .timeout(timeout.clone())
             .header(
                 "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

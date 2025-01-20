@@ -236,16 +236,9 @@ impl CodeGen for HandlerBlock {
 impl CodeGen for Statement {
     fn generate_rust(&self) -> TokenStream {
         match self {
-            Statement::Await { .. } => {
+            Statement::Assignment { .. } => {
                 // 今は利用しない
                 quote! {}
-            }
-            Statement::Assignment { target, value } => {
-                let target_tokens = target.generate_rust();
-                let value_tokens = value.generate_rust();
-                quote! {
-                     #target_tokens = #value_tokens
-                }
             }
             Statement::Emit { .. } => {
                 // 今は利用しない
@@ -342,6 +335,7 @@ impl CodeGen for Expression {
                 parameters,
                 options,
             } => todo!(),
+            Expression::Await(vec) => todo!(),
         }
     }
 }
@@ -410,10 +404,10 @@ mod tests {
             lifecycle: Some(LifecycleDef {
                 on_init: Some(HandlerBlock {
                     statements: vec![Statement::Assignment {
-                        target: Expression::StateAccess(StateAccessPath(vec![
+                        target: vec![Expression::StateAccess(StateAccessPath(vec![
                             "self".to_string(),
                             "counter".to_string(),
-                        ])),
+                        ]))],
                         value: Expression::Literal(Literal::Integer(0)),
                     }],
                 }),
@@ -461,10 +455,10 @@ mod tests {
         let lifecycle = LifecycleDef {
             on_init: Some(HandlerBlock {
                 statements: vec![Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec![
+                    target: vec![Expression::StateAccess(StateAccessPath(vec![
                         "self".to_string(),
                         "counter".to_string(),
-                    ])),
+                    ]))],
                     value: Expression::Literal(Literal::Integer(0)),
                 }],
             }),
@@ -549,10 +543,10 @@ mod tests {
                 parameters: vec![],
                 block: HandlerBlock {
                     statements: vec![Statement::Assignment {
-                        target: Expression::StateAccess(StateAccessPath(vec![
+                        target: vec![Expression::StateAccess(StateAccessPath(vec![
                             "self".to_string(),
                             "counter".to_string(),
-                        ])),
+                        ]))],
                         value: Expression::BinaryOp {
                             op: BinaryOperator::Add,
                             left: Box::new(Expression::StateAccess(StateAccessPath(vec![
@@ -622,10 +616,10 @@ mod tests {
                 block: HandlerBlock {
                     statements: vec![
                         Statement::Assignment {
-                            target: Expression::StateAccess(StateAccessPath(vec![
+                            target: vec![Expression::StateAccess(StateAccessPath(vec![
                                 "self".to_string(),
                                 "counter".to_string(),
-                            ])),
+                            ]))],
                             value: Expression::Literal(Literal::Integer(0)),
                         },
                         Statement::Emit {
@@ -665,10 +659,10 @@ mod tests {
             parameters: vec![],
             block: HandlerBlock {
                 statements: vec![Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec![
+                    target: vec![Expression::StateAccess(StateAccessPath(vec![
                         "self".to_string(),
                         "counter".to_string(),
-                    ])),
+                    ]))],
                     value: Expression::BinaryOp {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::StateAccess(StateAccessPath(vec![
@@ -780,10 +774,10 @@ mod tests {
         let block = HandlerBlock {
             statements: vec![
                 Statement::Assignment {
-                    target: Expression::StateAccess(StateAccessPath(vec![
+                    target: vec![Expression::StateAccess(StateAccessPath(vec![
                         "self".to_string(),
                         "counter".to_string(),
-                    ])),
+                    ]))],
                     value: Expression::Literal(Literal::Integer(0)),
                 },
                 Statement::Return(Expression::StateAccess(StateAccessPath(vec![
@@ -806,10 +800,10 @@ mod tests {
     fn test_statement() {
         // 各ステートメントタイプのテストデータを準備
         let assignment = Statement::Assignment {
-            target: Expression::StateAccess(StateAccessPath(vec![
+            target: vec![Expression::StateAccess(StateAccessPath(vec![
                 "self".to_string(),
                 "counter".to_string(),
-            ])),
+            ]))],
             value: Expression::Literal(Literal::Integer(10)),
         };
         let if_statement = Statement::If {
@@ -822,17 +816,17 @@ mod tests {
                 right: Box::new(Expression::Literal(Literal::Integer(0))),
             },
             then_block: vec![Statement::Assignment {
-                target: Expression::StateAccess(StateAccessPath(vec![
+                target: vec![Expression::StateAccess(StateAccessPath(vec![
                     "self".to_string(),
                     "counter".to_string(),
-                ])),
+                ]))],
                 value: Expression::Literal(Literal::Integer(1)),
             }],
             else_block: Some(vec![Statement::Assignment {
-                target: Expression::StateAccess(StateAccessPath(vec![
+                target: vec![Expression::StateAccess(StateAccessPath(vec![
                     "self".to_string(),
                     "counter".to_string(),
-                ])),
+                ]))],
                 value: Expression::Literal(Literal::Integer(2)),
             }]),
         };

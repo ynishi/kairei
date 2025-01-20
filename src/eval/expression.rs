@@ -103,6 +103,8 @@ impl ExpressionEvaluator {
                 self.eval_request(agent, request_type, parameters, options, context)
                     .await
             }
+            Expression::Await(expressions) => self.eval_await(expressions, context).await,
+
             Expression::Ok(expression) => Ok(Value::Ok(Box::new(
                 self.eval_expression(expression, context).await?,
             ))),
@@ -489,6 +491,42 @@ impl ExpressionEvaluator {
             .clone()
             .into();
         Ok(response)
+    }
+
+    async fn eval_await(
+        &self,
+        expressions: &Vec<Expression>,
+        context: Arc<ExecutionContext>,
+    ) -> EvalResult<Value> {
+        let evaluations: Vec<_> = futures::future::join_all(expressions.iter().map(|expr| async {
+            let forked_context = Arc::new(context.fork(None).await);
+            (expr.clone(), forked_context)
+        }))
+        .await;
+
+        let futures: Vec<_> = evaluations
+            .into_iter()
+            .map(|(expr, ctx)| self.eval_expression_for_await(expr, ctx))
+            .collect();
+
+        // 並列実行して結果を収集
+        let results = futures::future::join_all(futures).await;
+        let values: Vec<Value> = results.into_iter().collect::<Result<Vec<_>, _>>()?;
+
+        // 結果をタプルとして返す（単一値の場合はそのまま）
+        match values.len() {
+            0 => Ok(Value::Null),
+            1 => Ok(values.into_iter().next().unwrap()),
+            _ => Ok(Value::Tuple(values)),
+        }
+    }
+
+    async fn eval_expression_for_await(
+        &self,
+        expr: Expression,
+        context: Arc<ExecutionContext>,
+    ) -> EvalResult<Value> {
+        self.eval_expression(&expr, context).await
     }
 
     // 関数呼び出しの評価

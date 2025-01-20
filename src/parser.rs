@@ -510,8 +510,6 @@ fn parse_statements(input: &str) -> IResult<&str, Vec<Statement>> {
 #[instrument(level = "debug", skip(input))]
 fn parse_statement(input: &str) -> IResult<&str, Statement> {
     let (input, base_statement) = alt((
-        parse_await,
-        parse_await_block,
         parse_assignment,
         parse_emit_statement,
         parse_if_statement,
@@ -521,17 +519,21 @@ fn parse_statement(input: &str) -> IResult<&str, Statement> {
 }
 
 #[instrument(level = "debug", skip(input))]
-fn parse_await(input: &str) -> IResult<&str, Statement> {
-    map(preceded(ws(tag("await")), parse_statement), |s| {
-        Statement::Await(AwaitType::Single(Box::new(s)))
+fn parse_await(input: &str) -> IResult<&str, Expression> {
+    map(preceded(ws(tag("await")), parse_expression), |s| {
+        Expression::Await(vec![s])
     })(input)
 }
 
 #[instrument(level = "debug", skip(input))]
-fn parse_await_block(input: &str) -> IResult<&str, Statement> {
-    map(preceded(ws(tag("await")), parse_statements), |statements| {
-        Statement::Await(AwaitType::Block(statements))
-    })(input)
+fn parse_await_block(input: &str) -> IResult<&str, Expression> {
+    map(
+        preceded(
+            ws(tag("await")),
+            delimited(ws(char('{')), many0(parse_expression), ws(char('}'))),
+        ),
+        |expressions| Expression::Await(expressions),
+    )(input)
 }
 
 #[instrument(level = "debug", skip(input))]
@@ -567,7 +569,21 @@ fn parse_optional_error_handler(
 #[instrument(level = "debug", skip(input))]
 fn parse_assignment(input: &str) -> IResult<&str, Statement> {
     map(
-        tuple((ws(parse_expression), char('='), parse_expression)),
+        tuple((
+            // 左辺: 単一の式または括弧なしカンマ区切りの式のリスト
+            alt((
+                map(separated_list1(ws(char(',')), parse_expression), |exprs| {
+                    exprs
+                }),
+                delimited(
+                    char('('),
+                    separated_list1(ws(char(',')), parse_expression),
+                    char(')'),
+                ),
+            )),
+            ws(char('=')),
+            parse_expression,
+        )),
         |(target, _, value)| Statement::Assignment { target, value },
     )(input)
 }
@@ -594,7 +610,7 @@ fn parse_emit_statement(input: &str) -> IResult<&str, Statement> {
 }
 
 #[instrument(level = "debug", skip(input))]
-fn parse_request_statement(input: &str) -> IResult<&str, Expression> {
+fn parse_request_expression(input: &str) -> IResult<&str, Expression> {
     map(
         tuple((
             ws(tag("request")),
@@ -827,7 +843,10 @@ fn parse_primary(input: &str) -> IResult<&str, Expression> {
         // Result式
         parse_result_expression,
         // Resuest呼び出し
-        parse_request_statement,
+        parse_request_expression,
+        // await式
+        parse_await_block,
+        parse_await,
         // 関数呼び出し
         map(
             tuple((
@@ -1515,6 +1534,13 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_assignment_tuple() {
+        let input = "(count1, count2) = count + 1";
+        let result = parse_assignment(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn test_parse_emit() {
         let cases = [
             "emit Tick",
@@ -1572,31 +1598,129 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_await_single() {
-        let input = "await count = 0";
+        let input = "await think()";
         let result = parse_await(input);
         assert!(result.is_ok());
-        let (_, await_statement) = result.unwrap();
+        let (_, await_expression) = result.unwrap();
 
-        assert!(matches!(
-            await_statement,
-            Statement::Await(AwaitType::Single(_))
-        ));
+        match await_expression {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 1);
+            }
+            _ => panic!("Unexpected await type"),
+        }
     }
 
     #[tokio::test]
     async fn test_parse_await_block() {
         let input = "await {
-               count1 = 0
-               count2 = 1
+            think(1)
+            think(2)
            }";
         let result = parse_await_block(input);
         assert!(result.is_ok());
-        let (_, await_statement) = result.unwrap();
+        let (_, await_expression) = result.unwrap();
 
-        assert!(matches!(
-            await_statement,
-            Statement::Await(AwaitType::Block(_))
-        ));
+        match await_expression {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 2);
+            }
+            _ => panic!("Unexpected await block"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_assign() {
+        let input = "ret = await {
+                think(1)
+                think(2)
+               }";
+        let result = parse_assignment(input);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_parse_block_with_await() {
+        let input = "{
+            (a1, a2) = await {
+                think(1)
+                think(2)
+            }
+            got = think(3)
+        }";
+        let result = parse_block(input); // トップレベルのパーサー
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_single_expression() {
+        let input = "await { think(1) }";
+        let result = parse_await_block(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+        match await_statement {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 1);
+            }
+            _ => panic!("Unexpected await type"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_with_whitespace() {
+        let input = "await   {
+                think(1)
+                    think(2)
+                         }";
+        let result = parse_await_block(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+        match await_statement {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 2);
+            }
+            _ => panic!("Unexpected await type"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_empty() {
+        let input = "await { }";
+        let result = parse_await_block(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+        match await_statement {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 0);
+            }
+            _ => panic!("Unexpected await type"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_nested_expressions() {
+        let input = "await {
+                think(get_data(1))
+                process(analyze(2))
+            }";
+        let result = parse_await_block(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+        match await_statement {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 2);
+            }
+            _ => panic!("Unexpected await type"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_missing_brace() {
+        let input = "await {
+                think(1)
+                think(2)"; // 閉じ括弧がない
+        let result = parse_await_block(input);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -1860,6 +1984,16 @@ mod tests {
                                 .join(", ")
                         )
                     }
+                )
+            }
+            Expression::Await(expressions) => {
+                format!(
+                    "await {}",
+                    expressions
+                        .iter()
+                        .map(|expr| format_expression(expr))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             }
         }
@@ -2404,9 +2538,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_request_statement() {
+    fn test_parse_request_expression() {
         let input = "request GetCount to counter(last_updated)";
-        let (_, statement) = parse_request_statement(input).unwrap();
+        let (_, statement) = parse_request_expression(input).unwrap();
         assert_eq!(
             statement,
             Expression::Request {

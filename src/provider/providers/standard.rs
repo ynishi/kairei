@@ -57,6 +57,7 @@ impl Provider for StandardProvider {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, context, request))]
     async fn execute(
         &self,
         context: &ProviderContext,

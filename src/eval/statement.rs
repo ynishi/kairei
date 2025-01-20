@@ -11,12 +11,11 @@ use super::{
 };
 use crate::{
     eval::evaluator::{EvalError, EvalResult},
-    RequestAttributes,
+    RequestAttributes, StateAccessPath,
 };
 use crate::{
     event_bus::{self, Event},
-    event_registry, Argument, AwaitType, ErrorHandlerBlock, EventType, Expression, RequestType,
-    Statement,
+    event_registry, Argument, ErrorHandlerBlock, EventType, Expression, RequestType, Statement,
 };
 
 /// 文の評価結果を表す型
@@ -76,7 +75,6 @@ impl StatementEvaluator {
                 self.eval_if(condition, then_block, else_block, context)
                     .await
             }
-            Statement::Await(await_type) => self.eval_await(await_type, context).await,
             Statement::WithError {
                 statement,
                 error_handler_block,
@@ -125,7 +123,7 @@ impl StatementEvaluator {
 
     async fn eval_assignment(
         &self,
-        target: &Expression,
+        targets: &[Expression],
         value: &Expression,
         context: Arc<ExecutionContext>,
     ) -> EvalResult<Value> {
@@ -134,19 +132,46 @@ impl StatementEvaluator {
             .eval_expression(value, context.clone())
             .await?;
 
-        // targetの評価結果に基づいて適切な場所に値を格納
-        let access = match target {
-            Expression::Variable(name) => VariableAccess::Local(name.clone()),
-            Expression::StateAccess(path) => VariableAccess::State(path.to_string()),
-            _ => {
-                return Err(EvalError::InvalidOperation(
-                    "invalid access expression".to_string(),
-                ))
+        match (targets.len(), &value) {
+            // 単一のターゲットへの代入
+            (1, _) => {
+                let access = self.get_variable_access(&targets[0])?;
+                context.set(access, value.clone()).await?;
             }
-        };
-        context.set(access, value.clone()).await?;
-
+            // タプル値を複数のターゲットに分配
+            (n, Value::Tuple(values)) if n == values.len() => {
+                for (target, value) in targets.iter().zip(values) {
+                    let access = self.get_variable_access(target)?;
+                    context.set(access, value.clone()).await?;
+                }
+            }
+            // 不整合な場合（ターゲットの数と値の数が合わない）
+            (n, Value::Tuple(values)) => {
+                return Err(EvalError::InvalidOperation(format!(
+                    "mismatched assignment: {} targets but got {} values",
+                    n,
+                    values.len()
+                )))
+            }
+            // タプルでない値を複数のターゲットに代入しようとした場合
+            (n, _) => {
+                return Err(EvalError::InvalidOperation(format!(
+                    "cannot assign single value to {} targets",
+                    n
+                )))
+            }
+        }
         Ok(Value::Unit)
+    }
+
+    fn get_variable_access(&self, target: &Expression) -> EvalResult<VariableAccess> {
+        match target {
+            Expression::Variable(name) => Ok(VariableAccess::Local(name.clone())),
+            Expression::StateAccess(path) => Ok(VariableAccess::State(path.to_string())),
+            _ => Err(EvalError::InvalidOperation(
+                "invalid access expression".to_string(),
+            )),
+        }
     }
 
     async fn eval_emit(
@@ -227,41 +252,6 @@ impl StatementEvaluator {
             }
         }
         Ok(StatementResult::Value(last))
-    }
-
-    async fn eval_await(
-        &self,
-        await_type: &AwaitType,
-        context: Arc<ExecutionContext>,
-    ) -> EvalResult<StatementResult> {
-        match await_type {
-            AwaitType::Block(statements) => {
-                let mut futures = Vec::with_capacity(statements.len());
-
-                // 各ステートメントに対して新しいコンテキストをフォーク
-                for stmt in statements {
-                    let forked_context = Arc::new(context.fork(None).await);
-                    futures.push(self.eval_statement(stmt, forked_context));
-                }
-
-                // 並列実行して結果を収集
-                let results = futures::future::join_all(futures).await;
-                let mut values = Vec::new();
-
-                for result in results {
-                    match result? {
-                        StatementResult::Value(v) => values.push(v),
-                        StatementResult::Control(cf) => return Ok(StatementResult::Control(cf)),
-                    }
-                }
-
-                Ok(StatementResult::Value(Value::Tuple(values)))
-            }
-            AwaitType::Single(statement) => {
-                // 単一のStatementを実行して完了を待つ
-                self.eval_statement(statement, context).await
-            }
-        }
     }
 
     async fn eval_with_error(
@@ -355,7 +345,7 @@ mod tests {
 
         // 基本的な代入
         let stmt = Statement::Assignment {
-            target: Expression::Variable("x".to_string()),
+            target: vec![Expression::Variable("x".to_string())],
             value: Expression::Literal(Literal::Integer(42)),
         };
         let result = evaluator
@@ -370,7 +360,7 @@ mod tests {
 
         // 代入後の演算
         let stmt = Statement::Assignment {
-            target: Expression::Variable("x".to_string()),
+            target: vec![Expression::Variable("x".to_string())],
             value: Expression::BinaryOp {
                 op: BinaryOperator::Add,
                 left: Box::new(Expression::Literal(Literal::Integer(10))),
@@ -393,11 +383,11 @@ mod tests {
         // 複数のステートメントを含むブロック
         let stmt = Statement::Block(vec![
             Statement::Assignment {
-                target: Expression::Variable("x".to_string()),
+                target: vec![Expression::Variable("x".to_string())],
                 value: Expression::Literal(Literal::Integer(10)),
             },
             Statement::Assignment {
-                target: Expression::Variable("y".to_string()),
+                target: vec![Expression::Variable("y".to_string())],
                 value: Expression::Literal(Literal::Integer(20)),
             },
             Statement::Expression(Expression::BinaryOp {
@@ -482,7 +472,7 @@ mod tests {
         // ブロック内のreturn
         let stmt = Statement::Block(vec![
             Statement::Assignment {
-                target: Expression::Variable("x".to_string()),
+                target: vec![Expression::Variable("x".to_string())],
                 value: Expression::Literal(Literal::Integer(10)),
             },
             Statement::Return(Expression::Variable("x".to_string())),
@@ -503,7 +493,7 @@ mod tests {
         // 複雑なネストされた文の評価
         let stmt = Statement::Block(vec![
             Statement::Assignment {
-                target: Expression::Variable("x".to_string()),
+                target: vec![Expression::Variable("x".to_string())],
                 value: Expression::Literal(Literal::Integer(10)),
             },
             Statement::If {
@@ -518,7 +508,7 @@ mod tests {
                 },
                 then_block: vec![
                     Statement::Assignment {
-                        target: Expression::Variable("y".to_string()),
+                        target: vec![Expression::Variable("y".to_string())],
                         value: Expression::Literal(Literal::Integer(20)),
                     },
                     Statement::Return(Expression::BinaryOp {

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
 use kairei::{
     config::{self, SystemConfig},
@@ -23,14 +23,10 @@ micro TravelPlanner {
     answer {
         // create a comprehensive travel plan
         on request PlanTrip(destination: String, start: String, end: String, budget: Float) -> Result<String, Error> {
-            /*
             (hotels, flights) = await {
-                FindHotels(destination, start, end, budget) to HotelFinder,
-                FindFlight("NewYork", destination, start, end, budget) to FlightFinder
+                request FindHotels to HotelFinder(location: destination, start_date: start,end_date: end, budget: budget * 0.4)
+                request FindFlight to FlightFinder(departure_location: "NewYork", arrival_location: destination, departure_date: start, back_date: end, budget :budget * 0.4)
             }
-            */
-            hotels = request FindHotels to HotelFinder(location: destination, start_date: start,end_date: end, budget: budget)
-            flights = request FindFlight to FlightFinder(departure_location: "NewYork", arrival_location: destination, departure_date: start, back_date: end, budget :budget)
             plan = think("Create a comprehensive travel plan by combining this flight and hotel information:
 
                             Destination: ${destination}
@@ -162,7 +158,7 @@ fn create_request(
     if let Some(timeout) = timeout {
         builder = builder.parameter("timeout", &Value::Duration(Duration::from_secs(timeout)));
     } else {
-        builder = builder.parameter("timeout", &Value::Duration(Duration::from_secs(60)));
+        builder = builder.parameter("timeout", &Value::Duration(Duration::from_secs(240)));
     }
 
     builder.build().unwrap()
