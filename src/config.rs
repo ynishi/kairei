@@ -188,22 +188,24 @@ impl Default for ProviderConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, strum::EnumString)]
+#[strum(serialize_all = "lowercase")]
 pub enum PluginConfig {
     Memory(MemoryConfig),
     Rag(RagConfig),
     Search(SearchConfig),
+    Unknown(HashMap<String, serde_json::Value>),
 }
 
 /// メモリプラグインの設定
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MemoryConfig {
     #[serde(default = "default_max_short_term")]
     pub max_short_term: usize,
     #[serde(default = "default_max_long_term")]
     pub max_long_term: usize,
     #[serde(default = "default_importance_threshold")]
-    pub importance_threshold: f32,
+    pub importance_threshold: f64,
     #[serde(default = "default_max_items")]
     pub max_items: usize,
 }
@@ -219,14 +221,27 @@ impl Default for MemoryConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RagConfig {
+    #[serde(default = "default_collection_name")]
     pub collection_name: String,
+    #[serde(default = "default_rag_max_results")]
     pub max_results: usize,
-    pub similarity_threshold: f32,
+    #[serde(default = "default_similarity_threshold")]
+    pub similarity_threshold: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Default for RagConfig {
+    fn default() -> Self {
+        Self {
+            collection_name: default_collection_name(),
+            max_results: default_max_results(),
+            similarity_threshold: default_similarity_threshold(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SearchConfig {
     #[serde(default = "default_search_window")]
     pub search_window: Duration,
@@ -406,7 +421,7 @@ fn default_max_long_term() -> usize {
     10
 }
 
-fn default_importance_threshold() -> f32 {
+fn default_importance_threshold() -> f64 {
     0.5
 }
 
@@ -428,6 +443,18 @@ fn default_search_filters() -> Vec<String> {
 
 fn default_max_fetch_per_result() -> usize {
     3
+}
+
+fn default_collection_name() -> String {
+    "default_collection".to_string()
+}
+
+fn default_similarity_threshold() -> f64 {
+    0.5
+}
+
+fn default_rag_max_results() -> usize {
+    10
 }
 
 // Duration型のシリアライズ/デシリアライズヘルパー
