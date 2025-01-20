@@ -495,7 +495,7 @@ impl ExpressionEvaluator {
 
     async fn eval_await(
         &self,
-        expressions: &Vec<Expression>,
+        expressions: &[Expression],
         context: Arc<ExecutionContext>,
     ) -> EvalResult<Value> {
         let evaluations: Vec<_> = futures::future::join_all(expressions.iter().map(|expr| async {

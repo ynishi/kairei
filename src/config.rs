@@ -110,6 +110,9 @@ pub struct NativeFeatureConfig {
 
     #[serde(default = "default_ticker_config")]
     pub ticker: Option<TickerConfig>,
+
+    #[serde(default = "default_true")]
+    pub metrics_enabled: bool,
 }
 
 impl Default for NativeFeatureConfig {
@@ -117,6 +120,7 @@ impl Default for NativeFeatureConfig {
         Self {
             shutdown_timeout: default_shutdown_timeout(),
             ticker: default_ticker_config(),
+            metrics_enabled: default_true(),
         }
     }
 }

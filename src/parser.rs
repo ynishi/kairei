@@ -532,7 +532,7 @@ fn parse_await_block(input: &str) -> IResult<&str, Expression> {
             ws(tag("await")),
             delimited(ws(char('{')), many0(parse_expression), ws(char('}'))),
         ),
-        |expressions| Expression::Await(expressions),
+        Expression::Await,
     )(input)
 }
 

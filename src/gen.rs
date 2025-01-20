@@ -329,13 +329,8 @@ impl CodeGen for Expression {
             Expression::Err { .. } => {
                 todo!()
             }
-            Expression::Request {
-                agent,
-                request_type,
-                parameters,
-                options,
-            } => todo!(),
-            Expression::Await(vec) => todo!(),
+            Expression::Request { .. } => todo!(),
+            Expression::Await(_) => todo!(),
         }
     }
 }

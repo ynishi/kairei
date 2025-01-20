@@ -35,6 +35,7 @@ impl Event {
     pub fn category(&self) -> EventCategory {
         match &self.event_type {
             EventType::Tick => EventCategory::System,
+            EventType::MetricsSummary => EventCategory::System,
             EventType::StateUpdated { .. } => EventCategory::Agent,
             EventType::Message { .. } => EventCategory::Agent,
             EventType::Failure { .. } => EventCategory::Agent,

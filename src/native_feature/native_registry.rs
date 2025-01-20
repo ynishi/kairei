@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::{sync::RwLock, time::timeout};
 use tracing::{error, info};
 
+use super::metrics::MetricsFeature;
 use super::types::{
     FeatureError, FeatureResult, NativeFeature, NativeFeatureContext, NativeFeatureType,
 };
@@ -118,6 +119,9 @@ impl NativeFeatureRegistry {
         {
             res.push(NativeFeatureType::Ticker)
         }
+        if self.config.read().await.metrics_enabled {
+            res.push(NativeFeatureType::Metrics)
+        }
         res
     }
 
@@ -131,6 +135,7 @@ impl NativeFeatureRegistry {
                 self.context.clone(),
                 self.config.read().await.clone().ticker.unwrap_or_default(),
             ))),
+            NativeFeatureType::Metrics => Some(Arc::new(MetricsFeature::new(self.context.clone()))),
             _ => None,
         }
     }
