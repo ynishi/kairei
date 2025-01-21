@@ -111,8 +111,8 @@ pub struct NativeFeatureConfig {
     #[serde(default = "default_ticker_config")]
     pub ticker: Option<TickerConfig>,
 
-    #[serde(default = "default_true")]
-    pub metrics_enabled: bool,
+    #[serde(default = "default_metrics_config")]
+    pub metrics: Option<MetricsConfig>,
 }
 
 impl Default for NativeFeatureConfig {
@@ -120,7 +120,7 @@ impl Default for NativeFeatureConfig {
         Self {
             shutdown_timeout: default_shutdown_timeout(),
             ticker: default_ticker_config(),
-            metrics_enabled: default_true(),
+            metrics: default_metrics_config(),
         }
     }
 }
@@ -139,6 +139,25 @@ impl Default for TickerConfig {
         Self {
             enabled: default_true(),
             tick_interval: default_tick_interval(),
+        }
+    }
+}
+
+// metricsの設定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    #[serde(default = "default_metrics_tick_interval")]
+    pub metrics_interval: usize,
+}
+
+impl Default for MetricsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            metrics_interval: default_metrics_tick_interval(),
         }
     }
 }
@@ -403,6 +422,10 @@ fn default_ticker_config() -> Option<TickerConfig> {
     Some(TickerConfig::default())
 }
 
+fn default_metrics_config() -> Option<MetricsConfig> {
+    Some(MetricsConfig::default())
+}
+
 fn default_provider_name() -> String {
     "default_provider".to_string()
 }
@@ -476,6 +499,10 @@ fn default_rag_max_results() -> usize {
 
 fn default_fetch_timeout() -> Duration {
     Duration::from_secs(5)
+}
+
+fn default_metrics_tick_interval() -> usize {
+    60
 }
 
 // Duration型のシリアライズ/デシリアライズヘルパー
