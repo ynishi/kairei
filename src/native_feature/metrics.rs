@@ -427,4 +427,53 @@ mod tests {
         assert_eq!(statuses[0], "Active");
         assert_eq!(statuses[1], "Inactive");
     }
+
+    #[tokio::test]
+    async fn test_metrics_periodic_publishing() {
+        let context = setup_test_context().await;
+        let config = MetricsConfig {
+            metrics_interval: 5,
+            enabled: true,
+        };
+
+        let metrics = Arc::new(MetricsFeature::new(context.clone(), config));
+        let event_bus = context.event_bus();
+
+        let metrics_wait = {
+            let (mut metrics_receiver, _) = context.event_bus.subscribe();
+            tokio::spawn(async move {
+                let mut found_metrics_update = false;
+                while let Ok(event) =
+                    tokio::time::timeout(Duration::from_millis(100), metrics_receiver.recv()).await
+                {
+                    if let EventType::MetricsSummary = event.unwrap().event_type {
+                        found_metrics_update = true;
+                        break;
+                    }
+                }
+                found_metrics_update
+            })
+        };
+
+        // メトリクス収集を開始
+        metrics.start().await.unwrap();
+
+        sleep(Duration::from_millis(10)).await;
+
+        // Tickイベントを60回送信
+        for _ in 0..60 {
+            event_bus
+                .sync_publish(Event {
+                    event_type: EventType::Tick,
+                    parameters: HashMap::new(),
+                })
+                .unwrap();
+        }
+
+        let found_metrics_update = metrics_wait.await.unwrap();
+
+        assert!(found_metrics_update);
+
+        metrics.stop().await.unwrap();
+    }
 }
