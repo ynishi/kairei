@@ -31,15 +31,12 @@ impl NativeFeatureRegistry {
     }
 
     pub async fn register(&self) -> FeatureResult<()> {
-        let config = self.config.read().await;
-
-        if let Some(config) = config.ticker.clone() {
-            if config.enabled {
-                let feature_type = NativeFeatureType::Ticker;
-                if let Some(ticker) = self.create_feature(&feature_type).await {
-                    self.register_feature(feature_type, ticker).await?;
-                }
-            }
+        for feature_type in self.enabled_feature_type().await {
+            let feature = self
+                .create_feature(&feature_type)
+                .await
+                .ok_or_else(|| FeatureError::FeatureNotFound(feature_type.clone()))?;
+            self.register_feature(feature_type, feature).await?;
         }
         Ok(())
     }
@@ -119,7 +116,15 @@ impl NativeFeatureRegistry {
         {
             res.push(NativeFeatureType::Ticker)
         }
-        if self.config.read().await.metrics_enabled {
+        if self
+            .config
+            .read()
+            .await
+            .metrics
+            .clone()
+            .unwrap_or_default()
+            .enabled
+        {
             res.push(NativeFeatureType::Metrics)
         }
         res
@@ -135,7 +140,13 @@ impl NativeFeatureRegistry {
                 self.context.clone(),
                 self.config.read().await.clone().ticker.unwrap_or_default(),
             ))),
-            NativeFeatureType::Metrics => Some(Arc::new(MetricsFeature::new(self.context.clone()))),
+            NativeFeatureType::Metrics => {
+                let metrics_config = self.config.read().await.clone().metrics.unwrap_or_default();
+                Some(Arc::new(MetricsFeature::new(
+                    self.context.clone(),
+                    metrics_config,
+                )))
+            }
             _ => None,
         }
     }

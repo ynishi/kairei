@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     time::Instant,
@@ -12,6 +12,7 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 
 use crate::{
+    config::MetricsConfig,
     event_bus::{Event, Value},
     event_registry::EventType,
 };
@@ -26,6 +27,8 @@ pub struct MetricsFeature {
     metrics_store: Arc<RwLock<MetricsStore>>,
     status: Arc<RwLock<NativeFeatureStatus>>,
     running: Arc<AtomicBool>,
+    tick_count: Arc<AtomicUsize>, // Tickカウント用
+    publish_interval: usize,      // 何Tick毎に公開するか
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +81,10 @@ impl NativeFeature for MetricsFeature {
         let metrics_store = self.metrics_store.clone();
         let running = self.running.clone();
 
+        let tick_count = self.tick_count.clone();
+        let publish_interval = self.publish_interval;
+        let context = self.context.clone();
+
         tokio::spawn(async move {
             let (mut sub, _) = event_bus.subscribe();
             while running.load(Ordering::SeqCst) {
@@ -113,6 +120,15 @@ impl NativeFeature for MetricsFeature {
                                 store.response_metrics.insert(request_id, resp_metrics);
                             }
                         }
+                        EventType::Tick => {
+                            let count = tick_count.fetch_add(1, Ordering::SeqCst);
+                            if count % publish_interval == 0 {
+                                // メトリクスの公開
+                                let _ =
+                                    Self::publish_metrics(metrics_store.clone(), context.clone())
+                                        .await;
+                            }
+                        }
                         // 他のイベントタイプへの対応は後で追加
                         _ => {}
                     }
@@ -128,7 +144,7 @@ impl NativeFeature for MetricsFeature {
         self.running.store(false, Ordering::SeqCst);
 
         // 停止前にサマリーを生成して表示
-        self.generate_summary().await?;
+        self.publish_metrics_summary().await?;
 
         *self.status.write().await = NativeFeatureStatus::Inactive;
         self.emit_status().await
@@ -136,7 +152,7 @@ impl NativeFeature for MetricsFeature {
 }
 
 impl MetricsFeature {
-    pub fn new(context: Arc<NativeFeatureContext>) -> Self {
+    pub fn new(context: Arc<NativeFeatureContext>, config: MetricsConfig) -> Self {
         Self {
             context,
             metrics_store: Arc::new(RwLock::new(MetricsStore {
@@ -146,6 +162,8 @@ impl MetricsFeature {
             })),
             status: Arc::new(RwLock::new(NativeFeatureStatus::Inactive)),
             running: Arc::new(AtomicBool::new(false)),
+            tick_count: Arc::new(AtomicUsize::new(0)),
+            publish_interval: config.metrics_interval,
         }
     }
 
@@ -171,8 +189,17 @@ impl MetricsFeature {
 
 impl MetricsFeature {
     // サマリーの生成と表示を行うメソッド
-    async fn generate_summary(&self) -> FeatureResult<()> {
-        let store = self.metrics_store.read().await;
+    async fn publish_metrics_summary(&self) -> FeatureResult<()> {
+        let metrics_store = self.metrics_store.clone();
+        let context = self.context.clone();
+        Self::publish_metrics(metrics_store, context).await
+    }
+
+    async fn publish_metrics(
+        metrics_store: Arc<RwLock<MetricsStore>>,
+        context: Arc<NativeFeatureContext>,
+    ) -> FeatureResult<()> {
+        let store = metrics_store.read().await;
         let summary = MetricsSummary {
             total_requests: store.request_metrics.len(),
             total_responses: store.response_metrics.len(),
@@ -204,33 +231,37 @@ impl MetricsFeature {
         };
 
         // サマリーイベントの発行
-        self.publish(Event {
-            event_type: EventType::MetricsSummary,
-            parameters: {
-                let mut params = HashMap::new();
-                params.insert(
-                    "total_requests".to_string(),
-                    Value::Float(summary.total_requests as f64),
-                );
-                params.insert(
-                    "total_responses".to_string(),
-                    Value::Float(summary.total_responses as f64),
-                );
-                params.insert(
-                    "avg_execution_time_ms".to_string(),
-                    Value::Float(summary.average_execution_time().as_millis() as f64),
-                );
-                params.insert(
-                    "request_types".to_string(),
-                    Value::String(format!("{:?}", summary.request_types)),
-                );
-                params.insert(
-                    "agent_metrics".to_string(),
-                    Value::String(format!("{:?}", summary.agent_metrics)),
-                );
-                params
-            },
-        })?;
+        context
+            .event_bus
+            .publish(Event {
+                event_type: EventType::MetricsSummary,
+                parameters: {
+                    let mut params = HashMap::new();
+                    params.insert(
+                        "total_requests".to_string(),
+                        Value::Float(summary.total_requests as f64),
+                    );
+                    params.insert(
+                        "total_responses".to_string(),
+                        Value::Float(summary.total_responses as f64),
+                    );
+                    params.insert(
+                        "avg_execution_time_ms".to_string(),
+                        Value::Float(summary.average_execution_time().as_millis() as f64),
+                    );
+                    params.insert(
+                        "request_types".to_string(),
+                        Value::String(format!("{:?}", summary.request_types)),
+                    );
+                    params.insert(
+                        "agent_metrics".to_string(),
+                        Value::String(format!("{:?}", summary.agent_metrics)),
+                    );
+                    params
+                },
+            })
+            .await
+            .map_err(FeatureError::from)?;
 
         Ok(())
     }
@@ -272,7 +303,8 @@ mod tests {
     #[tokio::test]
     async fn test_metrics_initialization() {
         let context = setup_test_context().await;
-        let metrics = MetricsFeature::new(context);
+        let config = MetricsConfig::default();
+        let metrics = MetricsFeature::new(context, config);
 
         assert_eq!(metrics.status().await, NativeFeatureStatus::Inactive);
         assert_eq!(metrics.running.load(Ordering::SeqCst), false);
@@ -281,7 +313,8 @@ mod tests {
     #[tokio::test]
     async fn test_metrics_start_stop() {
         let context = setup_test_context().await;
-        let metrics = Arc::new(MetricsFeature::new(context));
+        let config = MetricsConfig::default();
+        let metrics = MetricsFeature::new(context, config);
 
         // メトリクス収集を開始
         metrics.start().await.unwrap();
@@ -297,7 +330,8 @@ mod tests {
     #[tokio::test]
     async fn test_metrics_collection() {
         let context = setup_test_context().await;
-        let metrics = Arc::new(MetricsFeature::new(context.clone()));
+        let config = MetricsConfig::default();
+        let metrics = MetricsFeature::new(context.clone(), config);
         let event_bus = context.event_bus();
 
         // メトリクス収集を開始
@@ -365,7 +399,8 @@ mod tests {
     #[tokio::test]
     async fn test_metrics_status_events() {
         let context = setup_test_context().await;
-        let metrics = Arc::new(MetricsFeature::new(context.clone()));
+        let config = MetricsConfig::default();
+        let metrics = MetricsFeature::new(context.clone(), config);
 
         let (mut status_receiver, _) = context.event_bus.subscribe();
         let received_statuses = Arc::new(RwLock::new(Vec::new()));
