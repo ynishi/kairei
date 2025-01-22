@@ -162,7 +162,7 @@ impl RequestManager {
 
     fn timeout(&self, event: &Event) -> Duration {
         match event.parameters.get("timeout") {
-            Some(Value::Duration(d)) => *d,
+            Some(Value::Duration(d)) if *d > Duration::from_secs(1) => *d,
             _ => self.default_timeout,
         }
     }

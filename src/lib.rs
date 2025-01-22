@@ -9,6 +9,7 @@ pub mod event;
 pub mod gen;
 pub mod native_feature;
 pub mod parser;
+pub mod preprocessor;
 pub mod provider;
 pub mod runtime;
 pub mod system;

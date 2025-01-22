@@ -15,6 +15,7 @@ pub enum NativeFeatureType {
     #[default]
     Ticker,
     ResourceMonitor,
+    Metrics,
 }
 
 #[derive(Debug, Clone, strum::Display, PartialEq)]
@@ -113,6 +114,7 @@ pub trait NativeFeature: Send + Sync {
     }
 }
 
+#[derive(Clone)]
 pub struct NativeFeatureContext {
     pub event_bus: Arc<EventBus>,
 }

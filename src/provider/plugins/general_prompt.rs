@@ -31,8 +31,21 @@ impl ProviderPlugin for GeneralPromptPlugin {
             _ => return Err(ProviderError::InvalidRequest("Invalid query format".into())),
         };
 
+        let params = context.request.input.parameters.clone();
+        let params_str = params
+            .iter()
+            .map(|(k, v)| format!("{}: {}", k, v))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let content = if params_str.is_empty() {
+            query.to_string()
+        } else {
+            format!("{}\n\nparameters:({})", query, params_str)
+        };
+
         Ok(Section {
-            content: query.to_string(),
+            content,
             priority: self.priority(),
             ..Default::default()
         })

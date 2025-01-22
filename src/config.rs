@@ -42,12 +42,21 @@ pub struct AgentConfig {
     pub monitor: Option<MonitorConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextConfig {
     #[serde(default = "default_access_timeout")]
     pub access_timeout: Duration,
     #[serde(default = "default_request_timeout", with = "duration_ms")]
     pub request_timeout: Duration,
+}
+
+impl Default for ContextConfig {
+    fn default() -> Self {
+        Self {
+            access_timeout: default_access_timeout(),
+            request_timeout: default_request_timeout(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +110,9 @@ pub struct NativeFeatureConfig {
 
     #[serde(default = "default_ticker_config")]
     pub ticker: Option<TickerConfig>,
+
+    #[serde(default = "default_metrics_config")]
+    pub metrics: Option<MetricsConfig>,
 }
 
 impl Default for NativeFeatureConfig {
@@ -108,6 +120,7 @@ impl Default for NativeFeatureConfig {
         Self {
             shutdown_timeout: default_shutdown_timeout(),
             ticker: default_ticker_config(),
+            metrics: default_metrics_config(),
         }
     }
 }
@@ -126,6 +139,25 @@ impl Default for TickerConfig {
         Self {
             enabled: default_true(),
             tick_interval: default_tick_interval(),
+        }
+    }
+}
+
+// metricsの設定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    #[serde(default = "default_metrics_tick_interval")]
+    pub metrics_interval: usize,
+}
+
+impl Default for MetricsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            metrics_interval: default_metrics_tick_interval(),
         }
     }
 }
@@ -188,22 +220,24 @@ impl Default for ProviderConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, strum::EnumString)]
+#[strum(serialize_all = "lowercase")]
 pub enum PluginConfig {
     Memory(MemoryConfig),
     Rag(RagConfig),
     Search(SearchConfig),
+    Unknown(HashMap<String, serde_json::Value>),
 }
 
 /// メモリプラグインの設定
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MemoryConfig {
     #[serde(default = "default_max_short_term")]
     pub max_short_term: usize,
     #[serde(default = "default_max_long_term")]
     pub max_long_term: usize,
     #[serde(default = "default_importance_threshold")]
-    pub importance_threshold: f32,
+    pub importance_threshold: f64,
     #[serde(default = "default_max_items")]
     pub max_items: usize,
 }
@@ -219,18 +253,51 @@ impl Default for MemoryConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RagConfig {
+    #[serde(default = "default_collection_name")]
     pub collection_name: String,
+    #[serde(default = "default_rag_max_results")]
     pub max_results: usize,
-    pub similarity_threshold: f32,
+    #[serde(default = "default_similarity_threshold")]
+    pub similarity_threshold: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Default for RagConfig {
+    fn default() -> Self {
+        Self {
+            collection_name: default_collection_name(),
+            max_results: default_max_results(),
+            similarity_threshold: default_similarity_threshold(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SearchConfig {
+    #[serde(default = "default_search_window")]
     pub search_window: Duration,
+    #[serde(default = "default_max_results")]
     pub max_results: usize,
+    #[serde(default = "default_search_filters")]
     pub filters: Vec<String>,
+    #[serde(default = "default_max_fetch_per_result")]
+    pub max_fetch_per_result: usize,
+    // fetch_timeout
+    #[serde(default = "default_fetch_timeout", with = "duration_ms")]
+    pub fetch_timeout: Duration,
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            search_window: default_search_window(),
+            max_results: default_max_results(),
+            filters: default_search_filters(),
+            max_fetch_per_result: default_max_fetch_per_result(),
+            fetch_timeout: default_fetch_timeout(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -299,6 +366,12 @@ pub fn from_file<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(path: P) -> Inter
     Ok(config)
 }
 
+pub fn from_str<T: for<'de> Deserialize<'de>>(s: &str) -> InternalResult<T> {
+    let config = serde_json::from_str(s)
+        .map_err(|e| Error::Internal(format!("Failed to parse secret file: {}", e)))?;
+    Ok(config)
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ProviderSecretConfig {
     pub api_key: String,
@@ -323,7 +396,7 @@ fn default_shutdown_timeout() -> Duration {
     Duration::from_secs(30)
 }
 fn default_request_timeout() -> Duration {
-    Duration::from_secs(30)
+    Duration::from_secs(60)
 }
 fn default_true() -> bool {
     true
@@ -347,6 +420,10 @@ fn default_access_timeout() -> Duration {
 
 fn default_ticker_config() -> Option<TickerConfig> {
     Some(TickerConfig::default())
+}
+
+fn default_metrics_config() -> Option<MetricsConfig> {
+    Some(MetricsConfig::default())
 }
 
 fn default_provider_name() -> String {
@@ -384,12 +461,48 @@ fn default_max_long_term() -> usize {
     10
 }
 
-fn default_importance_threshold() -> f32 {
+fn default_importance_threshold() -> f64 {
     0.5
 }
 
 fn default_max_items() -> usize {
     100
+}
+
+fn default_search_window() -> Duration {
+    Duration::from_secs(60)
+}
+
+fn default_max_results() -> usize {
+    10
+}
+
+fn default_search_filters() -> Vec<String> {
+    vec![]
+}
+
+fn default_max_fetch_per_result() -> usize {
+    3
+}
+
+fn default_collection_name() -> String {
+    "default_collection".to_string()
+}
+
+fn default_similarity_threshold() -> f64 {
+    0.5
+}
+
+fn default_rag_max_results() -> usize {
+    10
+}
+
+fn default_fetch_timeout() -> Duration {
+    Duration::from_secs(5)
+}
+
+fn default_metrics_tick_interval() -> usize {
+    60
 }
 
 // Duration型のシリアライズ/デシリアライズヘルパー

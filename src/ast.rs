@@ -310,7 +310,7 @@ pub enum Statement {
     // expressions
     Expression(Expression),
     Assignment {
-        target: Expression,
+        target: Vec<Expression>,
         value: Expression,
     },
     Return(Expression),
@@ -320,15 +320,8 @@ pub enum Statement {
         parameters: Vec<Argument>,
         target: Option<String>, // Noneの場合はブロードキャスト
     },
-    Request {
-        agent: String,
-        request_type: RequestType,
-        parameters: Vec<Argument>,
-        options: Option<RequestAttributes>,
-    },
     // grouping
     Block(Statements),
-    Await(AwaitType),
     WithError {
         statement: Box<Statement>,
         error_handler_block: ErrorHandlerBlock,
@@ -353,14 +346,6 @@ impl StatementExt for Statement {
             error_handler_block,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum AwaitType {
-    // 複数のStatementを並列実行して全ての完了を待つ
-    Block(Statements),
-    // 単一のStatementの完了を待つ
-    Single(Box<Statement>),
 }
 
 use std::fmt::{Display, Formatter};
@@ -406,11 +391,20 @@ pub enum Expression {
         args: Vec<Argument>,
         with_block: Option<ThinkAttributes>,
     },
+    Request {
+        agent: String,
+        request_type: RequestType,
+        parameters: Vec<Argument>,
+        options: Option<RequestAttributes>,
+    },
+    Await(Vec<Expression>),
     BinaryOp {
         op: BinaryOperator,
         left: Box<Expression>,
         right: Box<Expression>,
     },
+    Ok(Box<Expression>),
+    Err(Box<Expression>),
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -427,6 +421,9 @@ pub struct ThinkAttributes {
 
     // リトライ設定
     pub retry: Option<RetryConfig>,
+
+    // Plugin用の拡張項目
+    pub plugins: HashMap<String, HashMap<String, Literal>>,
 }
 
 // プロンプトジェネレータータイプ
@@ -453,7 +450,6 @@ pub enum RetryDelay {
     },
 }
 
-// ==== AST Definitions ====
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Policy {
     pub text: String,

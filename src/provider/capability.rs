@@ -1,6 +1,7 @@
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use tracing::warn;
 
 use super::types::{ProviderError, ProviderResult};
 
@@ -12,6 +13,8 @@ pub enum CapabilityType {
     Generate,
     /// 基本的なプロンプト生成
     GeneralPrompt,
+    /// Policyベースの文章生成機能
+    PolicyPrompt,
     /// ポリシーベースの制御機能
     Policy,
 
@@ -168,7 +171,7 @@ pub trait RequiresCapabilities {
             .cloned()
             .collect();
 
-        println!("missing_capabilities: {:?}", missing_capabilities);
+        warn!("missing_capabilities: {:?}", missing_capabilities);
         if !missing_capabilities.is_empty() {
             return Err(ProviderError::MissingCapabilities(
                 missing_capabilities.clone(),

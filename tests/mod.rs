@@ -1,3 +1,4 @@
+mod micro_agent_tests;
 mod provider_tests;
 
 use std::collections::HashMap;

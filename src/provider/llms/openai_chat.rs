@@ -13,6 +13,7 @@ use async_openai::{
 use async_trait::async_trait;
 use secrecy::ExposeSecret;
 use std::collections::HashSet;
+use tracing::debug;
 
 use crate::{
     config::ProviderConfig,
@@ -42,6 +43,7 @@ impl OpenAIChatProviderLLM {
         }
     }
 
+    #[tracing::instrument(skip(self, config))]
     async fn chat_completion(
         &self,
         prompt: &str,
@@ -51,6 +53,8 @@ impl OpenAIChatProviderLLM {
             .client
             .as_ref()
             .ok_or_else(|| ProviderError::Authentication("Client not initialized".into()))?;
+
+        debug!("prompt: {}", prompt);
 
         let messages = vec![ChatCompletionRequestMessage::User(
             ChatCompletionRequestUserMessage {

@@ -496,6 +496,8 @@ impl System {
             .map_err(SystemError::from)?;
 
         let providers = self.provider_registry.read().await.get_providers().clone();
+        let world_def = self.get_agent_ast(&AgentType::World.to_string()).await?;
+        let world_polices = world_def.policies.clone();
 
         // 指定された数だけエージェントを作成
         for i in 0..count {
@@ -509,6 +511,7 @@ impl System {
                     AgentConfig::default(),
                     primary.clone(),
                     providers.clone(),
+                    world_polices.clone(),
                 )
                 .await?,
             );
@@ -592,6 +595,9 @@ impl System {
         debug!("register_agent: {}", agent_name);
         let ast_registry = self.ast_registry.read().await;
         let agent_def = ast_registry.get_agent_ast(agent_name).await?;
+        let world_def = ast_registry
+            .get_agent_ast(&AgentType::World.to_string())
+            .await?;
         drop(ast_registry);
 
         let providers = self.provider_registry.read().await.get_providers().clone();
@@ -612,6 +618,7 @@ impl System {
                 AgentConfig::default(),
                 primary,
                 providers,
+                world_def.policies.clone(),
             )
             .await?,
         );
@@ -978,16 +985,16 @@ mod tests {
                     parameters: vec![],
                     block: HandlerBlock {
                         statements: vec![
-                            Statement::Request {
+                            Statement::Expression(Expression::Request {
                                 agent: "pong".to_string(),
                                 request_type: "ping".into(),
                                 parameters: vec![],
                                 options: None,
-                            },
+                            }),
                             Statement::Assignment {
-                                target: Expression::StateAccess(StateAccessPath(vec![
+                                target: vec![Expression::StateAccess(StateAccessPath(vec![
                                     "received_pong".to_string(),
-                                ])),
+                                ]))],
                                 value: Expression::Literal(Literal::Boolean(true)),
                             },
                         ],
