@@ -109,6 +109,7 @@ pub type ProviderResult<T> = Result<T, ProviderError>;
 #[cfg(test)]
 mod tests {
 
+    /*
     use std::collections::HashMap;
 
     use dashmap::DashMap;
@@ -146,10 +147,11 @@ mod tests {
             ContextConfig::default(),
             provider_instance,
             providers,
+            vec![],
         );
         Arc::new(context)
     }
-    /*
+
     #[tokio::test]
     async fn test_basic_think_evaluation() {
         let mut mock = MockProvider::new();

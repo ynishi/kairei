@@ -434,25 +434,14 @@ impl ExpressionEvaluator {
 
     fn collect_policies(
         &self,
-        _context: Arc<ExecutionContext>,
+        context: Arc<ExecutionContext>,
         attributes: Option<&ThinkAttributes>,
     ) -> EvalResult<Vec<Policy>> {
-        Ok(attributes
-            .map(|attr| {
-                let mut sorted = attr
-                    .policies
-                    .iter()
-                    .enumerate()
-                    .collect::<Vec<(usize, &Policy)>>()
-                    .clone();
-                sorted.sort_by(|a, b| a.0.cmp(&b.0));
-                sorted
-                    .iter()
-                    .map(|(_, p)| (*p).clone())
-                    .clone()
-                    .collect::<Vec<ast::Policy>>()
-            })
-            .unwrap_or_default())
+        let mut policies = context.shared.policies.clone();
+        if let Some(attrs) = attributes {
+            policies.extend(attrs.policies.clone());
+        }
+        Ok(policies)
     }
 
     async fn eval_request(
@@ -925,6 +914,7 @@ mod tests {
             ContextConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         ))
     }
 

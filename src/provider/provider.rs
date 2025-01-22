@@ -12,12 +12,10 @@ use super::{
     types::ProviderResult,
 };
 use async_trait::async_trait;
-use mockall::automock;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
 #[async_trait]
-#[automock]
 pub trait Provider: Send + Sync {
     async fn execute(
         &self,

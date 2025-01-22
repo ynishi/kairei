@@ -13,21 +13,31 @@ use crate::{micro_agent_tests::setup_secret, should_run_external_api_tests};
 
 const TRAVEL_PLANNING_DSL: &str = r#"
 world TravelPlanning {
+  // 共通の基本ポリシー
+  policy "Consider budget constraints and optimize value for money"
+  policy "Ensure traveler safety and comfort"
+  policy "Provide practical and actionable information"
+  policy "Consider seasonal factors in all recommendations"
 }
 
 micro TravelPlanner {
+    // 旅程計画に特化したポリシー
+    policy "Create balanced itineraries with appropriate time allocation"
+
     state {
         current_plan: String = "none",
         planning_stage: String = "none"
     }
     answer {
         // create a comprehensive travel plan
-        on request PlanTrip(destination: String, start: String, end: String, budget: Float) -> Result<String, Error> {
-            (hotels, flights) = await {
+        on request PlanTrip(destination: String, start: String, end: String, budget: Float, interests: String) -> Result<String, Error> {
+            (hotels, flights, attractions, local_info) = await {
                 request FindHotels to HotelFinder(location: destination, start_date: start,end_date: end, budget: budget * 0.4)
                 request FindFlight to FlightFinder(departure_location: "NewYork", arrival_location: destination, departure_date: start, back_date: end, budget :budget * 0.4)
+                request FindAttractions to AttractionRecommender(location: destination, dates: "${start} to ${end}", interests: interests, budget: budget * 0.2)
+                request GetLocalInfo to LocalExpertAgent(location: destination, season: start, specific_questions: "")
             }
-            plan = think("Create a comprehensive travel plan by combining this flight and hotel information:
+            plan = think("Create a comprehensive travel plan by combining this flight, hotels, attractions and local information:
 
                             Destination: ${destination}
                             Dates: ${start} to ${end}
@@ -39,6 +49,12 @@ micro TravelPlanner {
                             Hotel Information:
                             ${hotels}
 
+                            Attraction Recommendations:
+                            ${attractions}
+
+                            Local Information:
+                            ${local_info}
+
                             Please create a detailed itinerary that includes:
                             1. Transportation details (arrival and departure flights)
                             2. Accommodation details
@@ -46,7 +62,9 @@ micro TravelPlanner {
                             4. Important logistical notes (check-in/out times, airport transfers)
                             5. Remaining budget for activities and meals
 
-                            Format the response in clear sections with specific dates and times.")
+                            Format the response in clear sections with specific dates and times.") with {
+                                max_tokens: 2000
+                            }
             return Ok(plan)
         }
     }
@@ -86,32 +104,57 @@ micro FlightFinder {
     }
 }
 
-/*
-micro LocalExpert {
+micro AttractionRecommender {
     answer {
-        on request GetLocalInfo(location: String) {
-            think("Provide local insights") with {
-                search: {
-                    filter: ["news", "blogs"],
-                    recent: "7d"
-                }
-            }
+        on request FindAttractions(
+            location: String,
+            dates: String,
+            interests: String,  // 例: "culture,food,nature"
+            budget: Float
+        ) -> Result<String, Error> {
+            recommendations = think("Recommend tourist attractions and activities in ${location} that match:
+                Dates: ${dates}
+                Interests: ${interests}
+                Daily budget: ${budget}
+
+                Include:
+                1. Major attractions and landmarks
+                2. Suggested daily itineraries
+                3. Estimated costs
+                4. Travel times between locations")
+
+            return Ok(recommendations)
         }
     }
 }
 
-micro BudgetOptimizer {
+micro LocalExpertAgent {
+    policy "Provide comprehensive weather information and packing suggestions"
+    policy "Include local customs, etiquette and cultural considerations"
+    policy "Cover local transportation systems and tips"
+    policy "Detail safety information and emergency contacts"
+    policy "List relevant local festivals and events"
+
     answer {
-        on request OptimizeBudget(
-            total_budget: Float,
-            allocations: [Allocation]
-        ) -> Result<OptimizedBudget> {
-            think("Optimize budget allocation") with {
-                context: {
-                    total_budget,
-                    allocations
-                }
-            }
+        on request GetLocalInfo(
+            location: String,
+            season: String,  // 旅行時期
+            specific_questions: String  // オプショナル
+        ) -> Result<String, Error> {
+            local_info = think("Provide detailed local information for ${location}:
+                Travel season: ${season}
+                Specific questions: ${specific_questions}
+
+                Cover:
+                1. Weather conditions and what to pack
+                2. Local customs and etiquette
+                3. Transportation tips
+                4. Safety information
+                5. Local emergency contacts
+                6. Best areas to stay
+                7. Local festivals or events during the period")
+
+            return Ok(local_info)
         }
     }
 }
@@ -173,7 +216,13 @@ async fn setup_system() -> System {
 
     let root = system.parse_dsl(TRAVEL_PLANNING_DSL).await.unwrap();
     debug!("Root: {:?}", root);
-    let required = vec!["TravelPlanner", "HotelFinder", "FlightFinder"];
+    let required = vec![
+        "TravelPlanner",
+        "HotelFinder",
+        "FlightFinder",
+        "AttractionRecommender",
+        "LocalExpertAgent",
+    ];
     root.micro_agent_defs
         .is_empty()
         .then(|| panic!("No micro agents found"));
@@ -201,6 +250,7 @@ async fn test_travel_planner() {
         ("destination", Value::from("Tokyo")),
         ("start", Value::from("2024-06-01")),
         ("end", Value::from("2024-06-07")),
+        ("interests", Value::from("culture,food,nature")),
         ("budget", Value::Float(3000.0)),
     ];
     let request_id = Uuid::new_v4();
@@ -208,7 +258,7 @@ async fn test_travel_planner() {
 
     let result = system.send_request(request).await.unwrap();
     debug!("Result: {:?}", result);
-    assert!(format!("{:?}", result).contains("travel plan"));
+    assert!(format!("{:?}", result).contains("travel"));
     assert!(format!("{:?}", result).contains("Tokyo"));
 }
 

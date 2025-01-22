@@ -263,6 +263,7 @@ impl ExecutionContext {
         config: ContextConfig,
         primary: Arc<ProviderInstance>,
         providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
+        policies: Vec<Policy>,
     ) -> Self {
         let (mut event_rx, _) = event_bus.subscribe();
         let request_manager = Arc::new(RequestManager::new(
@@ -280,7 +281,7 @@ impl ExecutionContext {
                 providers,
                 // only 1 variant, when appended type, inject here.
                 prompt_generator: Arc::new(StandardPromptGenerator),
-                policies: vec![],
+                policies,
             },
             current_scope: DashMap::new(),
             access_mode,
@@ -658,6 +659,7 @@ mod tests {
             ContextConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         )
     }
 
@@ -670,6 +672,7 @@ mod tests {
             ContextConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         )
     }
 

@@ -1,5 +1,6 @@
 pub mod general_prompt;
 pub mod memory;
+pub mod policy;
 pub mod web_search_serper;
 
 #[cfg(test)]
@@ -17,7 +18,7 @@ mod provider_tests {
     // テストコンテキストのホルダー構造体
     #[derive(Clone)]
     pub struct TestContextHolder {
-        request: ProviderRequest,
+        pub request: ProviderRequest,
         context: ProviderContext,
         configs: HashMap<String, PluginConfig>,
     }
