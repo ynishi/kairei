@@ -12,7 +12,7 @@ use crate::{
         llm::{LLMResponse, ProviderLLM},
         llms::simple_expert::SimpleExpertProviderLLM,
         plugin::{PluginContext, ProviderPlugin},
-        plugins::general_prompt::GeneralPromptPlugin,
+        plugins::{general_prompt::GeneralPromptPlugin, policy::PolicyPlugin},
         provider::{Provider, ProviderSecret, Section},
         request::{ProviderContext, ProviderRequest, ProviderResponse},
         types::ProviderResult,
@@ -34,7 +34,7 @@ impl Default for StandardProvider {
                 "SimpleExpertProviderLLM",
             ))),
 
-            plugins: vec![Arc::new(GeneralPromptPlugin)],
+            plugins: vec![Arc::new(GeneralPromptPlugin), Arc::new(PolicyPlugin)],
             generator: Arc::new(PromptGenerator::new(None)),
         }
     }
@@ -111,7 +111,11 @@ impl Provider for StandardProvider {
 
 impl RequiresCapabilities for StandardProvider {
     fn required_capabilities(&self) -> RequiredCapabilities {
-        RequiredCapabilities::new(vec![CapabilityType::Generate, CapabilityType::SystemPrompt])
+        RequiredCapabilities::new(vec![
+            CapabilityType::Generate,
+            CapabilityType::PolicyPrompt,
+            CapabilityType::SystemPrompt,
+        ])
     }
 }
 

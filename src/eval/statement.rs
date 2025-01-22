@@ -2,8 +2,6 @@ use std::sync::Arc;
 
 use async_recursion::async_recursion;
 
-use tracing::debug;
-
 use super::{
     context::{ExecutionContext, StateAccessMode, VariableAccess},
     expression::{ExpressionEvaluator, Value},
@@ -308,6 +306,7 @@ mod tests {
             ContextConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         ))
     }
 

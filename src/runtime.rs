@@ -8,7 +8,7 @@ use crate::event_bus::{ErrorEvent, Event, EventBus, EventCategory, EventError, L
 use crate::event_registry::{EventType, LifecycleEvent};
 use crate::provider::provider_registry::ProviderInstance;
 use crate::provider::types::ProviderError;
-use crate::{EventHandler, HandlerBlock, MicroAgentDef, RequestHandler};
+use crate::{EventHandler, HandlerBlock, MicroAgentDef, Policy, RequestHandler};
 use async_trait::async_trait;
 use chrono::Utc;
 use dashmap::DashMap;
@@ -279,6 +279,7 @@ impl RuntimeAgentData {
         config: AgentConfig,
         primary: Arc<ProviderInstance>,
         providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
+        world_policies: Vec<Policy>,
     ) -> RuntimeResult<Self> {
         let agent_name = agent_def.name.clone();
         let agent_info = AgentInfo {
@@ -289,6 +290,8 @@ impl RuntimeAgentData {
         };
 
         let evaluator = Arc::new(Evaluator::new());
+        let mut policies = agent_def.policies.clone();
+        policies.extend(world_policies.clone());
 
         let base_context = Arc::new(ExecutionContext::new(
             event_bus.clone(),
@@ -297,6 +300,7 @@ impl RuntimeAgentData {
             config.context,
             primary.clone(),
             providers.clone(),
+            policies,
         ));
 
         let last_status = RwLock::new(LastStatus {
@@ -721,6 +725,7 @@ mod tests {
             AgentConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         )
         .await
         .unwrap();
@@ -861,6 +866,7 @@ mod tests {
             AgentConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         )
         .await
         .unwrap();
@@ -969,6 +975,7 @@ mod tests {
             AgentConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         )
         .await
         .unwrap();

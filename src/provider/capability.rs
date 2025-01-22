@@ -13,6 +13,8 @@ pub enum CapabilityType {
     Generate,
     /// 基本的なプロンプト生成
     GeneralPrompt,
+    /// Policyベースの文章生成機能
+    PolicyPrompt,
     /// ポリシーベースの制御機能
     Policy,
 
