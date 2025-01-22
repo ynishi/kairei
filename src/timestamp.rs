@@ -54,6 +54,7 @@ mod tests {
     use std::time::Duration;
 
     use tokio::time::sleep;
+    use tracing::debug;
 
     use super::*;
 
@@ -123,7 +124,7 @@ mod tests {
     fn test_timestamp_serialize() {
         let timestamp = Timestamp::now();
         let serialized = serde_json::to_string(&timestamp).unwrap();
-        println!("{}", serialized);
+        debug!("{}", serialized);
         assert!(serialized.contains("secs_since_epoch"));
         assert!(serialized.contains("nanos_since_epoch"));
     }

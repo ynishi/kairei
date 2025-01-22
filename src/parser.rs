@@ -9,7 +9,7 @@ use nom::{
     IResult,
 };
 use std::{collections::HashMap, time::Duration};
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 /// Entry point of the parser.
 #[instrument(level = "debug", skip(input))]
@@ -510,11 +510,8 @@ fn parse_statements(input: &str) -> IResult<&str, Vec<Statement>> {
 #[instrument(level = "debug", skip(input))]
 fn parse_statement(input: &str) -> IResult<&str, Statement> {
     let (input, base_statement) = alt((
-        parse_await,
-        parse_await_block,
         parse_assignment,
         parse_emit_statement,
-        parse_request_statement,
         parse_if_statement,
         parse_return_statement,
     ))(input)?;
@@ -522,17 +519,21 @@ fn parse_statement(input: &str) -> IResult<&str, Statement> {
 }
 
 #[instrument(level = "debug", skip(input))]
-fn parse_await(input: &str) -> IResult<&str, Statement> {
-    map(preceded(ws(tag("await")), parse_statement), |s| {
-        Statement::Await(AwaitType::Single(Box::new(s)))
+fn parse_await(input: &str) -> IResult<&str, Expression> {
+    map(preceded(ws(tag("await")), parse_expression), |s| {
+        Expression::Await(vec![s])
     })(input)
 }
 
 #[instrument(level = "debug", skip(input))]
-fn parse_await_block(input: &str) -> IResult<&str, Statement> {
-    map(preceded(ws(tag("await")), parse_statements), |statements| {
-        Statement::Await(AwaitType::Block(statements))
-    })(input)
+fn parse_await_block(input: &str) -> IResult<&str, Expression> {
+    map(
+        preceded(
+            ws(tag("await")),
+            delimited(ws(char('{')), many0(parse_expression), ws(char('}'))),
+        ),
+        Expression::Await,
+    )(input)
 }
 
 #[instrument(level = "debug", skip(input))]
@@ -568,7 +569,21 @@ fn parse_optional_error_handler(
 #[instrument(level = "debug", skip(input))]
 fn parse_assignment(input: &str) -> IResult<&str, Statement> {
     map(
-        tuple((ws(parse_expression), char('='), parse_expression)),
+        tuple((
+            // 左辺: 単一の式または括弧なしカンマ区切りの式のリスト
+            alt((
+                map(separated_list1(ws(char(',')), parse_expression), |exprs| {
+                    exprs
+                }),
+                delimited(
+                    char('('),
+                    separated_list1(ws(char(',')), parse_expression),
+                    char(')'),
+                ),
+            )),
+            ws(char('=')),
+            parse_expression,
+        )),
         |(target, _, value)| Statement::Assignment { target, value },
     )(input)
 }
@@ -595,7 +610,7 @@ fn parse_emit_statement(input: &str) -> IResult<&str, Statement> {
 }
 
 #[instrument(level = "debug", skip(input))]
-fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
+fn parse_request_expression(input: &str) -> IResult<&str, Expression> {
     map(
         tuple((
             ws(tag("request")),
@@ -604,7 +619,7 @@ fn parse_request_statement(input: &str) -> IResult<&str, Statement> {
             preceded(ws(tag("to")), identifier),
             parse_arguments,
         )),
-        |(_, request_type, options, target, parameters)| Statement::Request {
+        |(_, request_type, options, target, parameters)| Expression::Request {
             agent: target.to_string(),
             request_type,
             parameters,
@@ -783,7 +798,7 @@ fn parse_multiplicative(input: &str) -> IResult<&str, Expression> {
     )(input)
 }
 
-const RESERVED_KEYWORDS: [&str; 11] = [
+const RESERVED_KEYWORDS: [&str; 13] = [
     "think",
     "emit",
     "request",
@@ -795,6 +810,8 @@ const RESERVED_KEYWORDS: [&str; 11] = [
     "onInit",
     "onDestroy",
     "with",
+    "Ok",
+    "Err",
 ];
 
 fn parse_not_reserved(input: &str) -> IResult<&str, ()> {
@@ -810,6 +827,8 @@ fn parse_not_reserved(input: &str) -> IResult<&str, ()> {
         ws(tag(RESERVED_KEYWORDS[8])),
         ws(tag(RESERVED_KEYWORDS[9])),
         ws(tag(RESERVED_KEYWORDS[10])),
+        ws(tag(RESERVED_KEYWORDS[11])),
+        ws(tag(RESERVED_KEYWORDS[12])),
     ))))(input)
 }
 
@@ -821,6 +840,13 @@ fn parse_primary(input: &str) -> IResult<&str, Expression> {
         map(parse_literal, Expression::Literal),
         // LLM呼び出し
         parse_think_expression,
+        // Result式
+        parse_result_expression,
+        // Resuest呼び出し
+        parse_request_expression,
+        // await式
+        parse_await_block,
+        parse_await,
         // 関数呼び出し
         map(
             tuple((
@@ -901,13 +927,59 @@ fn parse_think_attributes(input: &str) -> IResult<&str, ThinkAttributes> {
 
 #[instrument(level = "debug", skip(input))]
 fn parse_think_attribute(input: &str) -> IResult<&str, ThinkAttributeKV> {
-    map(
-        tuple((ws(identifier), ws(char(':')), parse_literal)),
-        |(key, _, value)| ThinkAttributeKV {
-            key: key.to_string(),
-            value,
-        },
-    )(input)
+    alt((
+        // ネストされたオブジェクトをパースする
+        map(
+            tuple((
+                ws(identifier),
+                ws(char(':')),
+                delimited(
+                    ws(char('{')),
+                    separated_list0(ws(char(',')), parse_think_attribute),
+                    ws(char('}')),
+                ),
+            )),
+            |(key, _, nested_attrs)| ThinkAttributeKV {
+                key: key.to_string(),
+                value: Literal::Map(
+                    nested_attrs
+                        .into_iter()
+                        .map(|attr| (attr.key, attr.value))
+                        .collect(),
+                ),
+            },
+        ),
+        // 通常のキー・バリューをパースする
+        map(
+            tuple((ws(identifier), ws(char(':')), parse_literal)),
+            |(key, _, value)| ThinkAttributeKV {
+                key: key.to_string(),
+                value,
+            },
+        ),
+    ))(input)
+}
+
+#[instrument(level = "debug", skip(input))]
+fn parse_result_expression(input: &str) -> IResult<&str, Expression> {
+    alt((
+        // Ok(expr)のパース
+        map(
+            tuple((
+                ws(tag("Ok")),
+                preceded(ws(tag("(")), terminated(parse_expression, ws(tag(")")))),
+            )),
+            |(_, expr)| Expression::Ok(Box::new(expr)),
+        ),
+        // Err(expr)のパース
+        map(
+            tuple((
+                ws(tag("Err")),
+                preceded(ws(tag("(")), terminated(parse_expression, ws(tag(")")))),
+            )),
+            |(_, expr)| Expression::Err(Box::new(expr)),
+        ),
+    ))(input)
 }
 
 #[instrument(level = "debug", skip(input))]
@@ -1013,6 +1085,7 @@ fn collect_with_settings(settings: Vec<ThinkAttributeKV>) -> ThinkAttributes {
         retry: None,
         policies: vec![],
         prompt_generator_type: None,
+        plugins: HashMap::new(),
     };
 
     for setting in settings {
@@ -1034,7 +1107,17 @@ fn collect_with_settings(settings: Vec<ThinkAttributeKV>) -> ThinkAttributes {
                     }
                 }
             }
-            _ => (), // 不明な設定は無視
+            // プラグイン設定の処理
+            (plugin_name, Literal::Map(configs)) => {
+                let mut plugin_config = HashMap::new();
+                for (key, value) in configs {
+                    plugin_config.insert(key, value);
+                }
+                block.plugins.insert(plugin_name.to_string(), plugin_config);
+            }
+            (key, value) => {
+                warn!("Unknown think attribute: {}={:?}", key, value);
+            }
         }
     }
 
@@ -1451,6 +1534,13 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_assignment_tuple() {
+        let input = "(count1, count2) = count + 1";
+        let result = parse_assignment(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn test_parse_emit() {
         let cases = [
             "emit Tick",
@@ -1484,6 +1574,7 @@ mod tests {
     fn test_parse_statement() {
         let cases = [
             "count = count + 1",
+            r#"c = request GetCount to counter()"#,
             "emit Updated to manager",
             "if (count > 10) { return count }",
             "await count = count + 2",
@@ -1507,31 +1598,129 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_await_single() {
-        let input = "await count = 0";
+        let input = "await think()";
         let result = parse_await(input);
         assert!(result.is_ok());
-        let (_, await_statement) = result.unwrap();
+        let (_, await_expression) = result.unwrap();
 
-        assert!(matches!(
-            await_statement,
-            Statement::Await(AwaitType::Single(_))
-        ));
+        match await_expression {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 1);
+            }
+            _ => panic!("Unexpected await type"),
+        }
     }
 
     #[tokio::test]
     async fn test_parse_await_block() {
         let input = "await {
-               count1 = 0
-               count2 = 1
+            think(1)
+            think(2)
            }";
         let result = parse_await_block(input);
         assert!(result.is_ok());
-        let (_, await_statement) = result.unwrap();
+        let (_, await_expression) = result.unwrap();
 
-        assert!(matches!(
-            await_statement,
-            Statement::Await(AwaitType::Block(_))
-        ));
+        match await_expression {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 2);
+            }
+            _ => panic!("Unexpected await block"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_assign() {
+        let input = "ret = await {
+                think(1)
+                think(2)
+               }";
+        let result = parse_assignment(input);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_parse_block_with_await() {
+        let input = "{
+            (a1, a2) = await {
+                think(1)
+                think(2)
+            }
+            got = think(3)
+        }";
+        let result = parse_block(input); // トップレベルのパーサー
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_single_expression() {
+        let input = "await { think(1) }";
+        let result = parse_await_block(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+        match await_statement {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 1);
+            }
+            _ => panic!("Unexpected await type"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_with_whitespace() {
+        let input = "await   {
+                think(1)
+                    think(2)
+                         }";
+        let result = parse_await_block(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+        match await_statement {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 2);
+            }
+            _ => panic!("Unexpected await type"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_empty() {
+        let input = "await { }";
+        let result = parse_await_block(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+        match await_statement {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 0);
+            }
+            _ => panic!("Unexpected await type"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_nested_expressions() {
+        let input = "await {
+                think(get_data(1))
+                process(analyze(2))
+            }";
+        let result = parse_await_block(input);
+        assert!(result.is_ok());
+        let (_, await_statement) = result.unwrap();
+        match await_statement {
+            Expression::Await(expressions) => {
+                assert_eq!(expressions.len(), 2);
+            }
+            _ => panic!("Unexpected await type"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_await_block_missing_brace() {
+        let input = "await {
+                think(1)
+                think(2)"; // 閉じ括弧がない
+        let result = parse_await_block(input);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -1769,6 +1958,42 @@ mod tests {
                     format_expression(left),
                     op_str,
                     format_expression(right)
+                )
+            }
+            Expression::Ok(expression) => format!("Ok({})", format_expression(expression)),
+            Expression::Err(expression) => format!("Err({})", format_expression(expression)),
+            Expression::Request {
+                agent,
+                request_type,
+                parameters,
+                options,
+            } => {
+                format!(
+                    "request {} {}{}",
+                    agent,
+                    request_type,
+                    if parameters.is_empty() {
+                        "".to_string()
+                    } else {
+                        format!(
+                            "({})",
+                            parameters
+                                .iter()
+                                .map(|arg| format!("{:?}", arg))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                )
+            }
+            Expression::Await(expressions) => {
+                format!(
+                    "await {}",
+                    expressions
+                        .iter()
+                        .map(|expr| format_expression(expr))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             }
         }
@@ -2200,5 +2425,132 @@ mod tests {
                 Argument::Positional(Expression::BinaryOp { .. })
             ));
         }
+    }
+
+    #[test]
+    fn test_think_with_nested_attributes() {
+        let input = r#"think(query_text) with {
+            provider: "openai",
+            model: "gpt-4",
+            my_plugin: {
+                version : "v1",
+                settings: {
+                    timeout: 30,
+                    retries: 3
+                }
+            }
+        }"#;
+
+        let (_, expr) = parse_expression(input).unwrap();
+
+        if let Expression::Think {
+            args, with_block, ..
+        } = expr
+        {
+            assert_eq!(args.len(), 1);
+            assert!(matches!(
+                args[0],
+                Argument::Positional(Expression::Variable { .. })
+            ));
+
+            // 属性のチェック
+            if let Some(attrs) = with_block {
+                assert_eq!(attrs.provider, Some("openai".to_string()));
+                assert_eq!(attrs.model, Some("gpt-4".to_string()));
+
+                // プラグイン設定のチェック
+                let plugin_config = attrs
+                    .plugins
+                    .get("my_plugin")
+                    .expect("my_plugin should exist");
+
+                assert_eq!(
+                    plugin_config.get("version"),
+                    Some(&Literal::String("v1".to_string()))
+                );
+
+                if let Some(Literal::Map(settings)) = plugin_config.get("settings") {
+                    assert_eq!(settings.get("timeout"), Some(&Literal::Integer(30)));
+                    assert_eq!(settings.get("retries"), Some(&Literal::Integer(3)));
+                } else {
+                    panic!("settings should be a map");
+                }
+            } else {
+                panic!("attributes should exist");
+            }
+        } else {
+            panic!("should be a think expression");
+        }
+    }
+
+    #[test]
+    fn test_think_with_mixed_attributes() {
+        let input = r#"think(query_text) with {
+            provider: "openai",
+            temperature: 0.7,
+            plugin_one: {
+                enabled: true
+            },
+            plugin_two: {
+                config: {
+                    value: "nested"
+                }
+            }
+        }"#;
+
+        let (_, expr) = parse_expression(input).unwrap();
+
+        if let Expression::Think {
+            args, with_block, ..
+        } = expr
+        {
+            assert_eq!(args.len(), 1);
+
+            if let Some(attrs) = with_block {
+                assert_eq!(attrs.provider, Some("openai".to_string()));
+                assert_eq!(attrs.temperature, Some(0.7));
+
+                // プラグイン設定のチェック
+                let plugin_one = attrs
+                    .plugins
+                    .get("plugin_one")
+                    .expect("plugin_one should exist");
+                assert_eq!(plugin_one.get("enabled"), Some(&Literal::Boolean(true)));
+
+                let plugin_two = attrs
+                    .plugins
+                    .get("plugin_two")
+                    .expect("plugin_two should exist");
+                if let Some(Literal::Map(config)) = plugin_two.get("config") {
+                    assert_eq!(
+                        config.get("value"),
+                        Some(&Literal::String("nested".to_string()))
+                    );
+                } else {
+                    panic!("config should be a map");
+                }
+            } else {
+                panic!("attributes should exist");
+            }
+        } else {
+            panic!("should be a think expression");
+        }
+    }
+
+    #[test]
+    fn test_parse_request_expression() {
+        let input = "request GetCount to counter(last_updated)";
+        let (_, statement) = parse_request_expression(input).unwrap();
+        assert_eq!(
+            statement,
+            Expression::Request {
+                agent: "counter".to_string(),
+                request_type: RequestType::Custom("GetCount".to_string()),
+                parameters: vec![Argument::Positional(Expression::Variable(
+                    "last_updated".to_string()
+                ))],
+                options: None
+            }
+        );
     }
 }

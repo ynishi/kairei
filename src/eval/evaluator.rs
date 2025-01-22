@@ -55,8 +55,17 @@ impl Evaluator {
             .await;
         match result {
             Ok(StatementResult::Control(ControlFlow::Return(value))) => {
+                let response = match value {
+                    Value::Ok(inner) => Ok(*inner),
+                    Value::Err(inner) => Err(RuntimeError::EvalFailure(*inner)),
+                    // Exceptionの場合はエラーを返す
+                    Value::Error(e) => {
+                        return Err(EvalError::Eval(format!("Unhandled exception: {:?}", e)));
+                    }
+                    other => Ok(other),
+                };
                 context
-                    .send_response(event, Ok(value))
+                    .send_response(event, response)
                     .await
                     .map_err(|e| EvalError::SendResponseFailed(format!("error: {}", e)))?;
             }

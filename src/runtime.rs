@@ -8,7 +8,7 @@ use crate::event_bus::{ErrorEvent, Event, EventBus, EventCategory, EventError, L
 use crate::event_registry::{EventType, LifecycleEvent};
 use crate::provider::provider_registry::ProviderInstance;
 use crate::provider::types::ProviderError;
-use crate::{EventHandler, HandlerBlock, MicroAgentDef, RequestHandler};
+use crate::{EventHandler, HandlerBlock, MicroAgentDef, Policy, RequestHandler};
 use async_trait::async_trait;
 use chrono::Utc;
 use dashmap::DashMap;
@@ -279,6 +279,7 @@ impl RuntimeAgentData {
         config: AgentConfig,
         primary: Arc<ProviderInstance>,
         providers: Arc<DashMap<String, Arc<ProviderInstance>>>,
+        world_policies: Vec<Policy>,
     ) -> RuntimeResult<Self> {
         let agent_name = agent_def.name.clone();
         let agent_info = AgentInfo {
@@ -289,6 +290,8 @@ impl RuntimeAgentData {
         };
 
         let evaluator = Arc::new(Evaluator::new());
+        let mut policies = agent_def.policies.clone();
+        policies.extend(world_policies.clone());
 
         let base_context = Arc::new(ExecutionContext::new(
             event_bus.clone(),
@@ -297,6 +300,7 @@ impl RuntimeAgentData {
             config.context,
             primary.clone(),
             providers.clone(),
+            policies,
         ));
 
         let last_status = RwLock::new(LastStatus {
@@ -546,11 +550,13 @@ impl RuntimeAgentData {
     #[tracing::instrument(skip(self, event))]
     async fn handle_event(&self, event: &Event) -> RuntimeResult<()> {
         debug!("Event received: name: {}, event: {:?}", self.name(), event);
+
         match &event.category() {
             // リクエストイベント
             EventCategory::Request { request_type, .. } => {
                 if event.event_type.request_for_me(&self.name) {
                     if let Some(handler) = self.answer_handlers.get(request_type) {
+                        debug!("Handler found: {:?}", request_type);
                         handler(event).await
                     } else {
                         Err(RuntimeError::HandlerNotFound {
@@ -647,6 +653,10 @@ pub enum RuntimeError {
     #[error("Evaluation error: {0}")]
     Eval(#[from] EvalError),
 
+    // failure value
+    #[error("Evaluation result is failure: {0}")]
+    EvalFailure(expression::Value),
+
     #[error("Handler not found for {handler_type}: {name}")]
     HandlerNotFound { handler_type: String, name: String },
 }
@@ -691,9 +701,9 @@ mod tests {
                     parameters: vec![],
                     block: HandlerBlock {
                         statements: vec![Statement::Assignment {
-                            target: Expression::StateAccess(StateAccessPath(vec![
+                            target: vec![Expression::StateAccess(StateAccessPath(vec![
                                 "count".to_string()
-                            ])),
+                            ]))],
                             value: Expression::BinaryOp {
                                 op: BinaryOperator::Add,
                                 left: Box::new(Expression::StateAccess(StateAccessPath(vec![
@@ -715,6 +725,7 @@ mod tests {
             AgentConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         )
         .await
         .unwrap();
@@ -823,7 +834,7 @@ mod tests {
                     block: HandlerBlock {
                         statements: vec![
                             Statement::Assignment {
-                                target: Expression::Variable("last_result".into()),
+                                target: vec![Expression::Variable("last_result".into())],
                                 value: Expression::BinaryOp {
                                     op: BinaryOperator::Add,
                                     left: Box::new(Expression::Variable("a".into())),
@@ -831,7 +842,7 @@ mod tests {
                                 },
                             },
                             Statement::Assignment {
-                                target: Expression::Variable("last_result".into()),
+                                target: vec![Expression::Variable("last_result".into())],
                                 value: Expression::BinaryOp {
                                     op: BinaryOperator::Add,
                                     left: Box::new(Expression::StateAccess(StateAccessPath(vec![
@@ -855,6 +866,7 @@ mod tests {
             AgentConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         )
         .await
         .unwrap();
@@ -933,9 +945,9 @@ mod tests {
                     block: HandlerBlock {
                         statements: vec![
                             Statement::Assignment {
-                                target: Expression::StateAccess(StateAccessPath(vec![
+                                target: vec![Expression::StateAccess(StateAccessPath(vec![
                                     "event_count".into(),
-                                ])),
+                                ]))],
                                 value: Expression::BinaryOp {
                                     op: BinaryOperator::Add,
                                     left: Box::new(Expression::StateAccess(StateAccessPath(vec![
@@ -945,9 +957,9 @@ mod tests {
                                 },
                             },
                             Statement::Assignment {
-                                target: Expression::StateAccess(StateAccessPath(vec![
+                                target: vec![Expression::StateAccess(StateAccessPath(vec![
                                     "last_value".into(),
-                                ])),
+                                ]))],
                                 value: Expression::Variable("value".into()),
                             },
                         ],
@@ -963,6 +975,7 @@ mod tests {
             AgentConfig::default(),
             Arc::new(ProviderInstance::default()),
             Arc::new(DashMap::new()),
+            vec![],
         )
         .await
         .unwrap();

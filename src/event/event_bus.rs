@@ -35,6 +35,7 @@ impl Event {
     pub fn category(&self) -> EventCategory {
         match &self.event_type {
             EventType::Tick => EventCategory::System,
+            EventType::MetricsSummary => EventCategory::System,
             EventType::StateUpdated { .. } => EventCategory::Agent,
             EventType::Message { .. } => EventCategory::Agent,
             EventType::Failure { .. } => EventCategory::Agent,
@@ -325,9 +326,12 @@ pub enum Value {
     Null,
 }
 
-impl From<String> for Value {
-    fn from(value: String) -> Self {
-        Value::String(value)
+impl<T: Into<String>> From<T> for Value
+where
+    T: AsRef<str>,
+{
+    fn from(value: T) -> Self {
+        Value::String(value.into())
     }
 }
 
@@ -370,6 +374,8 @@ impl From<expression::Value> for Value {
                 }
                 Value::Map(map)
             }
+            expression::Value::Ok(value) => Value::from(*value),
+            expression::Value::Err(value) => Value::from(*value),
         }
     }
 }

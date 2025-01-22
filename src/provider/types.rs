@@ -66,6 +66,9 @@ pub enum ProviderError {
     #[error("API error: {0}")]
     ApiError(String),
 
+    #[error("Fetch Failed: {0}")]
+    FetchFailed(String),
+
     #[error("Rate limit exceeded: {0}")]
     RateLimit(String),
 
@@ -106,6 +109,7 @@ pub type ProviderResult<T> = Result<T, ProviderError>;
 #[cfg(test)]
 mod tests {
 
+    /*
     use std::collections::HashMap;
 
     use dashmap::DashMap;
@@ -143,10 +147,11 @@ mod tests {
             ContextConfig::default(),
             provider_instance,
             providers,
+            vec![],
         );
         Arc::new(context)
     }
-    /*
+
     #[tokio::test]
     async fn test_basic_think_evaluation() {
         let mut mock = MockProvider::new();

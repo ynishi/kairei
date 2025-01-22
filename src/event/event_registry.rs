@@ -14,7 +14,9 @@ pub struct EventInfo {
 #[derive(Debug, Clone, PartialEq, Hash, Eq, strum::EnumString, Default, PartialOrd, Ord)]
 pub enum EventType {
     #[default]
+    // System Events
     Tick,
+    MetricsSummary,
     StateUpdated {
         agent_name: String,
         state_name: String,
@@ -153,6 +155,7 @@ impl std::fmt::Display for EventType {
                 agent_name,
                 state_name,
             } => write!(f, "StateUpdated({}.{})", agent_name, state_name),
+            EventType::MetricsSummary => write!(f, "MetricsSummary"),
             EventType::Custom(name) => write!(f, "{}", name),
             EventType::Message { content_type } => write!(f, "{}", content_type),
             EventType::Failure { error_type } => write!(f, "{}", error_type),

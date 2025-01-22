@@ -375,7 +375,16 @@ impl ProviderRegistry {
         let memory_plugin = MemoryPlugin::new(memory_config);
         provider.register_plugin(Arc::new(memory_plugin))?;
         // secretが適切に設定してあれば採用する
-        if let Ok(web_search_serper_plugin) = WebSearchPlugin::try_new(secret) {
+        let search_config = config
+            .plugin_configs
+            .get("web_search_serper")
+            .and_then(|c| match c {
+                PluginConfig::Search(sc) => Some(sc),
+                _ => None,
+            })
+            .cloned()
+            .unwrap_or_default();
+        if let Ok(web_search_serper_plugin) = WebSearchPlugin::try_new(&search_config, secret) {
             provider.register_plugin(Arc::new(web_search_serper_plugin))?;
         }
         provider.initialize(config, secret).await?;
