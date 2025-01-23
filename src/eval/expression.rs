@@ -473,13 +473,16 @@ impl ExpressionEvaluator {
         debug!("Create Request: {:?}", request);
         let response_event = context.send_request(request).await?;
         debug!("Got Response: {:?}", response_event);
-        let response = response_event
-            .parameters
-            .get("response")
-            .ok_or(EvalError::Eval("response not found".to_string()))?
-            .clone()
-            .into();
-        Ok(response)
+        // responseSuccess/ResponseFailureのパラメータを取得
+        match response_event.event_type {
+            event_registry::EventType::ResponseSuccess { .. } => Ok(Value::Ok(Box::new(
+                Value::from(response_event.response_value()),
+            ))),
+            event_registry::EventType::ResponseFailure { .. } => Ok(Value::Err(Box::new(
+                Value::from(response_event.response_value()),
+            ))),
+            _ => Err(EvalError::Eval("Unknown response type".to_string())),
+        }
     }
 
     async fn eval_await(
