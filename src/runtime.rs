@@ -4,7 +4,9 @@ use crate::eval::context::{AgentInfo, AgentType, ExecutionContext, StateAccessMo
 use crate::eval::evaluator::Evaluator;
 use crate::eval::expression;
 use crate::evaluator::EvalError;
-use crate::event_bus::{ErrorEvent, Event, EventBus, EventCategory, EventError, LastStatus, Value};
+use crate::event_bus::{
+    self, ErrorEvent, Event, EventBus, EventCategory, EventError, LastStatus, Value,
+};
 use crate::event_registry::{EventType, LifecycleEvent};
 use crate::provider::provider_registry::ProviderInstance;
 use crate::provider::types::ProviderError;
@@ -176,7 +178,10 @@ impl RuntimeAgent for RuntimeAgentData {
         while let Some(Ok(message)) = streams.next().await {
             match message {
                 StreamMessage::Event(event) => {
-                    debug!("Event received: {:?}", event);
+                    event_bus::debug_event(
+                        format!("Event received in agent {}", self.name).as_str(),
+                        &event,
+                    );
                     self.handle_event(&event).await?;
                 }
                 StreamMessage::ErrorEvent(error) => {

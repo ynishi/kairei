@@ -545,25 +545,103 @@ fn parse_optional_error_handler(
     let (input, error_handler) = opt(tuple((
         ws(tag("onFail")),
         // エラーバインディングは括弧付きの識別子としてオプショナル
-        opt(delimited(ws(tag("(")), identifier, ws(tag(")")))),
+        parse_error_binding,
         // エラーハンドラブロック
-        parse_block,
+        parse_error_handler_block,
     )))(input)?;
 
     // エラーハンドラが存在する場合は WithErrorHandler を生成
     match error_handler {
-        Some((_, error_binding, handler_block)) => Ok((
+        Some((_, error_binding, (handler_statements, control))) => Ok((
             input,
             Statement::WithError {
                 statement: Box::new(base_statement),
                 error_handler_block: ErrorHandlerBlock {
                     error_binding: error_binding.map(String::from),
-                    error_handler_statements: handler_block.statements,
+                    error_handler_statements: handler_statements,
+                    control,
                 },
             },
         )),
         None => Ok((input, base_statement)),
     }
+}
+
+#[instrument(level = "debug", skip(input))]
+fn parse_error_binding(input: &str) -> IResult<&str, Option<&str>> {
+    opt(delimited(ws(tag("(")), identifier, ws(tag(")"))))(input)
+}
+
+#[instrument(level = "debug", skip(input))]
+fn parse_error_handler_block(
+    input: &str,
+) -> IResult<&str, (Vec<Statement>, Option<OnFailControl>)> {
+    let (input, (statements, control)) = delimited(
+        ws(tag("{")),
+        tuple((many0(parse_statement), opt(parse_on_fail_control))),
+        ws(tag("}")),
+    )(input)?;
+    if control.is_none() {
+        if let Some(st) = statements.last() {
+            let size = statements.len() - 1;
+            match st {
+                Statement::Return(Expression::Ok(expr)) => {
+                    return Ok((
+                        input,
+                        (
+                            statements.iter().take(size).cloned().collect(),
+                            Some(OnFailControl::Return(OnFailReturn::Ok(
+                                expr.as_ref().clone(),
+                            ))),
+                        ),
+                    ));
+                }
+                Statement::Return(Expression::Err(expr)) => {
+                    return Ok((
+                        input,
+                        (
+                            statements.iter().take(size).cloned().collect(),
+                            Some(OnFailControl::Return(OnFailReturn::Err(
+                                expr.as_ref().clone(),
+                            ))),
+                        ),
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok((input, (statements, control)))
+}
+
+fn parse_on_fail_control(input: &str) -> IResult<&str, OnFailControl> {
+    alt((
+        map(
+            tuple((
+                ws(tag("return")),
+                alt((
+                    map(
+                        tuple((
+                            ws(tag("Ok")),
+                            delimited(ws(char('(')), parse_expression, ws(char(')'))),
+                        )),
+                        |(_, expr)| OnFailControl::Return(OnFailReturn::Ok(expr)),
+                    ),
+                    map(
+                        tuple((
+                            ws(tag("Err")),
+                            delimited(ws(char('(')), parse_expression, ws(char(')'))),
+                        )),
+                        |(_, expr)| OnFailControl::Return(OnFailReturn::Err(expr)),
+                    ),
+                )),
+            )),
+            |(_, control)| control,
+        ),
+        // rethrow
+        map(ws(tag("rethrow")), |_| OnFailControl::Rethrow),
+    ))(input)
 }
 
 #[instrument(level = "debug", skip(input))]
@@ -805,7 +883,7 @@ const RESERVED_KEYWORDS: [&str; 13] = [
     "if",
     "return",
     "await",
-    "onFail",
+    "fail",
     "on",
     "onInit",
     "onDestroy",
@@ -1577,11 +1655,6 @@ mod tests {
             r#"c = request GetCount to counter()"#,
             "emit Updated to manager",
             "if (count > 10) { return count }",
-            "await count = count + 2",
-            r#"await {
-                count1 = count1 + 1
-                count2 = count2 + 2
-            }"#,
             r#"emit SearchFlights(...).onFail(err) {
                 emit Error(message: err.message)"
             }"#,
@@ -1592,6 +1665,21 @@ mod tests {
 
         for input in cases {
             let result = parse_statement(input);
+            assert!(result.is_ok(), "Failed to parse: {}", input);
+        }
+    }
+
+    #[test]
+    fn test_parse_expression() {
+        let cases = [
+            "await count = count + 2",
+            r#"await {
+                count1 + 1
+                count2 + 2
+            }"#,
+        ];
+        for input in cases {
+            let result = parse_expression(input);
             assert!(result.is_ok(), "Failed to parse: {}", input);
         }
     }
@@ -2550,6 +2638,174 @@ mod tests {
                     "last_updated".to_string()
                 ))],
                 options: None
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_error_binding() {
+        let input = "(err)";
+        let (rest, result) = parse_error_binding(input).unwrap();
+        assert_eq!(result, Some("err"));
+        assert_eq!(rest, "");
+
+        let input = "( err )";
+        let (rest, result) = parse_error_binding(input).unwrap();
+        assert_eq!(result, Some("err"));
+        assert_eq!(rest, "");
+
+        let input = "(123)"; // 数字で始まる識別子
+        assert_eq!(parse_error_binding(input), Ok(("(123)", None)));
+    }
+
+    #[test]
+    fn test_parse_on_fail_control() {
+        let input = "return Ok(\"fallback\")";
+        let (rest, result) = parse_on_fail_control(input).unwrap();
+        assert!(matches!(
+            result,
+            OnFailControl::Return(OnFailReturn::Ok(Expression::Literal(Literal::String(s))))
+            if s == "fallback"
+        ));
+        assert_eq!(rest, "");
+
+        // return: Err(...)のケース
+        let input = "return Err(\"error message\")";
+        let (_, result) = parse_on_fail_control(input).unwrap();
+        assert!(matches!(
+            result,
+            OnFailControl::Return(OnFailReturn::Err(Expression::Literal(Literal::String(s))))
+            if s == "error message"
+        ));
+
+        // rethrowのケース
+        let input = "rethrow";
+        let (_, result) = parse_on_fail_control(input).unwrap();
+        assert!(matches!(result, OnFailControl::Rethrow));
+    }
+
+    #[test]
+    fn test_parse_error_handler_block() {
+        // 基本的なステートメントのみのケース
+        let input = "{
+            emit ErrorOccurred()
+            emit ErrorOccurred()
+         }";
+        let (rest, (statements, control)) = parse_error_handler_block(input).unwrap();
+        assert_eq!(rest, "");
+        assert_eq!(statements.len(), 2);
+        assert!(control.is_none());
+
+        // ステートメントとreturn Okのケース
+        let input = "{
+             x = 1
+             emit ErrorOccurred()
+             return Ok(\"success\")
+         }";
+        let (rest, (statements, control)) = parse_error_handler_block(input).unwrap();
+        assert_eq!(rest, "");
+        assert_eq!(statements.len(), 2);
+        assert_eq!(
+            control,
+            Some(OnFailControl::Return(OnFailReturn::Ok(
+                Expression::Literal(Literal::String("success".to_string()))
+            )))
+        );
+
+        // ステートメントとreturn Errのケース
+        let input = "{
+             x = 1
+             return Err(\"error\")
+         }";
+        let (rest, (statements, control)) = parse_error_handler_block(input).unwrap();
+        assert_eq!(rest, "");
+        assert_eq!(statements.len(), 1);
+        assert_eq!(
+            control,
+            Some(OnFailControl::Return(OnFailReturn::Err(
+                Expression::Literal(Literal::String("error".to_string()))
+            )))
+        );
+
+        // ステートメントとrethrowのケース
+        let input = "{
+             emit ErrorOccurred()
+             rethrow
+         }";
+        let (rest, (statements, control)) = parse_error_handler_block(input).unwrap();
+        assert_eq!(rest, "");
+        assert_eq!(statements.len(), 1);
+        assert!(matches!(control, Some(OnFailControl::Rethrow)));
+    }
+
+    #[test]
+    fn test_parse_error_handler_block_invalid() {
+        // 空のブロック
+        let input = "{}";
+        let result = parse_error_handler_block(input);
+        assert!(result.is_ok());
+        let (_, (statements, control)) = result.unwrap();
+        assert!(statements.is_empty());
+        assert!(control.is_none());
+
+        // 構文エラー: 閉じブレースがない
+        let input = "{ x = 1";
+        assert!(parse_error_handler_block(input).is_err());
+
+        // 構文エラー: 開きブレースがない
+        let input = "x = 1 }";
+        assert!(parse_error_handler_block(input).is_err());
+
+        // 無効な制御文
+        let input = "{
+             x = 1;
+             invalid_control
+         }";
+        let result = parse_error_handler_block(input);
+        // パースは成功するが、制御文は認識されない
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_optional_error_handler() {
+        let input = r#"onFail (err) { return Err(err) }"#;
+        let (_, (statement)) = parse_optional_error_handler(
+            input,
+            Statement::Expression(Expression::Literal(Literal::Null)),
+        )
+        .unwrap();
+        assert_eq!(
+            statement,
+            Statement::WithError {
+                statement: Box::new(Statement::Expression(Expression::Literal(Literal::Null))),
+                error_handler_block: ErrorHandlerBlock {
+                    error_binding: Some("err".to_string()),
+                    error_handler_statements: vec![],
+                    control: Some(OnFailControl::Return(OnFailReturn::Err(
+                        Expression::Variable("err".to_string())
+                    ))),
+                }
+            }
+        );
+        let input = r#"emit Event() onFail (err) { return Err(err) }"#;
+        let (rest, statement) = parse_statement(input).unwrap();
+
+        assert_eq!(rest, "");
+        assert_eq!(
+            statement,
+            Statement::WithError {
+                statement: Box::new(Statement::Emit {
+                    event_type: EventType::Custom("Event".to_string()),
+                    parameters: vec![],
+                    target: None,
+                }),
+                error_handler_block: ErrorHandlerBlock {
+                    error_binding: Some("err".to_string()),
+                    error_handler_statements: vec![],
+                    control: Some(OnFailControl::Return(OnFailReturn::Err(
+                        Expression::Variable("err".to_string())
+                    ))),
+                },
             }
         );
     }
