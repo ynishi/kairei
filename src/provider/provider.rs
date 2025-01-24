@@ -33,7 +33,9 @@ pub trait Provider: Send + Sync {
         secret: &ProviderSecret,
     ) -> ProviderResult<()>;
 
-    async fn shutdown(&self) -> ProviderResult<()>;
+    async fn shutdown(&self) -> ProviderResult<()> {
+        Ok(())
+    }
 
     async fn health_check(&self) -> ProviderResult<()> {
         Ok(())

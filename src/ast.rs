@@ -302,6 +302,19 @@ pub struct ErrorHandlerBlock {
     // Error variable name to be bound in the handler scope
     pub error_binding: Option<String>,
     pub error_handler_statements: Statements,
+    pub control: Option<OnFailControl>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum OnFailControl {
+    Return(OnFailReturn),
+    Rethrow,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum OnFailReturn {
+    Ok(Expression),
+    Err(Expression),
 }
 
 // 文
@@ -689,6 +702,7 @@ mod tests {
                 parameters: vec![],
                 target: None,
             }],
+            control: None,
         };
 
         let with_handler = emit_stmt.on_fail(handler);
@@ -710,6 +724,7 @@ mod tests {
         let handler = ErrorHandlerBlock {
             error_binding: Some("err".to_string()),
             error_handler_statements: vec![],
+            control: None,
         };
 
         assert_eq!(handler.error_binding.unwrap(), "err");

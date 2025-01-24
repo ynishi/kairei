@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use kairei::{
     config::{self, SecretConfig, SystemConfig},
@@ -31,12 +31,14 @@ async fn setup_system(system_config_str: &str, dsl_str: &str, required: &[&str])
     root.micro_agent_defs
         .is_empty()
         .then(|| panic!("No micro agents found"));
-    root.micro_agent_defs
-        .iter()
-        .map(|x| x.name.as_str())
-        .any(|name| !required.contains(&name))
-        .then(|| panic!("Missing required micro agents"));
-
+    let agent_name_set: HashSet<&str> =
+        HashSet::from_iter(root.micro_agent_defs.iter().map(|x| x.name.as_str()));
+    let required_set = HashSet::from_iter(required.iter().cloned());
+    // check diff
+    let diff: HashSet<_> = required_set.difference(&agent_name_set).collect();
+    if !diff.is_empty() {
+        panic!("Missing required micro agents, {:?}", diff)
+    }
     system.initialize(root).await.unwrap();
     system
 }
