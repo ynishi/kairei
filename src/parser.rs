@@ -876,6 +876,7 @@ fn parse_multiplicative(input: &str) -> IResult<&str, Expression> {
     )(input)
 }
 
+// RESERVED_KEYWORDS in the block
 const RESERVED_KEYWORDS: [&str; 13] = [
     "think",
     "emit",
