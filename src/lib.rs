@@ -1,4 +1,5 @@
 pub mod agent_registry;
+pub mod analyzer;
 pub mod ast;
 pub mod ast_registry;
 pub mod config;
