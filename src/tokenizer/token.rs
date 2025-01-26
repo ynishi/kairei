@@ -17,7 +17,7 @@ use super::{
     whitespace::{parse_newline, parse_whitespace},
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, strum::Display)]
 pub enum Token {
     // Keywords
     Keyword(Keyword),
@@ -52,6 +52,12 @@ pub struct Tokenizer {
     current_position: usize,
     current_line: usize,
     current_column: usize,
+}
+
+impl Default for Tokenizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Tokenizer {
