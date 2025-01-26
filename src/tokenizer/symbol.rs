@@ -1,8 +1,13 @@
 use strum_macros::{AsRefStr, Display, EnumString};
 
-use nom::{branch::alt, bytes::complete::tag, combinator::map, IResult};
+use nom::{
+    branch::alt,
+    bytes::complete::tag,
+    combinator::{map, value},
+    error::context,
+};
 
-use super::tokenizer::Token;
+use super::token::{ParserResult, Token};
 
 #[derive(Debug, Clone, PartialEq, EnumString, Display, AsRefStr)]
 pub enum Operator {
@@ -79,44 +84,57 @@ pub enum Delimiter {
     Colon,
 }
 
-// 2文字の演算子を先にパースする
-pub fn operator(input: &str) -> IResult<&str, Token> {
-    alt((
-        // 2文字演算子
-        map(tag("=>"), |_| Token::Operator(Operator::Arrow)),
-        map(tag("->"), |_| Token::Operator(Operator::ThinArrow)),
-        map(tag("::"), |_| Token::Operator(Operator::Scope)),
-        map(tag("=="), |_| Token::Operator(Operator::EqualEqual)),
-        map(tag("!="), |_| Token::Operator(Operator::NotEqual)),
-        map(tag(">="), |_| Token::Operator(Operator::GreaterEqual)),
-        map(tag("<="), |_| Token::Operator(Operator::LessEqual)),
-        map(tag("&&"), |_| Token::Operator(Operator::And)),
-        map(tag("||"), |_| Token::Operator(Operator::Or)),
-        // 1文字演算子
-        map(tag("."), |_| Token::Operator(Operator::Dot)),
-        map(tag("="), |_| Token::Operator(Operator::Equal)),
-        map(tag(">"), |_| Token::Operator(Operator::Greater)),
-        map(tag("<"), |_| Token::Operator(Operator::Less)),
-        map(tag("+"), |_| Token::Operator(Operator::Plus)),
-        map(tag("-"), |_| Token::Operator(Operator::Minus)),
-        map(tag("*"), |_| Token::Operator(Operator::Multiply)),
-        map(tag("/"), |_| Token::Operator(Operator::Divide)),
-        map(tag("!"), |_| Token::Operator(Operator::Not)),
-    ))(input)
+#[tracing::instrument(level = "debug", skip(input))]
+pub fn parse_operator(input: &str) -> ParserResult<Token> {
+    context(
+        "operator",
+        map(
+            alt((
+                // 2文字演算子
+                value(Operator::Arrow, tag("=>")),
+                value(Operator::ThinArrow, tag("->")),
+                value(Operator::Scope, tag("::")),
+                value(Operator::EqualEqual, tag("==")),
+                value(Operator::NotEqual, tag("!=")),
+                value(Operator::GreaterEqual, tag(">=")),
+                value(Operator::LessEqual, tag("<=")),
+                value(Operator::And, tag("&&")),
+                value(Operator::Or, tag("||")),
+                // 1文字演算子
+                value(Operator::Dot, tag(".")),
+                value(Operator::Equal, tag("=")),
+                value(Operator::Greater, tag(">")),
+                value(Operator::Less, tag("<")),
+                value(Operator::Plus, tag("+")),
+                value(Operator::Minus, tag("-")),
+                value(Operator::Multiply, tag("*")),
+                value(Operator::Divide, tag("/")),
+                value(Operator::Not, tag("!")),
+            )),
+            Token::Operator,
+        ),
+    )(input)
 }
 
-pub fn delimiter(input: &str) -> IResult<&str, Token> {
-    alt((
-        map(tag("{"), |_| Token::Delimiter(Delimiter::OpenBrace)),
-        map(tag("}"), |_| Token::Delimiter(Delimiter::CloseBrace)),
-        map(tag("("), |_| Token::Delimiter(Delimiter::OpenParen)),
-        map(tag(")"), |_| Token::Delimiter(Delimiter::CloseParen)),
-        map(tag("["), |_| Token::Delimiter(Delimiter::OpenBracket)),
-        map(tag("]"), |_| Token::Delimiter(Delimiter::CloseBracket)),
-        map(tag(","), |_| Token::Delimiter(Delimiter::Comma)),
-        map(tag(";"), |_| Token::Delimiter(Delimiter::Semicolon)),
-        map(tag(":"), |_| Token::Delimiter(Delimiter::Colon)),
-    ))(input)
+#[tracing::instrument(level = "debug", skip(input))]
+pub fn parse_delimiter(input: &str) -> ParserResult<Token> {
+    context(
+        "delimiter",
+        map(
+            alt((
+                value(Delimiter::OpenBrace, tag("{")),
+                value(Delimiter::CloseBrace, tag(CLOSE_BRACE)),
+                value(Delimiter::OpenParen, tag("(")),
+                value(Delimiter::CloseParen, tag(")")),
+                value(Delimiter::OpenBracket, tag("[")),
+                value(Delimiter::CloseBracket, tag("]")),
+                value(Delimiter::Comma, tag(",")),
+                value(Delimiter::Semicolon, tag(";")),
+                value(Delimiter::Colon, tag(":")),
+            )),
+            Token::Delimiter,
+        ),
+    )(input)
 }
 
 #[cfg(test)]
@@ -138,7 +156,7 @@ mod tests {
         ];
 
         for (input, expected) in test_cases.iter() {
-            let (rest, token) = operator(input).unwrap();
+            let (rest, token) = parse_operator(input).unwrap();
             assert_eq!(token, *expected);
             assert_eq!(rest, "");
         }
@@ -159,7 +177,7 @@ mod tests {
         ];
 
         for (input, expected) in test_cases.iter() {
-            let (rest, token) = delimiter(input).unwrap();
+            let (rest, token) = parse_delimiter(input).unwrap();
             assert_eq!(token, *expected);
             assert_eq!(rest, "");
         }
@@ -168,7 +186,7 @@ mod tests {
     #[test]
     fn test_operator_precedence() {
         // ">="が">"として誤って解釈されないことを確認
-        let (rest, token) = operator(">=").unwrap();
+        let (rest, token) = parse_operator(">=").unwrap();
         assert_eq!(token, Token::Operator(Operator::GreaterEqual));
         assert_eq!(rest, "");
     }
