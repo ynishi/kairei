@@ -31,6 +31,8 @@ pub enum Keyword {
     OnInit,
     #[strum(serialize = "onDestroy")]
     OnDestroy,
+    #[strum(serialize = "lifecycle")]
+    Lifecycle,
     With,
     On,
 }

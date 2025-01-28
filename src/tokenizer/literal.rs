@@ -6,7 +6,6 @@ use nom::{
     error::context,
     multi::many0,
     sequence::{delimited, pair, tuple},
-    IResult,
 };
 
 use super::token::{ParserResult, Token};
@@ -23,6 +22,8 @@ pub enum Literal {
     String(Vec<StringPart>),
     Integer(i64),
     Float(f64),
+    Boolean(bool),
+    Null,
 }
 
 #[tracing::instrument(level = "debug", skip(input))]
@@ -198,31 +199,5 @@ mod tests {
         let (rest, result) = parse_float_literal("-123.45").unwrap();
         assert_eq!(result, Literal::Float(-123.45));
         assert_eq!(rest, "");
-    }
-}
-
-// 文字が terminals にマッチするまでの文字列を取得するパーサー
-fn take_until1<'a>(
-    terminals: impl Fn(char) -> bool,
-) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> {
-    move |input: &'a str| {
-        let mut index = 0;
-        let mut chars = input.chars();
-
-        while let Some(ch) = chars.next() {
-            if terminals(ch) {
-                break;
-            }
-            index += ch.len_utf8();
-        }
-
-        if index == 0 {
-            Err(nom::Err::Error(nom::error::Error::new(
-                input,
-                nom::error::ErrorKind::TakeUntil,
-            )))
-        } else {
-            Ok((&input[index..], &input[..index]))
-        }
     }
 }
