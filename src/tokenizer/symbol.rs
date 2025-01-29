@@ -82,6 +82,8 @@ pub enum Delimiter {
     Semicolon,
     #[strum(serialize = ":")]
     Colon,
+    #[strum(serialize = "=")]
+    Equal,
 }
 
 #[tracing::instrument(level = "debug", skip(input))]
