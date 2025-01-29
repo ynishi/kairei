@@ -181,3 +181,11 @@ where
 {
     WithContext::new(parser, c)
 }
+
+pub fn lazy<I, O, F, P>(f: F) -> Lazy<F>
+where
+    F: Fn() -> P,
+    P: Parser<I, O>,
+{
+    Lazy::new(f)
+}

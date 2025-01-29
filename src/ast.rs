@@ -279,7 +279,7 @@ pub enum TypeInfo {
     Map(Box<TypeInfo>, Box<TypeInfo>),
     Custom {
         name: String,
-        constraints: HashMap<String, Expression>,
+        fields: HashMap<String, FieldInfo>,
     },
 }
 
@@ -287,6 +287,12 @@ impl From<&str> for TypeInfo {
     fn from(value: &str) -> Self {
         Self::Simple(value.to_string())
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldInfo {
+    pub type_info: Option<TypeInfo>, // None の場合は型推論
+    pub default_value: Option<Expression>,
 }
 
 // コードブロック

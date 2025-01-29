@@ -85,6 +85,12 @@ impl<I> Identity<I> {
     }
 }
 
+impl Default for Identity<char> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<I: Clone> Parser<I, I> for Identity<I> {
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<I> {
         input
@@ -314,14 +320,9 @@ where
         let mut results = Vec::new();
         let mut current_pos = pos;
 
-        loop {
-            match self.parser.parse(input, current_pos) {
-                Ok((new_pos, value)) => {
-                    results.push(value);
-                    current_pos = new_pos;
-                }
-                Err(_) => break,
-            }
+        while let Ok((new_pos, value)) = self.parser.parse(input, current_pos) {
+            results.push(value);
+            current_pos = new_pos;
         }
 
         Ok((current_pos, results))
@@ -379,34 +380,33 @@ impl<P, S, I, O> SeparatedList<P, S, I, O> {
 
 impl<I, O, P, S> Parser<I, Vec<O>> for SeparatedList<P, S, I, O>
 where
+    I: Clone,
     P: Parser<I, O>,
     S: Parser<I, ()>,
 {
+    #[allow(clippy::single_match)]
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<Vec<O>> {
         let mut results = Vec::new();
         let mut current_pos = pos;
 
-        // Parse first item
+        // 最初の要素をパース
         match self.item_parser.parse(input, current_pos) {
             Ok((new_pos, value)) => {
                 results.push(value);
                 current_pos = new_pos;
-            }
-            Err(e) => return Err(e),
-        }
 
-        loop {
-            // Try to parse separator followed by item
-            match self.separator_parser.parse(input, current_pos) {
-                Ok((new_pos, _)) => match self.item_parser.parse(input, new_pos) {
-                    Ok((new_pos, value)) => {
-                        results.push(value);
-                        current_pos = new_pos;
+                // 残りの要素を繰り返しパース
+                while let Ok((sep_pos, _)) = self.separator_parser.parse(input, current_pos) {
+                    match self.item_parser.parse(input, sep_pos) {
+                        Ok((new_pos, value)) => {
+                            results.push(value);
+                            current_pos = new_pos;
+                        }
+                        Err(_) => break,
                     }
-                    Err(_) => break,
-                },
-                Err(_) => break,
+                }
             }
+            Err(_) => {} // 空のリストは有効
         }
 
         Ok((current_pos, results))
@@ -696,6 +696,27 @@ where
                 message: self.context.to_string(),
                 inner: Box::new(e),
             })
+    }
+}
+
+#[derive(Clone)]
+pub struct Lazy<F> {
+    f: F,
+}
+
+impl<F> Lazy<F> {
+    pub fn new(f: F) -> Self {
+        Self { f }
+    }
+}
+
+impl<I, O, F, P> Parser<I, O> for Lazy<F>
+where
+    F: Fn() -> P,
+    P: Parser<I, O>,
+{
+    fn parse(&self, input: &[I], pos: usize) -> ParseResult<O> {
+        (self.f)().parse(input, pos)
     }
 }
 

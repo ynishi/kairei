@@ -73,7 +73,7 @@ fn parse_string_literal(input: &str) -> ParserResult<Literal> {
                 ))),
                 char('"'),
             ),
-            |parts| Literal::String(parts),
+            Literal::String,
         ),
     )(input)
 }
