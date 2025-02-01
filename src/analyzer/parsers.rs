@@ -1,7 +1,10 @@
 use std::{collections::HashMap, time::Duration};
 
+use tracing::warn;
+
 use crate::{
     tokenizer::{
+        keyword::Keyword,
         literal::{Literal, StringPart},
         symbol::{Delimiter, Operator},
         token::Token,
@@ -12,14 +15,17 @@ use crate::{
 use super::{ast, prelude::*, Parser};
 
 fn parse_type_info() -> impl Parser<Token, ast::TypeInfo> {
-    lazy(|| {
-        choice(vec![
-            Box::new(parse_result_type()),
-            Box::new(parse_option_type()),
-            Box::new(parse_array_type()),
-            Box::new(parse_simple_type()),
-        ])
-    })
+    with_context(
+        lazy(|| {
+            choice(vec![
+                Box::new(parse_result_type()),
+                Box::new(parse_option_type()),
+                Box::new(parse_array_type()),
+                Box::new(parse_simple_type()),
+            ])
+        }),
+        "type info",
+    )
 }
 
 fn parse_field() -> impl Parser<Token, (String, FieldInfo)> {
@@ -27,24 +33,9 @@ fn parse_field() -> impl Parser<Token, (String, FieldInfo)> {
         preceded(
             parse_identifier(),
             choice(vec![
-                // パターン1: 型指定あり + 初期値あり
                 Box::new(parse_field_typed_with_default()),
-                // パターン2: 型指定あり + 初期値なし
-                Box::new(map(
-                    preceded(parse_colon(), parse_type_reference()),
-                    |(_, type_info)| FieldInfo {
-                        type_info: Some(type_info),
-                        default_value: None,
-                    },
-                )),
-                // パターン3: 型推論 + 初期値
-                Box::new(map(
-                    preceded(parse_equal(), parse_expression()),
-                    |(_, value)| FieldInfo {
-                        type_info: None,
-                        default_value: Some(value),
-                    },
-                )),
+                Box::new(parse_field_typed()),
+                Box::new(parse_field_inferred()),
             ]),
         ),
         "field",
@@ -52,17 +43,45 @@ fn parse_field() -> impl Parser<Token, (String, FieldInfo)> {
 }
 
 fn parse_field_typed_with_default() -> impl Parser<Token, FieldInfo> {
-    map(
-        tuple4(
-            parse_colon(),
-            parse_identifier(),
-            parse_equal(),
-            parse_expression(),
+    with_context(
+        map(
+            tuple4(
+                parse_colon(),
+                parse_identifier(),
+                parse_equal(),
+                parse_expression(),
+            ),
+            |(_, type_info, _, value)| FieldInfo {
+                type_info: Some(TypeInfo::Simple(type_info)),
+                default_value: Some(value),
+            },
         ),
-        |(_, type_info, _, value)| FieldInfo {
-            type_info: Some(TypeInfo::Simple(type_info)),
-            default_value: Some(value),
-        },
+        "typed field with default value",
+    )
+}
+
+fn parse_field_typed() -> impl Parser<Token, FieldInfo> {
+    with_context(
+        map(
+            preceded(parse_colon(), parse_type_reference()),
+            |(_, type_info)| FieldInfo {
+                type_info: Some(type_info),
+                default_value: None,
+            },
+        ),
+        "typed field",
+    )
+}
+
+fn parse_field_inferred() -> impl Parser<Token, FieldInfo> {
+    with_context(
+        map(preceded(parse_equal(), parse_expression()), |(_, value)| {
+            FieldInfo {
+                type_info: None,
+                default_value: Some(value),
+            }
+        }),
+        "inferred field",
     )
 }
 
@@ -82,22 +101,13 @@ fn parse_type_reference() -> impl Parser<Token, TypeInfo> {
 fn parse_custom_type() -> impl Parser<Token, TypeInfo> {
     with_context(
         map(
-            with_context(
-                preceded(
-                    with_context(parse_identifier(), "pi"), // 型名
-                    with_context(
-                        delimited(
-                            with_context(as_unit(parse_open_brace()), "op"),
-                            separated_list(
-                                with_context(lazy(|| with_context(parse_field(), "pf")), "lz"),
-                                with_context(as_unit(parse_comma()), "pc"),
-                            ),
-                            as_unit(parse_close_brace()),
-                        ),
-                        "del",
-                    ),
+            preceded(
+                parse_identifier(),
+                delimited(
+                    as_unit(parse_open_brace()),
+                    separated_list(lazy(parse_field), as_unit(parse_comma())),
+                    as_unit(parse_close_brace()),
                 ),
-                "map",
             ),
             |(name, fields)| {
                 let field_map = fields.into_iter().collect::<HashMap<_, _>>();
@@ -112,15 +122,21 @@ fn parse_custom_type() -> impl Parser<Token, TypeInfo> {
 }
 
 fn parse_option_type() -> impl Parser<Token, ast::TypeInfo> {
-    map(parse_generic_single_arg("Option"), |inner_type| {
-        ast::TypeInfo::Option(inner_type)
-    })
+    with_context(
+        map(parse_generic_single_arg("Option"), |inner_type| {
+            ast::TypeInfo::Option(inner_type)
+        }),
+        "Option type",
+    )
 }
 
 fn parse_array_type() -> impl Parser<Token, ast::TypeInfo> {
-    map(parse_generic_single_arg("Array"), |element_type| {
-        ast::TypeInfo::Array(element_type)
-    })
+    with_context(
+        map(parse_generic_single_arg("Array"), |element_type| {
+            ast::TypeInfo::Array(element_type)
+        }),
+        "Array type",
+    )
 }
 
 fn parse_generic_single_arg(type_name: &'static str) -> impl Parser<Token, Box<TypeInfo>> {
@@ -138,31 +154,34 @@ fn parse_generic_single_arg(type_name: &'static str) -> impl Parser<Token, Box<T
 }
 
 fn parse_result_type() -> impl Parser<Token, ast::TypeInfo> {
-    map(
-        tuple6(
-            expected(parse_identifier(), "Result".to_string()),
-            parse_open_brace(),
-            parse_identifier(),
-            parse_comma(),
-            parse_identifier(),
-            parse_close_brace(),
+    with_context(
+        map(
+            tuple6(
+                expected(parse_identifier(), "Result".to_string()),
+                parse_open_brace(),
+                parse_identifier(),
+                parse_comma(),
+                parse_identifier(),
+                parse_close_brace(),
+            ),
+            |(_, _, ok, _, err, _)| ast::TypeInfo::Result {
+                ok_type: Box::new(ast::TypeInfo::Simple(ok)),
+                err_type: Box::new(ast::TypeInfo::Simple(err)),
+            },
         ),
-        |(_, _, ok, _, err, _)| ast::TypeInfo::Result {
-            ok_type: Box::new(ast::TypeInfo::Simple(ok)),
-            err_type: Box::new(ast::TypeInfo::Simple(err)),
-        },
+        "Result type",
     )
 }
 
 fn parse_simple_type() -> impl Parser<Token, ast::TypeInfo> {
-    map(parse_identifier(), ast::TypeInfo::Simple)
+    with_context(
+        map(parse_identifier(), ast::TypeInfo::Simple),
+        "simple type",
+    )
 }
 
 fn parse_expression() -> impl Parser<Token, ast::Expression> {
-    with_context(
-        choice(vec![Box::new(lazy(parse_binary_expression))]),
-        "expression",
-    )
+    with_context(lazy(parse_binary_expression), "expression")
 }
 
 fn parse_binary_expression() -> impl Parser<Token, ast::Expression> {
@@ -396,11 +415,11 @@ fn parse_primary() -> impl Parser<Token, ast::Expression> {
         choice(vec![
             Box::new(parse_ok()),
             Box::new(parse_err()),
+            Box::new(parse_think()),
             Box::new(parse_function_call()),
             Box::new(map(parse_literal(), ast::Expression::Literal)),
             Box::new(map(parse_identifier(), ast::Expression::Variable)),
             Box::new(map(parse_state_access(), ast::Expression::StateAccess)),
-            Box::new(parse_think()),
             Box::new(parse_request()),
             Box::new(parse_await()),
         ]),
@@ -452,154 +471,462 @@ fn parse_function_call() -> impl Parser<Token, ast::Expression> {
 }
 
 fn parse_think() -> impl Parser<Token, ast::Expression> {
-    map(
-        preceded(
-            equal(Token::Identifier("think".to_string())),
-            parse_expression(),
+    with_context(
+        map(
+            tuple3(
+                as_unit(parse_think_keyword()),
+                parse_think_arguments(),
+                optional(parse_think_attributes()),
+            ),
+            |(_, args, with_block)| ast::Expression::Think { args, with_block },
         ),
-        |expr| ast::Expression::Think {
-            args: todo!(),
-            with_block: None,
-        },
+        "think",
     )
+}
+
+fn parse_think_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Think)), "think keyword")
+}
+
+fn parse_think_arguments() -> impl Parser<Token, Vec<ast::Argument>> {
+    with_context(
+        map(
+            delimited(
+                as_unit(parse_open_paren()),
+                separated_list(
+                    choice(vec![
+                        Box::new(
+                            // パターン1: 名前付き引数
+                            map(
+                                tuple3(
+                                    parse_identifier(),
+                                    as_unit(parse_colon()),
+                                    lazy(parse_expression),
+                                ),
+                                |(name, _, value)| (Some(name), value),
+                            ),
+                        ),
+                        Box::new(
+                            // パターン2: 名前なし引数
+                            map(lazy(parse_expression), |value| (None, value)),
+                        ),
+                    ]),
+                    as_unit(parse_comma()),
+                ),
+                as_unit(parse_close_paren()),
+            ),
+            |arguments| {
+                arguments
+                    .into_iter()
+                    .map(|(name, value)| match name {
+                        Some(name) => ast::Argument::Named { name, value },
+                        None => ast::Argument::Positional(value),
+                    })
+                    .collect()
+            },
+        ),
+        "think attributes",
+    )
+}
+
+fn parse_think_attributes() -> impl Parser<Token, ast::ThinkAttributes> {
+    with_context(
+        map(
+            preceded(
+                as_unit(parse_with_keyword()),
+                delimited(
+                    as_unit(parse_open_brace()),
+                    separated_list(parse_think_attribute(), as_unit(parse_comma())),
+                    as_unit(parse_close_brace()),
+                ),
+            ),
+            |(_, settings)| collect_with_settings(settings),
+        ),
+        "think attributes",
+    )
+}
+
+fn parse_with_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::With)), "with keyword")
+}
+
+fn parse_think_attribute() -> impl Parser<Token, ThinkAttributeKV> {
+    with_context(
+        map(
+            tuple3(
+                parse_identifier(),
+                as_unit(parse_colon()),
+                parse_attribute_value(),
+            ),
+            |(key, _, value)| ThinkAttributeKV { key, value },
+        ),
+        "think attribute",
+    )
+}
+
+fn parse_attribute_value() -> impl Parser<Token, ast::Literal> {
+    with_context(parse_literal(), "attribute value")
+}
+
+fn collect_with_settings(settings: Vec<ThinkAttributeKV>) -> ast::ThinkAttributes {
+    let mut block = ast::ThinkAttributes {
+        provider: None,
+        model: None,
+        temperature: None,
+        max_tokens: None,
+        retry: None,
+        policies: vec![],
+        prompt_generator_type: None,
+        plugins: HashMap::new(),
+    };
+
+    for setting in settings {
+        match (setting.key.as_str(), setting.value) {
+            ("provider", ast::Literal::String(s)) => block.provider = Some(s),
+            ("model", ast::Literal::String(s)) => block.model = Some(s),
+            ("temperature", ast::Literal::Float(f)) => block.temperature = Some(f),
+            ("retry", ast::Literal::Retry(r)) => block.retry = Some(r),
+            ("max_tokens", ast::Literal::Integer(n)) => block.max_tokens = Some(n as u32),
+            ("policies", ast::Literal::List(policies)) => {
+                for policy in policies {
+                    if let ast::Literal::String(text) = policy {
+                        let policy = ast::Policy {
+                            text,
+                            scope: ast::PolicyScope::Think,
+                            internal_id: ast::PolicyId::new(),
+                        };
+                        block.policies.push(policy);
+                    }
+                }
+            }
+            // プラグイン設定の処理
+            (plugin_name, ast::Literal::Map(configs)) => {
+                let mut plugin_config = HashMap::new();
+                for (key, value) in configs {
+                    plugin_config.insert(key, value);
+                }
+                block.plugins.insert(plugin_name.to_string(), plugin_config);
+            }
+            (key, value) => {
+                warn!("Unknown think attribute: {}={:?}", key, value);
+            }
+        }
+    }
+
+    block
+}
+
+#[derive(Debug, Clone)]
+struct ThinkAttributeKV {
+    key: String,
+    value: ast::Literal,
 }
 
 fn parse_request() -> impl Parser<Token, ast::Expression> {
     map(
-        preceded(
-            equal(Token::Identifier("request".to_string())),
-            parse_expression(),
+        tuple5(
+            as_unit(parse_request_keyword()),
+            parse_identifier(), // リクエストタイプ
+            as_unit(equal(Token::Identifier("to".to_string()))),
+            parse_identifier(), // エージェント名
+            delimited(
+                as_unit(parse_open_paren()),
+                separated_list(
+                    // パラメータリスト
+                    tuple3(
+                        parse_identifier(), // パラメータ名
+                        as_unit(parse_colon()),
+                        parse_expression(), // 値
+                    ),
+                    as_unit(parse_comma()),
+                ),
+                as_unit(parse_close_paren()),
+            ),
         ),
-        |expr| ast::Expression::Request {
-            agent: todo!(),
-            request_type: todo!(),
-            parameters: todo!(),
-            options: todo!(),
+        |(_, request_type, _, agent, parameters)| {
+            let params = parameters
+                .into_iter()
+                .map(|(name, _, value)| ast::Argument::Named { name, value })
+                .collect();
+
+            ast::Expression::Request {
+                agent,
+                request_type: ast::RequestType::Custom(request_type),
+                parameters: params,
+                options: None, // オプションの実装は別途必要
+            }
         },
     )
 }
 
+fn parse_request_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Request)), "request keyword")
+}
+
 fn parse_ok() -> impl Parser<Token, ast::Expression> {
-    map(
-        preceded(as_unit(parse_ok_ident()), parse_expression()),
-        |(_, expression)| ast::Expression::Ok(Box::new(expression)),
+    with_context(
+        map(
+            preceded(as_unit(parse_ok_ident()), parse_expression()),
+            |(_, expression)| ast::Expression::Ok(Box::new(expression)),
+        ),
+        "Ok expression",
     )
 }
 
 fn parse_ok_ident() -> impl Parser<Token, Token> {
-    equal(Token::Identifier("Ok".to_string()))
+    with_context(equal(Token::Identifier("Ok".to_string())), "Ok")
 }
 
 fn parse_err() -> impl Parser<Token, ast::Expression> {
-    map(
-        preceded(as_unit(parse_err_ident()), parse_expression()),
-        |(_, expression)| ast::Expression::Err(Box::new(expression)),
+    with_context(
+        map(
+            preceded(as_unit(parse_err_ident()), parse_expression()),
+            |(_, expression)| ast::Expression::Err(Box::new(expression)),
+        ),
+        "Err expression",
     )
 }
 
 fn parse_err_ident() -> impl Parser<Token, Token> {
-    equal(Token::Identifier("Err".to_string()))
+    with_context(equal(Token::Identifier("Err".to_string())), "Err")
 }
 
 fn parse_await() -> impl Parser<Token, ast::Expression> {
-    choice(vec![
-        Box::new(parse_await_single()),
-        Box::new(parse_await_multiple()),
-    ])
+    with_context(
+        choice(vec![
+            Box::new(parse_await_single()),
+            Box::new(parse_await_multiple()),
+        ]),
+        "await",
+    )
 }
 
 fn parse_await_single() -> impl Parser<Token, ast::Expression> {
-    map(
-        preceded(as_unit(parse_await_ident()), parse_expression()),
-        |(_, expression)| ast::Expression::Await(vec![expression]),
+    with_context(
+        map(
+            preceded(as_unit(parse_await_keyword()), parse_expression()),
+            |(_, expression)| ast::Expression::Await(vec![expression]),
+        ),
+        "await single",
     )
 }
 
 fn parse_await_multiple() -> impl Parser<Token, ast::Expression> {
-    map(
-        preceded(
-            as_unit(parse_await_ident()),
-            delimited(
-                as_unit(parse_open_paren()),
-                separated_list(parse_expression(), as_unit(parse_comma())),
-                as_unit(parse_close_paren()),
+    with_context(
+        map(
+            preceded(
+                as_unit(parse_await_keyword()),
+                delimited(
+                    as_unit(parse_open_paren()),
+                    separated_list(parse_expression(), as_unit(parse_comma())),
+                    as_unit(parse_close_paren()),
+                ),
             ),
+            |(_, expressions)| ast::Expression::Await(expressions),
         ),
-        |(_, expressions)| ast::Expression::Await(expressions),
+        "await multiple",
     )
 }
 
-fn parse_await_ident() -> impl Parser<Token, Token> {
-    equal(Token::Identifier("await".to_string()))
+fn parse_await_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Await)), "await")
 }
 
 fn parse_operator_add() -> impl Parser<Token, ast::BinaryOperator> {
-    map(equal(Token::Operator(Operator::Plus)), |_| {
-        ast::BinaryOperator::Add
-    })
+    with_context(
+        map(equal(Token::Operator(Operator::Plus)), |_| {
+            ast::BinaryOperator::Add
+        }),
+        "add operator",
+    )
 }
 
 fn parse_operator_subtract() -> impl Parser<Token, ast::BinaryOperator> {
-    map(equal(Token::Operator(Operator::Minus)), |_| {
-        ast::BinaryOperator::Subtract
-    })
+    with_context(
+        map(equal(Token::Operator(Operator::Minus)), |_| {
+            ast::BinaryOperator::Subtract
+        }),
+        "subtract operator",
+    )
 }
 
 fn parse_operator_multiply() -> impl Parser<Token, ast::BinaryOperator> {
-    map(equal(Token::Operator(Operator::Multiply)), |_| {
-        ast::BinaryOperator::Multiply
-    })
+    with_context(
+        map(equal(Token::Operator(Operator::Multiply)), |_| {
+            ast::BinaryOperator::Multiply
+        }),
+        "multiply operator",
+    )
 }
 
 fn parse_operator_divide() -> impl Parser<Token, ast::BinaryOperator> {
-    map(equal(Token::Operator(Operator::Divide)), |_| {
-        ast::BinaryOperator::Divide
-    })
+    with_context(
+        map(equal(Token::Operator(Operator::Divide)), |_| {
+            ast::BinaryOperator::Divide
+        }),
+        "divide operator",
+    )
 }
 
 fn parse_literal_expression() -> impl Parser<Token, ast::Expression> {
-    map(parse_literal(), ast::Expression::Literal)
+    with_context(
+        map(parse_literal(), ast::Expression::Literal),
+        "literal expression",
+    )
 }
 
 fn parse_literal() -> impl Parser<Token, ast::Literal> {
-    choice(vec![
-        Box::new(parse_float()),
-        Box::new(parse_integer()),
-        Box::new(parse_string()),
-        Box::new(parse_boolean()),
-        Box::new(parse_list()),
-        Box::new(parse_null()),
-        // parse_retry
-    ])
+    with_context(
+        choice(vec![
+            Box::new(parse_float()),
+            Box::new(parse_integer()),
+            Box::new(parse_string()),
+            Box::new(parse_boolean()),
+            Box::new(parse_list()),
+            Box::new(parse_map()),
+            Box::new(parse_retry()),
+            Box::new(parse_null()),
+        ]),
+        "literal",
+    )
 }
 
 fn parse_string() -> impl Parser<Token, ast::Literal> {
-    satisfy(|token| match token {
-        Token::Literal(Literal::String(parts)) => {
-            // Vec<StringPart> から ast::Literal::String に変換
-            // 現時点では単純なLiteralのみをサポート
-            if parts.len() == 1 {
-                match &parts[0] {
-                    StringPart::Literal(s) => Some(ast::Literal::String(s.clone())),
-                    // 他のケースは今は未サポート
-                    _ => None,
+    with_context(
+        satisfy(|token| match token {
+            Token::Literal(Literal::String(parts)) => {
+                // Vec<StringPart> から ast::Literal::String に変換
+                // 現時点では単純なLiteralのみをサポート
+                if parts.len() == 1 {
+                    match &parts[0] {
+                        StringPart::Literal(s) => Some(ast::Literal::String(s.clone())),
+                        // 他のケースは今は未サポート
+                        _ => None,
+                    }
+                } else {
+                    None
                 }
-            } else {
-                None
             }
-        }
-        _ => None,
-    })
+            _ => None,
+        }),
+        "string",
+    )
 }
 
 fn parse_list() -> impl Parser<Token, ast::Literal> {
-    map(
-        delimited(
-            as_unit(parse_open_bracket()),
-            separated_list(lazy(parse_literal), as_unit(parse_comma())),
-            as_unit(parse_close_bracket()),
+    with_context(
+        map(
+            delimited(
+                as_unit(parse_open_bracket()),
+                separated_list(lazy(parse_literal), as_unit(parse_comma())),
+                as_unit(parse_close_bracket()),
+            ),
+            ast::Literal::List,
         ),
-        ast::Literal::List,
+        "list",
+    )
+}
+
+fn parse_map() -> impl Parser<Token, ast::Literal> {
+    with_context(
+        map(
+            delimited(
+                as_unit(parse_open_brace()),
+                separated_list(parse_map_entry(), as_unit(parse_comma())),
+                as_unit(parse_close_brace()),
+            ),
+            |entries| {
+                let mut map = HashMap::new();
+                for (key, value) in entries {
+                    map.insert(key, value);
+                }
+                ast::Literal::Map(map)
+            },
+        ),
+        "map",
+    )
+}
+
+fn parse_map_entry() -> impl Parser<Token, (String, ast::Literal)> {
+    with_context(
+        map(
+            tuple3(
+                parse_identifier(),
+                as_unit(parse_colon()),
+                lazy(parse_literal),
+            ),
+            |(key, _, value)| (key, value),
+        ),
+        "map entry",
+    )
+}
+
+fn parse_retry() -> impl Parser<Token, ast::Literal> {
+    with_context(map(parse_retry_config(), ast::Literal::Retry), "retry")
+}
+
+fn parse_retry_ident() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Identifier("Retry".to_string())), "Retry")
+}
+
+fn parse_retry_config() -> impl Parser<Token, ast::RetryConfig> {
+    with_context(
+        map(
+            tuple3(
+                as_unit(parse_retry_ident()),
+                parse_u64(),
+                parse_retry_delay(),
+            ),
+            |(_, max_attempts, delay)| ast::RetryConfig {
+                max_attempts,
+                delay,
+            },
+        ),
+        "retry config",
+    )
+}
+
+fn parse_retry_delay() -> impl Parser<Token, ast::RetryDelay> {
+    with_context(
+        choice(vec![
+            Box::new(parse_fixed_delay()),
+            Box::new(parse_exponential_delay()),
+        ]),
+        "retry delay",
+    )
+}
+
+fn parse_fixed_delay() -> impl Parser<Token, ast::RetryDelay> {
+    with_context(
+        map(
+            preceded(as_unit(parse_fixed_ident()), parse_u64()),
+            |(_, s)| ast::RetryDelay::Fixed(s),
+        ),
+        "Fixed",
+    )
+}
+
+fn parse_fixed_ident() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Identifier("Fixed".to_string())), "Fixed")
+}
+
+fn parse_exponential_delay() -> impl Parser<Token, ast::RetryDelay> {
+    with_context(
+        map(
+            preceded(
+                as_unit(parse_exponential_ident()),
+                tuple3(parse_u64(), as_unit(parse_comma()), parse_u64()),
+            ),
+            |(_, (initial, _, max))| ast::RetryDelay::Exponential { initial, max },
+        ),
+        "Exponential",
+    )
+}
+
+fn parse_exponential_ident() -> impl Parser<Token, Token> {
+    with_context(
+        equal(Token::Identifier("Exponential".to_string())),
+        "Exponential",
     )
 }
 
@@ -1020,6 +1347,494 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_think() {
+        // 基本的なthink式（with blockなし）
+        let input = &[
+            Token::Keyword(Keyword::Think),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "Find suitable hotels matching criteria".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("location".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+
+        let (pos, expr) = parse_think().parse(input, 0).unwrap();
+        assert_eq!(pos, input.len());
+
+        match expr {
+            ast::Expression::Think { args, with_block } => {
+                assert_eq!(args.len(), 2);
+
+                // 第1引数の検証（文字列リテラル）
+                match &args[0] {
+                    ast::Argument::Positional(value) => match value {
+                        ast::Expression::Literal(ast::Literal::String(s)) => {
+                            assert_eq!(s, "Find suitable hotels matching criteria");
+                        }
+                        _ => panic!("Expected string literal for first argument"),
+                    },
+                    _ => panic!("Expected positional argument for first argument"),
+                }
+
+                // 第2引数の検証（識別子）
+                match &args[1] {
+                    ast::Argument::Positional(value) => match value {
+                        ast::Expression::Variable(name) => {
+                            assert_eq!(name, "location");
+                        }
+                        _ => panic!("Expected identifier for second argument"),
+                    },
+                    _ => panic!("Expected positional argument for second argument"),
+                }
+
+                assert!(with_block.is_none());
+            }
+            _ => panic!("Expected Think expression"),
+        }
+
+        // 名前付き引数とwithブロックを含むthink式
+        let input = &[
+            Token::Keyword(Keyword::Think),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "Find suitable hotels matching criteria".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("check_in".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Identifier("start_date".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Keyword(Keyword::With),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Identifier("provider".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "openai".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("search".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Identifier("filters".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Delimiter(Delimiter::OpenBracket),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "hotels".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::CloseBracket),
+            // Policy設定
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("policies".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Delimiter(Delimiter::OpenBracket),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "hotelsPolicy".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::CloseBracket),
+            Token::Delimiter(Delimiter::CloseBrace),
+            Token::Delimiter(Delimiter::CloseBrace),
+        ];
+
+        let (pos, expr) = parse_think().parse(input, 0).unwrap();
+        assert_eq!(pos, input.len());
+
+        match expr {
+            ast::Expression::Think { args, with_block } => {
+                assert_eq!(args.len(), 2);
+
+                match args[1].clone() {
+                    ast::Argument::Named { name, value } => {
+                        assert_eq!(name, "check_in");
+                        match value {
+                            ast::Expression::Variable(name) => assert_eq!(name, "start_date"),
+                            _ => panic!("Expected Variable"),
+                        }
+                    }
+                    _ => panic!("Expected String literal"),
+                }
+
+                // withブロック
+                with_block.expect("Expected with block");
+            }
+            _ => panic!("Expected Think expression"),
+        }
+    }
+
+    #[test]
+    fn test_parse_think_keyword() {
+        let input = &[
+            Token::Keyword(Keyword::Think),
+            Token::Identifier("think".to_string()),
+        ];
+
+        let (pos, token) = parse_think_keyword().parse(input, 0).unwrap();
+        assert_eq!(pos, 1);
+        assert_eq!(token, Token::Keyword(Keyword::Think));
+    }
+
+    #[test]
+    fn test_parse_think_attributes() {
+        let parser = parse_think_attributes();
+
+        let tokens = vec![
+            Token::Keyword(Keyword::With),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Identifier("provider".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "openai".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("model".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "gpt-4".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("temperature".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Literal(Literal::Float(0.7)),
+            Token::Delimiter(Delimiter::Comma),
+            // search: { filters: ["hotels"] }
+            Token::Identifier("search".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Identifier("filters".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Delimiter(Delimiter::OpenBracket),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "hotels".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::CloseBracket),
+            Token::Delimiter(Delimiter::CloseBrace),
+            Token::Delimiter(Delimiter::Comma),
+            // key: "value"
+            Token::Identifier("key".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "value".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::Comma),
+            // value: 42
+            Token::Identifier("value".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::CloseBrace),
+        ];
+
+        let result = parser.parse(&tokens, 0);
+        assert!(result.is_ok());
+        let (pos, attrs) = result.unwrap();
+        assert_eq!(pos, tokens.len());
+
+        // 基本設定の検証
+        assert_eq!(attrs.provider, Some("openai".to_string()));
+        assert_eq!(attrs.model, Some("gpt-4".to_string()));
+        assert_eq!(attrs.temperature, Some(0.7));
+
+        // プラグイン設定の検証
+        assert!(attrs.plugins.contains_key("search"));
+        if let Some(search_config) = attrs.plugins.get("search") {
+            assert!(search_config.contains_key("filters"));
+            match &search_config["filters"] {
+                ast::Literal::List(arr) => {
+                    assert_eq!(arr.len(), 1);
+                    assert!(matches!(&arr[0], ast::Literal::String(s) if s == "hotels"));
+                }
+                _ => panic!("Expected array for filters"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_collect_with_settings() {
+        let settings = vec![
+            ThinkAttributeKV {
+                key: "provider".to_string(),
+                value: ast::Literal::String("openai".to_string()),
+            },
+            ThinkAttributeKV {
+                key: "model".to_string(),
+                value: ast::Literal::String("gpt-4o-mini".to_string()),
+            },
+            ThinkAttributeKV {
+                key: "temperature".to_string(),
+                value: ast::Literal::Float(0.7),
+            },
+            ThinkAttributeKV {
+                key: "max_tokens".to_string(),
+                value: ast::Literal::Integer(500),
+            },
+            ThinkAttributeKV {
+                key: "retry".to_string(),
+                value: ast::Literal::Retry(ast::RetryConfig {
+                    max_attempts: 3,
+                    delay: ast::RetryDelay::Fixed(5),
+                }),
+            },
+            ThinkAttributeKV {
+                key: "policies".to_string(),
+                value: ast::Literal::List(vec![
+                    ast::Literal::String("Policy 1".to_string()),
+                    ast::Literal::String("Policy 2".to_string()),
+                ]),
+            },
+            ThinkAttributeKV {
+                key: "plugin".to_string(),
+                value: ast::Literal::Map(
+                    vec![(
+                        "plugin_config".to_string(),
+                        ast::Literal::Map(HashMap::from_iter(vec![
+                            (
+                                "key1".to_string(),
+                                ast::Literal::String("value1".to_string()),
+                            ),
+                            (
+                                "key2".to_string(),
+                                ast::Literal::String("value2".to_string()),
+                            ),
+                        ])),
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+            },
+        ];
+
+        let block = collect_with_settings(settings);
+
+        assert_eq!(block.provider, Some("openai".to_string()));
+        assert_eq!(block.model, Some("gpt-4o-mini".to_string()));
+        assert_eq!(block.temperature, Some(0.7));
+        assert_eq!(block.max_tokens, Some(500));
+        assert_eq!(
+            block.retry,
+            Some(ast::RetryConfig {
+                max_attempts: 3,
+                delay: ast::RetryDelay::Fixed(5),
+            })
+        );
+        assert_eq!(block.policies.len(), 2);
+        assert_eq!(block.plugins.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_with_keyword() {
+        let input = &[
+            Token::Keyword(Keyword::With),
+            Token::Identifier("with".to_string()),
+        ];
+
+        let (pos, token) = parse_with_keyword().parse(input, 0).unwrap();
+        assert_eq!(pos, 1);
+        assert_eq!(token, Token::Keyword(Keyword::With));
+    }
+
+    #[test]
+    fn test_parse_think_arguments() {
+        let parser = parse_think_arguments();
+
+        // テストケース1: 空の引数リスト
+        let tokens = vec![
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+        let result = parser.parse(&tokens, 0);
+        assert!(result.is_ok());
+        let (pos, args) = result.unwrap();
+        assert_eq!(pos, 2); // 2トークンを消費
+        assert_eq!(args.len(), 0);
+
+        // テストケース2: 位置引数のみ
+        let tokens = vec![
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+        let result = parser.parse(&tokens, 0);
+        assert!(result.is_ok());
+        let (pos, args) = result.unwrap();
+        assert_eq!(pos, 3); // 3トークンを消費
+        assert_eq!(args.len(), 1);
+        match &args[0] {
+            ast::Argument::Positional(expr) => {
+                assert!(matches!(
+                    expr,
+                    ast::Expression::Literal(ast::Literal::Integer(42))
+                ));
+            }
+            _ => panic!("Expected positional argument"),
+        }
+
+        // テストケース3: 文字列リテラルと識別子
+        let tokens = vec![
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "Find suitable hotels".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("location".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+        let result = parser.parse(&tokens, 0);
+        assert!(result.is_ok());
+        let (pos, args) = result.unwrap();
+        assert_eq!(pos, 5); // 5トークンを消費
+        assert_eq!(args.len(), 2);
+        match &args[0] {
+            ast::Argument::Positional(expr) => {
+                assert!(
+                    matches!(expr,  ast::Expression::Literal(ast::Literal::String(s)) if s == "Find suitable hotels")
+                );
+            }
+            _ => panic!("Expected positional string argument"),
+        }
+        match &args[1] {
+            ast::Argument::Positional(expr) => {
+                assert!(matches!(expr, ast::Expression::Variable(id) if id == "location"));
+            }
+            _ => panic!("Expected positional identifier argument"),
+        }
+
+        // テストケース4: 名前付き引数
+        let tokens = vec![
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("prompt".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Literal(Literal::String(vec![StringPart::Literal(
+                "Search query".to_string(),
+            )])),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+        let result = parser.parse(&tokens, 0);
+        assert!(result.is_ok());
+        let (pos, args) = result.unwrap();
+        assert_eq!(pos, 5); // 5トークンを消費
+        assert_eq!(args.len(), 1);
+        match &args[0] {
+            ast::Argument::Named { name, value } => {
+                assert_eq!(name, "prompt");
+                assert!(
+                    matches!(value, ast::Expression::Literal(ast::Literal::String(s)) if s == "Search query")
+                );
+            }
+            _ => panic!("Expected named argument"),
+        }
+    }
+
+    #[test]
+    fn test_parse_request() {
+        // 基本的なリクエスト
+        let input = &[
+            Token::Keyword(Keyword::Request),
+            Token::Identifier("FindHotels".to_string()),
+            Token::Identifier("to".to_string()),
+            Token::Identifier("HotelFinder".to_string()),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("location".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Identifier("destination".to_string()),
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("budget".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Identifier("budget".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+
+        let (pos, expr) = parse_request().parse(input, 0).unwrap();
+        assert_eq!(pos, input.len());
+
+        match expr {
+            ast::Expression::Request {
+                agent,
+                request_type,
+                parameters,
+                options,
+            } => {
+                assert_eq!(agent, "HotelFinder");
+                assert_eq!(
+                    request_type,
+                    ast::RequestType::Custom("FindHotels".to_string())
+                );
+                assert_eq!(parameters.len(), 2);
+
+                match parameters[0].clone() {
+                    ast::Argument::Named { name, value } => {
+                        assert_eq!(name, "location");
+                        assert_eq!(value, ast::Expression::Variable("destination".to_string()));
+                    }
+                    _ => panic!("Expected Named argument"),
+                }
+
+                assert!(options.is_none());
+            }
+            _ => panic!("Expected Request expression"),
+        }
+
+        // 複雑な式を含むリクエスト
+        let input = &[
+            Token::Keyword(Keyword::Request),
+            Token::Identifier("FindHotels".to_string()),
+            Token::Identifier("to".to_string()),
+            Token::Identifier("HotelFinder".to_string()),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("budget".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Identifier("budget".to_string()),
+            Token::Operator(Operator::Multiply),
+            Token::Literal(Literal::Float(0.4)),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+
+        let (pos, expr) = parse_request().parse(input, 0).unwrap();
+        assert_eq!(pos, input.len());
+
+        match expr {
+            ast::Expression::Request { parameters, .. } => {
+                assert_eq!(parameters.len(), 1);
+                match parameters[0].clone() {
+                    ast::Argument::Named { name, value } => {
+                        assert_eq!(name, "budget");
+                        match value {
+                            ast::Expression::BinaryOp { op, left, right } => {
+                                assert_eq!(op, ast::BinaryOperator::Multiply);
+                                match (&*left, *right) {
+                                    (
+                                        ast::Expression::Variable(name),
+                                        ast::Expression::Literal(ast::Literal::Float(value)),
+                                    ) => {
+                                        assert_eq!(name, "budget");
+                                        assert_eq!(value, 0.4);
+                                    }
+                                    _ => panic!("Expected multiplication of variable and float"),
+                                }
+                            }
+                            _ => panic!("Expected BinaryOp expression for budget"),
+                        }
+                    }
+                    _ => panic!("Expected Named argument"),
+                }
+            }
+            _ => panic!("Expected Request expression"),
+        }
+
+        // エラーケース
+        // request キーワードがない
+        let input = &[Token::Identifier("FindHotels".to_string())];
+        assert!(parse_request().parse(input, 0).is_err());
+
+        // "to" キーワードがない
+        let input = &[
+            Token::Identifier("request".to_string()),
+            Token::Identifier("FindHotels".to_string()),
+            Token::Identifier("HotelFinder".to_string()),
+        ];
+        assert!(parse_request().parse(input, 0).is_err());
+    }
+
+    #[test]
     fn test_parse_state_access() {
         // シンプルなアクセス（単一識別子）
         let input = &[Token::Identifier("state".to_string())];
@@ -1195,7 +2010,7 @@ mod tests {
     fn test_parse_await() {
         // 単一式のawait
         let input = &[
-            Token::Identifier("await".to_string()),
+            Token::Keyword(Keyword::Await),
             Token::Identifier("future".to_string()),
         ];
         let (pos, expr) = parse_await().parse(input, 0).unwrap();
@@ -1213,7 +2028,7 @@ mod tests {
 
         // 複数式のawait（カンマ区切り、括弧付き）
         let input = &[
-            Token::Identifier("await".to_string()),
+            Token::Keyword(Keyword::Await),
             Token::Delimiter(Delimiter::OpenParen),
             Token::Identifier("foo".to_string()),
             Token::Delimiter(Delimiter::Comma),
@@ -1239,7 +2054,7 @@ mod tests {
 
         // 複雑な式を含む単一await
         let input = &[
-            Token::Identifier("await".to_string()),
+            Token::Keyword(Keyword::Await),
             Token::Identifier("foo".to_string()),
             Token::Delimiter(Delimiter::OpenParen),
             Token::Literal(Literal::Integer(42)),
@@ -1276,7 +2091,7 @@ mod tests {
 
         // エラーケース: 括弧が不完全
         let input = &[
-            Token::Identifier("await".to_string()),
+            Token::Keyword(Keyword::Await),
             Token::Delimiter(Delimiter::OpenParen),
             Token::Identifier("foo".to_string()),
         ];
@@ -1338,7 +2153,6 @@ mod tests {
         ];
         let (pos, expr) = parse_binary_expression().parse(input, 0).unwrap();
         assert_eq!(pos, 7);
-        println!("{:?}", expr);
 
         match expr {
             ast::Expression::BinaryOp { op, left, right } => {
