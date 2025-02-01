@@ -24,8 +24,6 @@ pub enum Operator {
     Scope,
 
     // 比較
-    #[strum(serialize = "=")]
-    Equal,
     #[strum(serialize = "==")]
     EqualEqual,
     #[strum(serialize = "!=")]
@@ -104,7 +102,6 @@ pub fn parse_operator(input: &str) -> ParserResult<Token> {
                 value(Operator::Or, tag("||")),
                 // 1文字演算子
                 value(Operator::Dot, tag(".")),
-                value(Operator::Equal, tag("=")),
                 value(Operator::Greater, tag(">")),
                 value(Operator::Less, tag("<")),
                 value(Operator::Plus, tag("+")),
@@ -133,6 +130,7 @@ pub fn parse_delimiter(input: &str) -> ParserResult<Token> {
                 value(Delimiter::Comma, tag(",")),
                 value(Delimiter::Semicolon, tag(";")),
                 value(Delimiter::Colon, tag(":")),
+                value(Delimiter::Equal, tag("=")),
             )),
             Token::Delimiter,
         ),
@@ -153,7 +151,6 @@ mod tests {
             ("!=", Token::Operator(Operator::NotEqual)),
             (">=", Token::Operator(Operator::GreaterEqual)),
             (".", Token::Operator(Operator::Dot)),
-            ("=", Token::Operator(Operator::Equal)),
             (">", Token::Operator(Operator::Greater)),
         ];
 
@@ -176,6 +173,7 @@ mod tests {
             (",", Token::Delimiter(Delimiter::Comma)),
             (";", Token::Delimiter(Delimiter::Semicolon)),
             (":", Token::Delimiter(Delimiter::Colon)),
+            ("=", Token::Delimiter(Delimiter::Equal)),
         ];
 
         for (input, expected) in test_cases.iter() {
