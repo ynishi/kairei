@@ -301,7 +301,7 @@ pub struct HandlerBlock {
     pub statements: Vec<Statement>,
 }
 
-type Statements = Vec<Statement>;
+pub type Statements = Vec<Statement>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ErrorHandlerBlock {

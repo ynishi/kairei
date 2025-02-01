@@ -9,10 +9,192 @@ use crate::{
         symbol::{Delimiter, Operator},
         token::Token,
     },
-    FieldInfo, TypeInfo,
+    EventType, FieldInfo, TypeInfo,
 };
 
 use super::{ast, prelude::*, Parser};
+
+fn parse_statement() -> impl Parser<Token, ast::Statement> {
+    with_context(
+        lazy(|| {
+            choice(vec![
+                Box::new(parse_expression_statement()),
+                Box::new(parse_assignment_statement()),
+                Box::new(parse_return_statement()),
+                Box::new(parse_emit_statement()),
+                Box::new(parse_if_statement()),
+                Box::new(parse_block_statement()),
+            ])
+        }),
+        "statement",
+    )
+    // TODO support with_error
+}
+
+fn parse_expression_statement() -> impl Parser<Token, ast::Statement> {
+    with_context(
+        map(parse_expression(), ast::Statement::Expression),
+        "expression statement",
+    )
+}
+
+fn parse_assignment_statement() -> impl Parser<Token, ast::Statement> {
+    with_context(
+        map(
+            tuple3(
+                parse_assignment_target(),
+                as_unit(parse_equal()),
+                parse_literal(),
+            ),
+            |(target, _, value)| ast::Statement::Assignment {
+                target,
+                value: ast::Expression::Literal(value),
+            },
+        ),
+        "assignment statement",
+    )
+}
+
+fn parse_assignment_target() -> impl Parser<Token, Vec<ast::Expression>> {
+    with_context(
+        choice(vec![
+            Box::new(map(parse_expression(), |expr| vec![expr])),
+            Box::new(map(
+                delimited(
+                    as_unit(parse_open_paren()),
+                    tuple2(
+                        parse_expression(),
+                        many(preceded(as_unit(parse_comma()), parse_expression())),
+                    ),
+                    as_unit(parse_close_paren()),
+                ),
+                |(target, targets)| {
+                    let mut acc = vec![target];
+                    acc.extend(targets.iter().map(|t| t.1.clone()).collect::<Vec<_>>());
+                    acc
+                },
+            )),
+        ]),
+        "assignment target",
+    )
+}
+
+fn parse_return_statement() -> impl Parser<Token, ast::Statement> {
+    with_context(
+        map(
+            preceded(as_unit(parse_return_keyword()), parse_expression()),
+            |(_, value)| ast::Statement::Return(value),
+        ),
+        "return statement",
+    )
+}
+
+fn parse_return_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Return)), "return keyword")
+}
+
+fn parse_emit_statement() -> impl Parser<Token, ast::Statement> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_emit_keyword()),
+                parse_identifier(),
+                parse_emit_arguments(),
+                optional(parse_emit_target()),
+            ),
+            |(_, event_type, parameters, target)| ast::Statement::Emit {
+                event_type: EventType::Custom(event_type),
+                parameters,
+                target,
+            },
+        ),
+        "emit statement",
+    )
+}
+
+fn parse_emit_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Emit)), "emit keyword")
+}
+
+fn parse_emit_target() -> impl Parser<Token, String> {
+    with_context(
+        map(
+            tuple2(as_unit(parse_to_keyword()), parse_identifier()),
+            |(_, target)| target,
+        ),
+        "emit target",
+    )
+}
+
+fn parse_emit_arguments() -> impl Parser<Token, Vec<ast::Argument>> {
+    with_context(parse_arguments(), "emit arguments")
+}
+
+fn parse_to_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Identifier("to".to_string())), "to keyword")
+}
+
+fn parse_if_statement() -> impl Parser<Token, ast::Statement> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_if_keyword()),
+                parse_expression(),
+                parse_statements(),
+                optional(parse_else_statement()),
+            ),
+            |(_, condition, then_block, else_block)| ast::Statement::If {
+                condition,
+                then_block,
+                else_block,
+            },
+        ),
+        "if statement",
+    )
+}
+
+fn parse_if_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::If)), "if keyword")
+}
+
+fn parse_else_statement() -> impl Parser<Token, ast::Statements> {
+    with_context(
+        map(
+            preceded(as_unit(parse_else_keyword()), parse_statements()),
+            |(_, block)| block,
+        ),
+        "else statement",
+    )
+}
+
+fn parse_else_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Else)), "else keyword")
+}
+
+fn parse_statements() -> impl Parser<Token, ast::Statements> {
+    with_context(
+        delimited(
+            as_unit(parse_open_brace()),
+            many(parse_statement()),
+            as_unit(parse_close_brace()),
+        ),
+        "block statement",
+    )
+}
+
+fn parse_block_statement() -> impl Parser<Token, ast::Statement> {
+    with_context(
+        map(
+            delimited(
+                as_unit(parse_open_brace()),
+                many(parse_statement()),
+                as_unit(parse_close_brace()),
+            ),
+            ast::Statement::Block,
+        ),
+        "block statement",
+    )
+}
 
 fn parse_type_info() -> impl Parser<Token, ast::TypeInfo> {
     with_context(
@@ -275,7 +457,7 @@ fn parse_operator_and() -> impl Parser<Token, ast::BinaryOperator> {
 }
 
 fn parse_comparison_equal() -> impl Parser<Token, ast::BinaryOperator> {
-    map(equal(Token::Operator(Operator::Equal)), |_| {
+    map(equal(Token::Operator(Operator::EqualEqual)), |_| {
         ast::BinaryOperator::Equal
     })
 }
@@ -489,6 +671,10 @@ fn parse_think_keyword() -> impl Parser<Token, Token> {
 }
 
 fn parse_think_arguments() -> impl Parser<Token, Vec<ast::Argument>> {
+    with_context(parse_arguments(), "think attributes")
+}
+
+fn parse_arguments() -> impl Parser<Token, Vec<ast::Argument>> {
     with_context(
         map(
             delimited(
@@ -525,7 +711,7 @@ fn parse_think_arguments() -> impl Parser<Token, Vec<ast::Argument>> {
                     .collect()
             },
         ),
-        "think attributes",
+        "attributes",
     )
 }
 
@@ -931,12 +1117,12 @@ fn parse_exponential_ident() -> impl Parser<Token, Token> {
 }
 
 fn parse_float() -> impl Parser<Token, ast::Literal> {
-    map(parse_f64(), ast::Literal::Float)
+    with_context(map(parse_f64(), ast::Literal::Float), "float")
 }
 
 // 数値リテラル（Integer）
 fn parse_integer() -> impl Parser<Token, ast::Literal> {
-    map(parse_i64(), ast::Literal::Integer)
+    with_context(map(parse_i64(), ast::Literal::Integer), "integer")
 }
 
 // 真偽値リテラル
@@ -973,6 +1159,10 @@ fn parse_colon() -> impl Parser<Token, Token> {
 
 fn parse_equal() -> impl Parser<Token, Token> {
     equal(Token::Delimiter(Delimiter::Equal))
+}
+
+fn parse_equal_equal() -> impl Parser<Token, Token> {
+    equal(Token::Operator(Operator::EqualEqual))
 }
 
 fn parse_open_paren() -> impl Parser<Token, Token> {
@@ -1344,6 +1534,210 @@ mod tests {
             result,
             ast::TypeInfo::Option(Box::new(ast::TypeInfo::Simple("String".to_string())))
         );
+    }
+
+    #[test]
+    fn test_parse_expression_statement() {
+        let input = vec![Token::Literal(Literal::Integer(42))];
+        let expected = ast::Statement::Expression(ast::Expression::Variable("foo".to_string()));
+        assert_eq!(
+            parse_expression_statement().parse(&input, 0),
+            Ok((0, expected))
+        );
+    }
+
+    #[test]
+    fn test_parse_assignment() {
+        let input = vec![
+            Token::Identifier("foo".to_string()),
+            Token::Delimiter(Delimiter::Equal),
+            Token::Literal(Literal::Integer(42)),
+        ];
+        let expected = ast::Statement::Assignment {
+            target: vec![ast::Expression::Variable("foo".to_string())],
+            value: ast::Expression::Literal(ast::Literal::Integer(42)),
+        };
+        assert_eq!(
+            parse_assignment_statement().parse(&input, 0),
+            Ok((3, expected))
+        );
+
+        let input = vec![
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("foo".to_string()),
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("bar".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Delimiter(Delimiter::Equal),
+            Token::Literal(Literal::Integer(42)),
+        ];
+        let expected = ast::Statement::Assignment {
+            target: vec![
+                ast::Expression::Variable("foo".to_string()),
+                ast::Expression::Variable("bar".to_string()),
+            ],
+            value: ast::Expression::Literal(ast::Literal::Integer(42)),
+        };
+        assert_eq!(
+            parse_assignment_statement().parse(&input, 0),
+            Ok((7, expected))
+        );
+    }
+
+    #[test]
+    fn test_parse_assignment_target() {
+        let input = vec![
+            Token::Identifier("foo".to_string()),
+            Token::Delimiter(Delimiter::Equal),
+            Token::Literal(Literal::Integer(42)),
+        ];
+        let expected = vec![ast::Expression::Variable("foo".to_string())];
+        assert_eq!(
+            parse_assignment_target().parse(&input, 0),
+            Ok((1, expected))
+        );
+
+        let input = vec![
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("foo".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Delimiter(Delimiter::Equal),
+            Token::Literal(Literal::Integer(42)),
+        ];
+        let expected = vec![ast::Expression::Variable("foo".to_string())];
+        assert_eq!(
+            parse_assignment_target().parse(&input, 0),
+            Ok((3, expected))
+        );
+
+        let input = vec![
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("foo".to_string()),
+            Token::Delimiter(Delimiter::Comma),
+            Token::Identifier("bar".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Delimiter(Delimiter::Equal),
+            Token::Literal(Literal::Integer(42)),
+        ];
+        let expected = vec![
+            ast::Expression::Variable("foo".to_string()),
+            ast::Expression::Variable("bar".to_string()),
+        ];
+        assert_eq!(
+            parse_assignment_target().parse(&input, 0),
+            Ok((5, expected))
+        );
+    }
+
+    #[test]
+    fn test_parse_return_statement() {
+        let input = vec![
+            Token::Keyword(Keyword::Return),
+            Token::Literal(Literal::Integer(42)),
+        ];
+        let expected = ast::Statement::Return(ast::Expression::Literal(ast::Literal::Integer(42)));
+        assert_eq!(parse_return_statement().parse(&input, 0), Ok((2, expected)));
+    }
+
+    #[test]
+    fn test_parse_emit_statement() {
+        let input = vec![
+            Token::Keyword(Keyword::Emit),
+            Token::Identifier("test-event".to_string()),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+        let expected = ast::Statement::Emit {
+            event_type: EventType::Custom("test-event".to_string()),
+            parameters: vec![ast::Argument::Positional(ast::Expression::Literal(
+                ast::Literal::Integer(42),
+            ))],
+            target: None,
+        };
+        assert_eq!(parse_emit_statement().parse(&input, 0), Ok((5, expected)));
+    }
+
+    #[test]
+    fn test_parse_emit_statement_with_target() {
+        let input = vec![
+            Token::Keyword(Keyword::Emit),
+            Token::Identifier("test-event".to_string()),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Identifier("to".to_string()),
+            Token::Identifier("target".to_string()),
+        ];
+        let expected = ast::Statement::Emit {
+            event_type: EventType::Custom("test-event".to_string()),
+            parameters: vec![ast::Argument::Positional(ast::Expression::Literal(
+                ast::Literal::Integer(42),
+            ))],
+            target: Some("target".to_string()),
+        };
+        assert_eq!(parse_emit_statement().parse(&input, 0), Ok((7, expected)));
+    }
+
+    #[test]
+    fn test_parse_if_statement() {
+        let input = vec![
+            Token::Keyword(Keyword::If),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Keyword(Keyword::Return),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::CloseBrace),
+        ];
+        let expected = ast::Statement::If {
+            condition: ast::Expression::Literal(ast::Literal::Integer(42)),
+            then_block: vec![ast::Statement::Return(ast::Expression::Literal(
+                ast::Literal::Integer(42),
+            ))],
+            else_block: None,
+        };
+        assert_eq!(parse_if_statement().parse(&input, 0), Ok((6, expected)));
+    }
+
+    #[test]
+    fn test_parse_if_else_statement() {
+        let input = vec![
+            Token::Keyword(Keyword::If),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Keyword(Keyword::Return),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::CloseBrace),
+            Token::Keyword(Keyword::Else),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Keyword(Keyword::Return),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::CloseBrace),
+        ];
+        let expected = ast::Statement::If {
+            condition: ast::Expression::Literal(ast::Literal::Integer(42)),
+            then_block: vec![ast::Statement::Return(ast::Expression::Literal(
+                ast::Literal::Integer(42),
+            ))],
+            else_block: Some(vec![ast::Statement::Return(ast::Expression::Literal(
+                ast::Literal::Integer(42),
+            ))]),
+        };
+        assert_eq!(parse_if_statement().parse(&input, 0), Ok((11, expected)));
+    }
+
+    #[test]
+    fn test_parse_block_statement() {
+        let input = vec![
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Keyword(Keyword::Return),
+            Token::Literal(Literal::Integer(42)),
+            Token::Delimiter(Delimiter::CloseBrace),
+        ];
+        let expected = ast::Statement::Block(vec![ast::Statement::Return(
+            ast::Expression::Literal(ast::Literal::Integer(42)),
+        )]);
+        assert_eq!(parse_block_statement().parse(&input, 0), Ok((4, expected)));
     }
 
     #[test]
@@ -2148,7 +2542,7 @@ mod tests {
             Token::Identifier("b".to_string()),
             Token::Operator(Operator::And),
             Token::Identifier("c".to_string()),
-            Token::Operator(Operator::Equal),
+            Token::Operator(Operator::EqualEqual),
             Token::Identifier("d".to_string()),
         ];
         let (pos, expr) = parse_binary_expression().parse(input, 0).unwrap();
@@ -2246,7 +2640,7 @@ mod tests {
         assert_eq!(op, ast::BinaryOperator::And);
 
         // 比較演算子
-        let input = &[Token::Operator(Operator::Equal)];
+        let input = &[Token::Operator(Operator::EqualEqual)];
         let (pos, op) = parse_comparison_equal().parse(input, 0).unwrap();
         assert_eq!(pos, 1);
         assert_eq!(op, ast::BinaryOperator::Equal);
@@ -2256,7 +2650,7 @@ mod tests {
     fn test_parse_comparison() {
         let input = &[
             Token::Literal(Literal::Integer(1)),
-            Token::Operator(Operator::Equal),
+            Token::Operator(Operator::EqualEqual),
             Token::Literal(Literal::Integer(2)),
         ];
         let (pos, expr) = parse_comparison().parse(input, 0).unwrap();
@@ -2281,7 +2675,10 @@ mod tests {
     fn test_parse_operator_comparison() {
         // すべての比較演算子をテスト
         let comparison_tests = vec![
-            (Token::Operator(Operator::Equal), ast::BinaryOperator::Equal),
+            (
+                Token::Operator(Operator::EqualEqual),
+                ast::BinaryOperator::Equal,
+            ),
             (
                 Token::Operator(Operator::NotEqual),
                 ast::BinaryOperator::NotEqual,
