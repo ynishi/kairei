@@ -9,26 +9,225 @@ use crate::{
         symbol::{Delimiter, Operator},
         token::Token,
     },
-    EventType, FieldInfo, TypeInfo,
+    EventType, FieldInfo, Statement, TypeInfo,
 };
 
 use super::{ast, prelude::*, Parser};
 
 fn parse_statement() -> impl Parser<Token, ast::Statement> {
     with_context(
-        lazy(|| {
-            choice(vec![
-                Box::new(parse_expression_statement()),
-                Box::new(parse_assignment_statement()),
-                Box::new(parse_return_statement()),
-                Box::new(parse_emit_statement()),
-                Box::new(parse_if_statement()),
-                Box::new(parse_block_statement()),
-            ])
-        }),
+        map(
+            lazy(|| {
+                choice(vec![
+                    Box::new(tuple2(
+                        parse_expression_statement(),
+                        optional(parse_error_handler()),
+                    )),
+                    Box::new(tuple2(
+                        parse_assignment_statement(),
+                        optional(parse_error_handler()),
+                    )),
+                    Box::new(tuple2(
+                        parse_return_statement(),
+                        optional(parse_error_handler()),
+                    )),
+                    Box::new(tuple2(
+                        parse_emit_statement(),
+                        optional(parse_error_handler()),
+                    )),
+                    Box::new(tuple2(
+                        parse_if_statement(),
+                        optional(parse_error_handler()),
+                    )),
+                    Box::new(tuple2(
+                        parse_block_statement(),
+                        optional(parse_error_handler()),
+                    )),
+                ])
+            }),
+            |(statement, error_handler)| match error_handler {
+                Some(Statement::WithError {
+                    statement,
+                    error_handler_block,
+                }) => Statement::WithError {
+                    statement,
+                    error_handler_block,
+                },
+                _ => statement,
+            },
+        ),
         "statement",
     )
-    // TODO support with_error
+}
+
+fn parse_error_handler() -> impl Parser<Token, ast::Statement> {
+    map(
+        tuple3(
+            as_unit(parse_onfail_keyword()),
+            optional(parse_error_binding()),
+            delimited(
+                as_unit(parse_open_brace()),
+                error_handling_statements(),
+                as_unit(parse_close_brace()),
+            ),
+        ),
+        |(
+            _,
+            error_binding,
+            ErrorHandlingStatements {
+                statements,
+                control,
+            },
+        )| ast::Statement::WithError {
+            error_handler_block: ast::ErrorHandlerBlock {
+                error_binding,
+                error_handler_statements: statements,
+                control,
+            },
+            statement: Box::new(ast::Statement::Expression(ast::Expression::Literal(
+                ast::Literal::Null,
+            ))),
+        },
+    )
+}
+
+fn on_fail_return_from_expr(expr: ast::Expression) -> Option<ast::OnFailControl> {
+    if let ast::Expression::FunctionCall {
+        function,
+        arguments,
+    } = expr
+    {
+        if let Some(expr) = arguments.first() {
+            if function == "Ok" {
+                return Some(ast::OnFailControl::Return(ast::OnFailReturn::Ok(
+                    expr.clone(),
+                )));
+            } else if function == "Err" {
+                return Some(ast::OnFailControl::Return(ast::OnFailReturn::Err(
+                    expr.clone(),
+                )));
+            }
+        }
+    }
+    None
+}
+
+fn error_handling_statements() -> impl Parser<Token, ErrorHandlingStatements> {
+    with_context(
+        map(
+            tuple2(parse_statement_list(), optional(parse_on_fail_control())),
+            |(statements, control)| {
+                if control.is_none() {
+                    if let Some(ast::Statement::Return(expr)) = statements.last().cloned() {
+                        if let Some(on_fail_return) = on_fail_return_from_expr(expr) {
+                            return ErrorHandlingStatements {
+                                statements: statements[..statements.len() - 1].to_vec(),
+                                control: Some(on_fail_return),
+                            };
+                        }
+                    }
+                }
+                ErrorHandlingStatements {
+                    statements,
+                    control,
+                }
+            },
+        ),
+        "error handling statements",
+    )
+}
+
+struct ErrorHandlingStatements {
+    statements: ast::Statements,
+    control: Option<ast::OnFailControl>,
+}
+
+fn parse_onfail_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::OnFail)), "onFail keyword")
+}
+
+fn parse_error_binding() -> impl Parser<Token, String> {
+    with_context(
+        delimited(
+            as_unit(parse_open_paren()),
+            parse_identifier(),
+            as_unit(parse_close_paren()),
+        ),
+        "error binding",
+    )
+}
+
+fn parse_on_fail_control() -> impl Parser<Token, ast::OnFailControl> {
+    with_context(
+        choice(vec![
+            Box::new(parse_return_control()),
+            Box::new(parse_rethrow_control()),
+        ]),
+        "onFail control",
+    )
+}
+
+fn parse_return_control() -> impl Parser<Token, ast::OnFailControl> {
+    with_context(
+        map(
+            tuple2(
+                as_unit(parse_return_keyword()),
+                choice(vec![
+                    Box::new(parse_ok_return()),
+                    Box::new(parse_err_return()),
+                ]),
+            ),
+            |(_, control)| control,
+        ),
+        "return control",
+    )
+}
+
+fn parse_ok_return() -> impl Parser<Token, ast::OnFailControl> {
+    with_context(
+        map(
+            tuple2(
+                as_unit(parse_ok_ident()),
+                delimited(
+                    as_unit(parse_open_paren()),
+                    parse_expression(),
+                    as_unit(parse_close_paren()),
+                ),
+            ),
+            |(_, expr)| ast::OnFailControl::Return(ast::OnFailReturn::Ok(expr)),
+        ),
+        "ok return",
+    )
+}
+
+fn parse_err_return() -> impl Parser<Token, ast::OnFailControl> {
+    with_context(
+        map(
+            tuple2(
+                as_unit(parse_err_ident()),
+                delimited(
+                    as_unit(parse_open_paren()),
+                    parse_expression(),
+                    as_unit(parse_close_paren()),
+                ),
+            ),
+            |(_, expr)| ast::OnFailControl::Return(ast::OnFailReturn::Err(expr)),
+        ),
+        "err return",
+    )
+}
+
+fn parse_rethrow_control() -> impl Parser<Token, ast::OnFailControl> {
+    with_context(
+        map(as_unit(parse_resthrow_keyword()), |_| {
+            ast::OnFailControl::Rethrow
+        }),
+        "rethrow control",
+    )
+}
+
+fn parse_resthrow_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::ReThrow)), "rethrow keyword")
 }
 
 fn parse_expression_statement() -> impl Parser<Token, ast::Statement> {
@@ -175,11 +374,15 @@ fn parse_statements() -> impl Parser<Token, ast::Statements> {
     with_context(
         delimited(
             as_unit(parse_open_brace()),
-            many(parse_statement()),
+            parse_statement_list(),
             as_unit(parse_close_brace()),
         ),
         "block statement",
     )
+}
+
+fn parse_statement_list() -> impl Parser<Token, ast::Statements> {
+    with_context(many(parse_statement()), "statement list")
 }
 
 fn parse_block_statement() -> impl Parser<Token, ast::Statement> {
@@ -1153,6 +1356,10 @@ fn parse_comma() -> impl Parser<Token, Token> {
     with_context(equal(Token::Delimiter(Delimiter::Comma)), "comma")
 }
 
+fn parse_semicolon() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Delimiter(Delimiter::Semicolon)), "semicolon")
+}
+
 fn parse_colon() -> impl Parser<Token, Token> {
     equal(Token::Delimiter(Delimiter::Colon))
 }
@@ -1537,12 +1744,86 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_error_handler() {
+        let input = vec![
+            Token::Keyword(Keyword::OnFail),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("err".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Keyword(Keyword::Return),
+            Token::Identifier("Ok".to_string()),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Literal(Literal::Integer(1)),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Delimiter(Delimiter::CloseBrace),
+        ];
+        let (rest, handler) = parse_error_handler().parse(&input, 0).unwrap();
+        assert_eq!(rest, 11);
+        assert_eq!(
+            handler,
+            ast::Statement::WithError {
+                statement: Box::new(ast::Statement::Expression(ast::Expression::Literal(
+                    ast::Literal::Null
+                ))),
+                error_handler_block: ast::ErrorHandlerBlock {
+                    error_binding: Some("err".to_string()),
+                    error_handler_statements: vec![],
+                    control: Some(ast::OnFailControl::Return(ast::OnFailReturn::Ok(
+                        ast::Expression::Literal(ast::Literal::Integer(1))
+                    ))),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_error_binding() {
+        let input = vec![
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("err".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+        let (rest, binding) = parse_error_binding().parse(&input, 0).unwrap();
+        assert_eq!(rest, 3);
+        assert_eq!(binding, "err".to_string());
+    }
+
+    #[test]
+    fn test_parse_on_fail_control() {
+        let input = vec![
+            Token::Keyword(Keyword::Return),
+            Token::Identifier("Ok".to_string()),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Literal(Literal::Integer(1)),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+        let (rest, control) = parse_on_fail_control().parse(&input, 0).unwrap();
+        assert_eq!(rest, 5);
+        assert_eq!(
+            control,
+            ast::OnFailControl::Return(ast::OnFailReturn::Ok(ast::Expression::Literal(
+                ast::Literal::Integer(1)
+            )))
+        );
+    }
+
+    #[test]
+    fn test_parse_on_fail_rethrow_control() {
+        let input = vec![Token::Keyword(Keyword::ReThrow)];
+        let (rest, control) = parse_on_fail_control().parse(&input, 0).unwrap();
+        assert_eq!(rest, 1);
+        assert_eq!(control, ast::OnFailControl::Rethrow);
+    }
+
+    #[test]
     fn test_parse_expression_statement() {
         let input = vec![Token::Literal(Literal::Integer(42))];
-        let expected = ast::Statement::Expression(ast::Expression::Variable("foo".to_string()));
+        let expected =
+            ast::Statement::Expression(ast::Expression::Literal(ast::Literal::Integer(42)));
         assert_eq!(
             parse_expression_statement().parse(&input, 0),
-            Ok((0, expected))
+            Ok((1, expected))
         );
     }
 
