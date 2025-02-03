@@ -35,6 +35,7 @@ pub enum Keyword {
     Lifecycle,
     With,
     On,
+    ReThrow,
 }
 
 #[tracing::instrument(level = "debug", skip(input))]

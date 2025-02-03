@@ -156,6 +156,8 @@ where
     Tuple5::new(parser1, parser2, parser3, parser4, parser5)
 }
 
+// based on practical idiom for tuple
+#[allow(clippy::type_complexity)]
 pub fn tuple6<P1, P2, P3, P4, P5, P6, I, O1, O2, O3, O4, O5, O6>(
     parser1: P1,
     parser2: P2,
