@@ -2770,7 +2770,7 @@ mod tests {
     #[test]
     fn test_parse_optional_error_handler() {
         let input = r#"onFail (err) { return Err(err) }"#;
-        let (_, (statement)) = parse_optional_error_handler(
+        let (_, statement) = parse_optional_error_handler(
             input,
             Statement::Expression(Expression::Literal(Literal::Null)),
         )

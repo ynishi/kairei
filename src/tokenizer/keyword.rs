@@ -4,6 +4,7 @@ use nom::{
     combinator::{map, value},
     error::context,
 };
+use serde::de::value;
 
 use super::token::{ParserResult, Token};
 
@@ -14,10 +15,16 @@ use super::token::{ParserResult, Token};
 pub enum Keyword {
     Micro,
     World,
+    Handlers,
+    Events,
+    Config,
     Policy,
     State,
     Observe,
     Answer,
+    Query,
+    Action,
+    React,
     Request,
     Emit,
     Think,
@@ -44,25 +51,37 @@ pub fn parse_keyword(input: &str) -> ParserResult<Token> {
         "keyword",
         map(
             alt((
-                value(Keyword::Micro, tag("micro")),
-                value(Keyword::World, tag("world")),
-                value(Keyword::Policy, tag("policy")),
-                value(Keyword::State, tag("state")),
-                value(Keyword::Observe, tag("observe")),
-                value(Keyword::Answer, tag("answer")),
-                value(Keyword::Request, tag("request")),
-                value(Keyword::Emit, tag("emit")),
-                value(Keyword::Think, tag("think")),
-                value(Keyword::If, tag("if")),
-                value(Keyword::Else, tag("else")),
-                value(Keyword::Return, tag("return")),
-                value(Keyword::Await, tag("await")),
-                value(Keyword::OnFail, tag("onFail")),
-                value(Keyword::OnInit, tag("onInit")),
-                value(Keyword::OnDestroy, tag("onDestroy")),
-                value(Keyword::With, tag("with")),
-                value(Keyword::On, tag("on")),
-                // TODO: Add more keywords when Keywords enum is updated
+                alt((
+                    value(Keyword::Micro, tag("micro")),
+                    value(Keyword::World, tag("world")),
+                    value(Keyword::Handlers, tag("handlers")),
+                    value(Keyword::Events, tag("events")),
+                    value(Keyword::Config, tag("config")),
+                    value(Keyword::Policy, tag("policy")),
+                    value(Keyword::State, tag("state")),
+                    value(Keyword::Observe, tag("observe")),
+                    value(Keyword::Answer, tag("answer")),
+                    value(Keyword::Query, tag("query")),
+                    value(Keyword::Action, tag("action")),
+                    value(Keyword::React, tag("react")),
+                    value(Keyword::Request, tag("request")),
+                    value(Keyword::Emit, tag("emit")),
+                    value(Keyword::Think, tag("think")),
+                    value(Keyword::If, tag("if")),
+                    value(Keyword::Else, tag("else")),
+                    value(Keyword::Return, tag("return")),
+                    value(Keyword::Await, tag("await")),
+                    value(Keyword::OnFail, tag("onFail")),
+                    value(Keyword::OnInit, tag("onInit")),
+                    // separated for alt max size limit
+                )),
+                alt((
+                    value(Keyword::OnDestroy, tag("onDestroy")),
+                    value(Keyword::With, tag("with")),
+                    value(Keyword::On, tag("on")),
+                    value(Keyword::ReThrow, tag("reThrow")),
+                    // TODO: Add more keywords when Keywords enum is updated
+                ))
             )),
             Token::Keyword,
         ),
