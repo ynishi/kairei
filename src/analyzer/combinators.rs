@@ -1,6 +1,8 @@
 use super::core::ParseError;
 use super::core::ParseResult;
 use super::core::Parser;
+use core::fmt;
+use std::fmt::Display;
 use std::marker::PhantomData;
 
 // Expected: 入力値を変換し、その結果が value と一致する場合のみ成功し、value を返す
@@ -191,13 +193,13 @@ impl<I, O> Parser<I, O> for Choice<I, O> {
     }
 }
 #[derive(Clone)]
-pub struct Preceded<P1, P2, I, O1, O2> {
+pub struct Preceded<P1, P2, I, O> {
     parser1: P1,
     parser2: P2,
-    _phantom: PhantomData<(I, O1, O2)>,
+    _phantom: PhantomData<(I, O)>,
 }
 
-impl<P1, P2, I, O1, O2> Preceded<P1, P2, I, O1, O2> {
+impl<P1, P2, I, O> Preceded<P1, P2, I, O> {
     pub fn new(parser1: P1, parser2: P2) -> Self {
         Self {
             parser1,
@@ -207,16 +209,16 @@ impl<P1, P2, I, O1, O2> Preceded<P1, P2, I, O1, O2> {
     }
 }
 
-impl<P1, P2, I, O1, O2> Parser<I, (O1, O2)> for Preceded<P1, P2, I, O1, O2>
+impl<P1, P2, I, O> Parser<I, O> for Preceded<P1, P2, I, O>
 where
-    P1: Parser<I, O1>,
-    P2: Parser<I, O2>,
+    P1: Parser<I, ()>,
+    P2: Parser<I, O>,
     I: Clone,
 {
-    fn parse(&self, input: &[I], pos: usize) -> ParseResult<(O1, O2)> {
-        let (pos, result1) = self.parser1.parse(input, pos)?;
-        let (pos, result2) = self.parser2.parse(input, pos)?;
-        Ok((pos, (result1, result2)))
+    fn parse(&self, input: &[I], pos: usize) -> ParseResult<O> {
+        let (pos, _) = self.parser1.parse(input, pos)?;
+        let (pos, result) = self.parser2.parse(input, pos)?;
+        Ok((pos, result))
     }
 }
 

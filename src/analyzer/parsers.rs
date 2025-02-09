@@ -1,6 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use tracing::warn;
+use uuid::Uuid;
 
 use crate::{
     tokenizer::{
@@ -8,11 +9,643 @@ use crate::{
         literal::{Literal, StringPart},
         symbol::{Delimiter, Operator},
         token::Token,
-    },
-    EventType, FieldInfo, Statement, TypeInfo,
+    }, EventType, FieldInfo, HandlerBlock, PolicyId, Statement, TypeInfo
 };
 
 use super::{ast, prelude::*, Parser};
+
+fn parse_agent_def() -> impl Parser<Token, ast::MicroAgentDef> {
+    with_context(
+        map(
+            tuple5(
+                as_unit(parse_micro_agent_keyword()),
+                parse_identifier(),
+                parse_open_brace(),
+                many(choice(vec![
+                    Box::new(map(parse_policy(), AgentDefItem::Policy)),
+                    Box::new(map(parse_lifecycle(), AgentDefItem::Lifecycle)),
+                    Box::new(map(parse_state(), AgentDefItem::State)),
+                    Box::new(map(parse_observe(), AgentDefItem::Observe)),
+                    Box::new(map(parse_answer(), AgentDefItem::Answer)),
+                    Box::new(map(parse_react(), AgentDefItem::React)),
+                ])),
+                parse_close_brace(),
+            ),
+            |(_, name, _, items, _)| {
+                let mut agent = ast::MicroAgentDef {
+                    name,
+                    ..Default::default()
+                };
+
+                for item in items {
+                    match item {
+                        AgentDefItem::Policy(policy) => agent.policies.push(policy),
+                        AgentDefItem::Lifecycle(lifecycle) => agent.lifecycle = Some(lifecycle),
+                        AgentDefItem::State(state) => agent.state = Some(state),
+                        AgentDefItem::Observe(observe) => agent.observe = Some(observe),
+                        AgentDefItem::Answer(answer) => agent.answer = Some(answer),
+                        AgentDefItem::React(react) => agent.react = Some(react),
+                    }
+                }
+
+                agent
+            },
+        ),
+        "agent definition",
+    )
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum AgentDefItem {
+    Policy(ast::Policy),
+    Lifecycle(ast::LifecycleDef),
+    State(ast::StateDef),
+    Observe(ast::ObserveDef),
+    Answer(ast::AnswerDef),
+    React(ast::ReactDef),
+}
+
+fn parse_init_handler() -> impl Parser<Token, HandlerBlock> {
+    with_context(
+        map(
+            tuple3(
+                as_unit(parse_init_keyword()),
+                parse_parameters(),
+                parse_statements(),
+            ),
+            |(_, _, statements)| HandlerBlock { statements },
+        ),
+        "init handler",
+    )
+}
+
+
+fn parse_lifecycle() -> impl Parser<Token, ast::LifecycleDef> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_lifecycle_keyword()),
+                parse_open_brace(),
+                many(choice(vec![
+                    Box::new(map(parse_init_handler(), |handler| ("init", handler))),
+                    Box::new(map(parse_destroy_handler(), |handler| ("destroy", handler))),
+                ])),
+                parse_close_brace(),
+            ),
+            |(_, _, handlers, _)| {
+                let mut on_init = None;
+                let mut on_destroy = None;
+
+                for (handler_type, block) in handlers {
+                    match handler_type {
+                        "init" => on_init = Some(block),
+                        "destroy" => on_destroy = Some(block),
+                        _ => unreachable!(),
+                    }
+                }
+
+                ast::LifecycleDef {
+                    on_init,
+                    on_destroy,
+                }
+            },
+        ),
+        "lifecycle",
+    )
+}
+
+fn parse_destroy_handler() -> impl Parser<Token, HandlerBlock> {
+    with_context(
+        map(
+            tuple3(
+                as_unit(parse_destroy_keyword()),
+                parse_parameters(),
+                parse_statements(),
+            ),
+            |(_, _, statements)| HandlerBlock { statements },
+        ),
+        "destroy handler",
+    )
+}
+
+
+fn parse_lifecycle_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Lifecycle)), "lifecycle keyword")
+}
+
+fn parse_init_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::OnInit)), "init keyword")
+}
+
+fn parse_destroy_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::OnDestroy)), "destroy keyword")
+}
+
+
+fn parse_state() -> impl Parser<Token, ast::StateDef> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_state_keyword()),
+                as_unit(parse_open_brace()),
+                many(parse_state_var()),
+                as_unit(parse_close_brace()),
+            ),
+            |(_, _, vars, _)| {
+                let variables = vars.into_iter().collect();
+                ast::StateDef { variables }
+            },
+        ),
+        "state",
+    )
+}
+
+fn parse_state_var() -> impl Parser<Token, (String, ast::StateVarDef)> {
+    with_context(
+        map(
+            tuple5(
+                parse_identifier(),
+                as_unit(parse_colon()),
+                parse_type_info(),
+                optional(preceded(
+                    as_unit(parse_equal()),
+                    parse_expression(),
+                )),
+                as_unit(parse_semicolon()),
+            ),
+            |(name, _, type_info, initial_value, _)| {
+                (
+                    name.clone(),
+                    ast::StateVarDef {
+                        name,
+                        type_info,
+                        initial_value,
+                    },
+                )
+            },
+        ),
+        "state variable",
+    )
+}
+
+fn parse_state_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::State)), "state keyword")
+}
+
+fn parse_micro_agent_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Micro)), "micro agent keyword")
+}
+
+
+fn parse_observe() -> impl Parser<Token, ast::ObserveDef> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_observe_keyword()),
+                as_unit(parse_open_brace()),
+                many(parse_event_handler()),
+                as_unit(parse_close_brace()),
+            ),
+            |(_, _, handlers, _)| ast::ObserveDef { handlers },
+        ),
+        "observe",
+    )
+}
+
+fn parse_event_handler() -> impl Parser<Token, ast::EventHandler> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_on_keyword()),
+                parse_event_type(),
+                parse_parameters(),
+                parse_statements(),
+            ),
+            |(_, event_type, parameters, block)| ast::EventHandler {
+                event_type,
+                parameters,
+                block: HandlerBlock { statements: block },
+            },
+        ),
+        "event handler",
+    )
+}
+
+
+fn parse_event_type() -> impl Parser<Token, ast::EventType> {
+    with_context(
+        choice(vec![
+            Box::new(map(parse_tick_identify(), |_| ast::EventType::Tick)),
+            Box::new(map(
+                tuple4(
+                    parse_state_updated_keyword(),
+                    parse_dot(),
+                    parse_identifier(),
+                    preceded(as_unit(parse_dot()), parse_identifier()),
+                ),
+                |(_, _, agent_name, state_name)| ast::EventType::StateUpdated {
+                    agent_name,
+                    state_name,
+                },
+            )),
+            Box::new(map(parse_identifier(), |name| {
+                ast::EventType::Custom(name)
+            })),
+        ]),
+        "event type",
+    )
+}
+
+fn parse_observe_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Observe)), "observe keyword")
+}
+
+fn parse_tick_identify() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Identifier("Tick".to_string())), "tick keyword")
+}
+
+fn parse_state_updated_keyword() -> impl Parser<Token, Token> {
+    with_context(
+        equal(Token::Identifier("StateUpdated".to_string())),
+        "state updated keyword",
+    )
+}
+
+fn parse_answer() -> impl Parser<Token, ast::AnswerDef> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_answer_keyword()),
+                as_unit(parse_open_brace()),
+                many(parse_request_handler()),
+                as_unit(parse_close_brace()),
+            ),
+            |(_, _, handlers, _)| ast::AnswerDef { handlers },
+        ),
+        "answer",
+    )
+}
+
+// RequestHandler用のパーサー
+fn parse_request_handler() -> impl Parser<Token, ast::RequestHandler> {
+    with_context(
+        map(
+            tuple6(
+                as_unit(parse_on_keyword()),
+                parse_request_type(),
+                parse_parameters(),
+                preceded(
+                    as_unit(parse_arrow()),
+                    parse_type_info(),
+                ),
+                optional(parse_constraints()),
+                parse_statements(),
+            ),
+            |(_, request_type, parameters, return_type, constraints, block)| {
+                ast::RequestHandler {
+                    request_type,
+                    parameters,
+                    return_type,
+                    constraints,
+                    block: HandlerBlock { statements: block },
+                }
+            },
+        ),
+        "request handler",
+    )
+}
+
+
+fn parse_request_type() -> impl Parser<Token, ast::RequestType> {
+    with_context(
+        choice(vec![
+            Box::new(map(
+                preceded(
+                    as_unit(parse_query_keyword()),
+                    preceded(as_unit(parse_dot()), parse_identifier()),
+                ),
+                |query_type| ast::RequestType::Query { query_type },
+            )),
+            Box::new(map(
+                preceded(
+                    as_unit(parse_action_keyword()),
+                    preceded(as_unit(parse_dot()), parse_identifier()),
+                ),
+                |action_type| ast::RequestType::Action { action_type },
+            )),
+            Box::new(map(parse_identifier(), |name| {
+                ast::RequestType::Custom(name)
+            })),
+        ]),
+        "request type",
+    )
+}
+
+
+fn parse_constraints() -> impl Parser<Token, ast::Constraints> {
+    with_context(
+        map(
+        preceded(
+            as_unit(parse_with_keyword()),
+            map(
+                delimited(
+                    as_unit(parse_open_brace()),
+                    separated_list(
+                        parse_constraint_item(),
+                        as_unit(parse_comma()),
+                    ),
+                    as_unit(parse_close_brace()),
+                ),
+                |items| {
+                    let mut constraints = ast::Constraints {
+                        strictness: None,
+                        stability: None,
+                        latency: None,
+                    };
+                    for (key, value) in items {
+                        match (key.as_str(), value) {
+                            ("strictness", ast::Literal::Float(v)) => constraints.strictness = Some(v),
+                            ("stability", ast::Literal::Float(v)) => constraints.stability = Some(v),
+                            ("latency", ast::Literal::Integer(v)) => {
+                                constraints.latency = Some(v as u32)
+                            }
+                            _ => {}
+                        }
+                    }
+                    constraints
+                },
+            )),|constraints| constraints,
+        ),
+        "constraints",
+    )
+}
+
+fn parse_constraint_item() -> impl Parser<Token, (String, ast::Literal)> {
+    with_context(
+        map(
+            tuple3(
+                parse_identifier(),
+                as_unit(parse_colon()),
+                parse_literal(),
+            ),
+            |(key, _, value)| (key, value),
+        ),
+        "constraint item",
+    )
+}
+
+fn parse_answer_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Answer)), "answer keyword")
+}
+
+fn parse_query_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Query)), "query keyword")
+}
+
+fn parse_action_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Action)), "action keyword")
+}
+
+fn parse_arrow() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Operator(Operator::Arrow)), "arrow operator")
+}
+
+fn parse_react() -> impl Parser<Token, ast::ReactDef> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_react_keyword()),
+                as_unit(parse_open_brace()),
+                many(parse_event_handler()),  // ObserveDefと同じEventHandlerを使用
+                as_unit(parse_close_brace()),
+            ),
+            |(_, _, handlers, _)| ast::ReactDef { handlers },
+        ),
+        "react",
+    )
+}
+
+fn parse_react_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::React)), "react keyword")
+}
+
+fn parse_world() -> impl Parser<Token, ast::WorldDef> {
+    with_context(
+        map(
+            tuple5(
+                as_unit(parse_world_keyword()),
+                parse_identifier(),
+                parse_open_brace(),
+                many(choice(vec![
+                    Box::new(map(parse_policy(), WorldDefItem::Policy)),
+                    Box::new(map(parse_config(), WorldDefItem::Config)),
+                    Box::new(map(parse_events(), WorldDefItem::Events)),
+                    Box::new(map(parse_handlers(), WorldDefItem::Handlers)),
+                ])),
+                parse_close_brace(),
+            ),
+            |(_, name, _, items, _)| {
+                let mut policies = vec![];
+                let mut config = None;
+                let mut events = None;
+                let mut handlers = None;
+
+                for item in items {
+                    match item {
+                        WorldDefItem::Policy(policy) => policies.push(policy),
+                        WorldDefItem::Config(config_def) => config = Some(config_def),
+                        WorldDefItem::Events(events_def) => events = Some(events_def),
+                        WorldDefItem::Handlers(handlers_def) => handlers = Some(handlers_def),
+                    }
+                }
+
+                ast::WorldDef {
+                    name,
+                    policies,
+                    config,
+                    events: events.unwrap_or_default(),
+                    handlers: handlers.unwrap_or_default(),
+                }
+            },
+        ),
+        "world",
+    )
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+enum WorldDefItem {
+    Policy(ast::Policy),
+    Config(ast::ConfigDef),
+    Events(ast::EventsDef),
+    Handlers(ast::HandlersDef),
+}
+
+fn parse_world_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::World)), "world keyword")
+}
+fn parse_policy() -> impl Parser<Token, ast::Policy> {
+    with_context(
+        map(
+            preceded(as_unit(parse_policy_keyword()), parse_literal()),
+            |text| ast::Policy {
+                text: text.to_string(),
+                scope: ast::PolicyScope::World(Default::default()),
+                internal_id: PolicyId(Uuid::new_v4().to_string()),
+            },
+        ),
+        "policy",
+    )
+}
+
+fn parse_policy_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Policy)), "policy keyword")
+}
+
+fn parse_policy_item() -> impl Parser<Token, (String, ast::Literal)> {
+    with_context(
+        map(
+            tuple3(
+                parse_identifier(),
+                as_unit(parse_colon()),
+                parse_literal(),
+            ),
+            |(name, _, value)| (name, value),
+        ),
+        "policy item",
+    )
+}
+
+fn parse_config() -> impl Parser<Token, ast::ConfigDef> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_config_keyword()),
+                as_unit(parse_open_brace()),
+                many(parse_config_item()),
+                as_unit(parse_close_brace()),
+            ),
+            |(_, _, items, _)| {
+                let items_map = items.into_iter().collect::<HashMap<_, _>>();
+                ast::ConfigDef::from(items_map)
+            },
+        ),
+        "config",
+    )
+}
+
+fn parse_config_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Config)), "config keyword")
+}
+
+fn parse_config_item() -> impl Parser<Token, (String, ast::Literal)> {
+    with_context(
+        map(
+            tuple3(parse_identifier(), as_unit(parse_colon()), parse_literal()),
+            |(name, _, value)| (name, value),
+        ),
+        "config item",
+    )
+}
+
+fn parse_events() -> impl Parser<Token, ast::EventsDef> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_events_keyword()),
+                as_unit(parse_open_brace()),
+                many(parse_event()),
+                as_unit(parse_close_brace()),
+            ),
+            |(_, _, events, _)| ast::EventsDef { events },
+        ),
+        "events",
+    )
+}
+
+fn parse_events_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Events)), "events keyword")
+}
+
+fn parse_event() -> impl Parser<Token, ast::CustomEventDef> {
+    with_context(
+        map(
+            tuple2(parse_identifier(), parse_parameters()),
+            |(name, parameters)| ast::CustomEventDef { name, parameters },
+        ),
+        "event",
+    )
+}
+
+fn parse_handlers() -> impl Parser<Token, ast::HandlersDef> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_handlers_keyword()),
+                as_unit(parse_open_brace()),
+                many(parse_handler()),
+                as_unit(parse_close_brace()),
+            ),
+            |(_, _, handlers, _)| ast::HandlersDef { handlers },
+        ),
+        "handlers",
+    )
+}
+
+fn parse_handlers_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Handlers)), "handlers keyword")
+}
+
+fn parse_handler() -> impl Parser<Token, ast::HandlerDef> {
+    with_context(
+        map(
+            tuple4(
+                as_unit(parse_on_keyword()),
+                parse_identifier(),
+                parse_parameters(),
+                parse_statements(),
+            ),
+            |(_, event_name, parameters, block)| ast::HandlerDef {
+                event_name,
+                parameters,
+                block: HandlerBlock { statements: block },
+            },
+        ),
+        "handler",
+    )
+}
+
+fn parse_on_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::On)), "on keyword")
+}
+
+fn parse_parameters() -> impl Parser<Token, Vec<ast::Parameter>> {
+    with_context(
+        map(
+            delimited(
+                as_unit(parse_open_paren()),
+                separated_list(parse_parameter(), as_unit(parse_comma())),
+                as_unit(parse_close_paren()),
+            ),
+            |parameters| parameters,
+        ),
+        "parameters",
+    )
+}
+
+fn parse_parameter() -> impl Parser<Token, ast::Parameter> {
+    with_context(
+        map(
+            tuple3(
+                parse_identifier(),
+                as_unit(parse_colon()),
+                parse_type_info(),
+            ),
+            |(name, _, type_info)| ast::Parameter { name, type_info },
+        ),
+        "parameter",
+    )
+}
 
 fn parse_statement() -> impl Parser<Token, ast::Statement> {
     with_context(
@@ -269,7 +902,7 @@ fn parse_assignment_target() -> impl Parser<Token, Vec<ast::Expression>> {
                 ),
                 |(target, targets)| {
                     let mut acc = vec![target];
-                    acc.extend(targets.iter().map(|t| t.1.clone()).collect::<Vec<_>>());
+                    acc.extend(targets.to_vec());
                     acc
                 },
             )),
@@ -282,7 +915,7 @@ fn parse_return_statement() -> impl Parser<Token, ast::Statement> {
     with_context(
         map(
             preceded(as_unit(parse_return_keyword()), parse_expression()),
-            |(_, value)| ast::Statement::Return(value),
+             ast::Statement::Return,
         ),
         "return statement",
     )
@@ -360,7 +993,7 @@ fn parse_else_statement() -> impl Parser<Token, ast::Statements> {
     with_context(
         map(
             preceded(as_unit(parse_else_keyword()), parse_statements()),
-            |(_, block)| block,
+            |block| block,
         ),
         "else statement",
     )
@@ -415,7 +1048,7 @@ fn parse_type_info() -> impl Parser<Token, ast::TypeInfo> {
 
 fn parse_field() -> impl Parser<Token, (String, FieldInfo)> {
     with_context(
-        preceded(
+        tuple2(
             parse_identifier(),
             choice(vec![
                 Box::new(parse_field_typed_with_default()),
@@ -448,8 +1081,8 @@ fn parse_field_typed_with_default() -> impl Parser<Token, FieldInfo> {
 fn parse_field_typed() -> impl Parser<Token, FieldInfo> {
     with_context(
         map(
-            preceded(parse_colon(), parse_type_reference()),
-            |(_, type_info)| FieldInfo {
+            preceded(as_unit(parse_colon()), parse_type_reference()),
+            |type_info| FieldInfo {
                 type_info: Some(type_info),
                 default_value: None,
             },
@@ -460,7 +1093,7 @@ fn parse_field_typed() -> impl Parser<Token, FieldInfo> {
 
 fn parse_field_inferred() -> impl Parser<Token, FieldInfo> {
     with_context(
-        map(preceded(parse_equal(), parse_expression()), |(_, value)| {
+        map(preceded(as_unit(parse_equal()), parse_expression()), |value| {
             FieldInfo {
                 type_info: None,
                 default_value: Some(value),
@@ -486,7 +1119,7 @@ fn parse_type_reference() -> impl Parser<Token, TypeInfo> {
 fn parse_custom_type() -> impl Parser<Token, TypeInfo> {
     with_context(
         map(
-            preceded(
+            tuple2(
                 parse_identifier(),
                 delimited(
                     as_unit(parse_open_brace()),
@@ -526,7 +1159,7 @@ fn parse_array_type() -> impl Parser<Token, ast::TypeInfo> {
 
 fn parse_generic_single_arg(type_name: &'static str) -> impl Parser<Token, Box<TypeInfo>> {
     map(
-        preceded(
+        tuple2(
             expected(parse_identifier(), type_name.to_string()),
             delimited(
                 as_unit(parse_open_brace()),
@@ -576,9 +1209,9 @@ fn parse_binary_expression() -> impl Parser<Token, ast::Expression> {
 fn parse_logical_or() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
-            preceded(
+            tuple2(
                 parse_logical_and(),
-                many(preceded(parse_operator_or(), parse_logical_and())),
+                many(tuple2(parse_operator_or(), parse_logical_and())),
             ),
             |(first, rest)| {
                 rest.into_iter()
@@ -596,9 +1229,9 @@ fn parse_logical_or() -> impl Parser<Token, ast::Expression> {
 fn parse_logical_and() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
-            preceded(
+            tuple2(
                 parse_comparison(),
-                many(preceded(parse_operator_and(), parse_comparison())),
+                many(tuple2(parse_operator_and(), parse_comparison())),
             ),
             |(first, rest)| {
                 rest.into_iter()
@@ -616,9 +1249,9 @@ fn parse_logical_and() -> impl Parser<Token, ast::Expression> {
 fn parse_comparison() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
-            preceded(
+            tuple2(
                 parse_additive(),
-                many(preceded(parse_operator_comparison(), parse_additive())),
+                many(tuple2(parse_operator_comparison(), parse_additive())),
             ),
             |(first, rest)| {
                 rest.into_iter()
@@ -698,9 +1331,9 @@ fn parse_comparison_less_equal() -> impl Parser<Token, ast::BinaryOperator> {
 fn parse_additive() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
-            preceded(
+            tuple2(
                 parse_multiplicative(),
-                many(preceded(
+                many(tuple2(
                     choice(vec![
                         Box::new(parse_operator_add()),
                         Box::new(parse_operator_subtract()),
@@ -725,9 +1358,9 @@ fn parse_additive() -> impl Parser<Token, ast::Expression> {
 fn parse_multiplicative() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
-            preceded(
+            tuple2(
                 parse_unary(),
-                many(preceded(
+                many(tuple2(
                     choice(vec![
                         Box::new(parse_operator_multiply()),
                         Box::new(parse_operator_divide()),
@@ -752,7 +1385,7 @@ fn parse_unary() -> impl Parser<Token, ast::Expression> {
     with_context(
         choice(vec![
             Box::new(map(
-                preceded(parse_operator_not(), parse_primary()),
+                tuple2(parse_operator_not(), parse_primary()),
                 |(op, expr)| ast::Expression::BinaryOp {
                     op,
                     left: Box::new(expr),
@@ -762,7 +1395,7 @@ fn parse_unary() -> impl Parser<Token, ast::Expression> {
                 },
             )),
             Box::new(map(
-                preceded(parse_operator_minus(), parse_primary()),
+                tuple2(parse_operator_minus(), parse_primary()),
                 |(op, expr)| ast::Expression::BinaryOp {
                     op,
                     left: Box::new(expr),
@@ -815,14 +1448,14 @@ fn parse_primary() -> impl Parser<Token, ast::Expression> {
 fn parse_state_access() -> impl Parser<Token, ast::StateAccessPath> {
     with_context(
         map(
-            preceded(
+            tuple2(
                 parse_identifier(),
                 many(preceded(as_unit(parse_dot()), parse_identifier())),
             ),
             |(first, rest)| {
                 ast::StateAccessPath(
                     std::iter::once(first)
-                        .chain(rest.into_iter().map(|s| s.1.to_string()))
+                        .chain(rest.into_iter().map(|s| s.to_string()))
                         .collect::<Vec<_>>(),
                 )
             },
@@ -838,7 +1471,7 @@ fn parse_dot() -> impl Parser<Token, Token> {
 fn parse_function_call() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
-            preceded(
+            tuple2(
                 parse_identifier(),
                 delimited(
                     as_unit(parse_open_paren()),
@@ -929,7 +1562,7 @@ fn parse_think_attributes() -> impl Parser<Token, ast::ThinkAttributes> {
                     as_unit(parse_close_brace()),
                 ),
             ),
-            |(_, settings)| collect_with_settings(settings),
+             collect_with_settings,
         ),
         "think attributes",
     )
@@ -1055,8 +1688,13 @@ fn parse_request_keyword() -> impl Parser<Token, Token> {
 fn parse_ok() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
-            preceded(as_unit(parse_ok_ident()), parse_expression()),
-            |(_, expression)| ast::Expression::Ok(Box::new(expression)),
+            preceded(as_unit(parse_ok_ident()),
+             delimited(
+                as_unit(parse_open_paren()),
+                parse_expression(),
+                as_unit(parse_close_paren()),
+            )),
+            |expression| ast::Expression::Ok(Box::new(expression)),
         ),
         "Ok expression",
     )
@@ -1069,8 +1707,13 @@ fn parse_ok_ident() -> impl Parser<Token, Token> {
 fn parse_err() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
-            preceded(as_unit(parse_err_ident()), parse_expression()),
-            |(_, expression)| ast::Expression::Err(Box::new(expression)),
+            preceded(as_unit(parse_err_ident()), 
+            delimited(
+                as_unit(parse_open_paren()),
+                parse_expression(),
+            as_unit(parse_close_paren()),
+            )),
+            |expression| ast::Expression::Err(Box::new(expression)),
         ),
         "Err expression",
     )
@@ -1094,7 +1737,7 @@ fn parse_await_single() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
             preceded(as_unit(parse_await_keyword()), parse_expression()),
-            |(_, expression)| ast::Expression::Await(vec![expression]),
+            |expression| ast::Expression::Await(vec![expression]),
         ),
         "await single",
     )
@@ -1111,7 +1754,7 @@ fn parse_await_multiple() -> impl Parser<Token, ast::Expression> {
                     as_unit(parse_close_paren()),
                 ),
             ),
-            |(_, expressions)| ast::Expression::Await(expressions),
+            ast::Expression::Await,
         ),
         "await multiple",
     )
@@ -1289,7 +1932,7 @@ fn parse_fixed_delay() -> impl Parser<Token, ast::RetryDelay> {
     with_context(
         map(
             preceded(as_unit(parse_fixed_ident()), parse_u64()),
-            |(_, s)| ast::RetryDelay::Fixed(s),
+             ast::RetryDelay::Fixed,
         ),
         "Fixed",
     )
@@ -1306,7 +1949,7 @@ fn parse_exponential_delay() -> impl Parser<Token, ast::RetryDelay> {
                 as_unit(parse_exponential_ident()),
                 tuple3(parse_u64(), as_unit(parse_comma()), parse_u64()),
             ),
-            |(_, (initial, _, max))| ast::RetryDelay::Exponential { initial, max },
+            |(initial, _, max)| ast::RetryDelay::Exponential { initial, max },
         ),
         "Exponential",
     )
@@ -1350,6 +1993,22 @@ fn parse_bool(b: bool) -> impl Parser<Token, ast::Literal> {
 // nullリテラル
 fn parse_null() -> impl Parser<Token, ast::Literal> {
     map(equal(Token::Literal(Literal::Null)), |_| ast::Literal::Null)
+}
+
+#[test]
+fn test_return_null() {
+    let input = vec![
+        Token::Keyword(Keyword::Return),
+        Token::Literal(Literal::Null),
+    ];
+    let result = parse_return_statement().parse(&input, 0);
+    assert_eq!(
+        result,
+        Ok((
+            2,
+            ast::Statement::Return(ast::Expression::Literal(ast::Literal::Null))
+        ))
+    );
 }
 
 fn parse_comma() -> impl Parser<Token, Token> {
@@ -1416,25 +2075,25 @@ fn parse_duration_unit() -> impl Parser<Token, String> {
 }
 
 fn parse_duration_millis() -> impl Parser<Token, ast::Literal> {
-    map(preceded(parse_u64(), parse_ms()), |(value, _)| {
+    map(tuple2(parse_u64(), parse_ms()), |(value, _)| {
         ast::Literal::Duration(Duration::from_millis(value))
     })
 }
 
 fn parse_duration_sec() -> impl Parser<Token, ast::Literal> {
-    map(preceded(parse_u64(), parse_sec()), |(value, _)| {
+    map(tuple2(parse_u64(), parse_sec()), |(value, _)| {
         ast::Literal::Duration(Duration::from_secs(value))
     })
 }
 
 fn parse_duration_min() -> impl Parser<Token, ast::Literal> {
-    map(preceded(parse_u64(), parse_min()), |(value, _)| {
+    map(tuple2(parse_u64(), parse_min()), |(value, _)| {
         ast::Literal::Duration(Duration::from_secs(value * 60))
     })
 }
 
 fn parse_duration_hour() -> impl Parser<Token, ast::Literal> {
-    map(preceded(parse_u64(), parse_hour()), |(value, _)| {
+    map(tuple2(parse_u64(), parse_hour()), |(value, _)| {
         ast::Literal::Duration(Duration::from_secs(value * 60 * 60))
     })
 }
@@ -1498,6 +2157,536 @@ mod tests {
     use crate::tokenizer::literal::StringPart;
 
     use super::*;
+
+
+#[test]
+fn test_parse_agent_def() {
+    let input = vec![
+        Token::Keyword(Keyword::Micro),
+        Token::Identifier("TestAgent".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        // State block
+        Token::Keyword(Keyword::State),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("counter".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("Integer".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::Integer(0)),
+        Token::Delimiter(Delimiter::Semicolon),
+        Token::Delimiter(Delimiter::CloseBrace),
+        // Observe block
+        Token::Keyword(Keyword::Observe),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::On),
+        Token::Identifier("Tick".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Literal(Literal::Null),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+
+    let expected = ast::MicroAgentDef {
+        name: "TestAgent".to_string(),
+        policies: vec![],
+        lifecycle: None,
+        state: Some(ast::StateDef {
+            variables: {
+                let mut vars = HashMap::new();
+                vars.insert(
+                    "counter".to_string(),
+                    ast::StateVarDef {
+                        name: "counter".to_string(),
+                        type_info: TypeInfo::Simple("Integer".to_string()),
+                        initial_value: Some(ast::Expression::Literal(ast::Literal::Integer(0))),
+                    },
+                );
+                vars
+            },
+        }),
+        observe: Some(ast::ObserveDef {
+            handlers: vec![ast::EventHandler {
+                event_type: ast::EventType::Tick,
+                parameters: vec![],
+                block: HandlerBlock {
+                    statements: vec![Statement::Return(ast::Expression::Literal(ast::Literal::Null))],
+                },
+            }],
+        }),
+        answer: None,
+        react: None,
+    };
+
+    assert_eq!(parse_agent_def().parse(&input, 0), Ok((input.len(), expected)));
+}
+
+#[test]
+fn test_parse_lifecycle() {
+    let input = vec![
+        Token::Keyword(Keyword::Lifecycle),
+        Token::Delimiter(Delimiter::OpenBrace),
+        // init handler
+        Token::Keyword(Keyword::OnInit),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Literal(Literal::Null),
+        Token::Delimiter(Delimiter::CloseBrace),
+        // destroy handler
+        Token::Keyword(Keyword::OnDestroy),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Literal(Literal::Null),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+
+    let expected = ast::LifecycleDef {
+        on_init: Some(HandlerBlock {
+            statements: vec![Statement::Return(ast::Expression::Literal(ast::Literal::Null))],
+        }),
+        on_destroy: Some(HandlerBlock {
+            statements: vec![Statement::Return(ast::Expression::Literal(ast::Literal::Null))],
+        }),
+    };
+
+    assert_eq!(parse_lifecycle().parse(&input, 0), Ok((input.len(), expected)));
+}
+
+#[test]
+fn test_parse_state() {
+    let input = vec![
+        Token::Keyword(Keyword::State),
+        Token::Delimiter(Delimiter::OpenBrace),
+        // 変数1: 初期値あり
+        Token::Identifier("counter".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("Integer".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::Integer(0)),
+        Token::Delimiter(Delimiter::Semicolon),
+        // 変数2: 初期値なし
+        Token::Identifier("name".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::Semicolon),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+
+    let expected = ast::StateDef {
+        variables: {
+            let mut vars = HashMap::new();
+            vars.insert(
+                "counter".to_string(),
+                ast::StateVarDef {
+                    name: "counter".to_string(),
+                    type_info: TypeInfo::Simple("Integer".to_string()),
+                    initial_value: Some(ast::Expression::Literal(ast::Literal::Integer(0))),
+                },
+            );
+            vars.insert(
+                "name".to_string(),
+                ast::StateVarDef {
+                    name: "name".to_string(),
+                    type_info: TypeInfo::Simple("String".to_string()),
+                    initial_value: None,
+                },
+            );
+            vars
+        },
+    };
+
+    assert_eq!(parse_state().parse(&input, 0), Ok((input.len(), expected)));
+}
+
+
+#[test]
+fn test_parse_observe() {
+    let input = vec![
+        Token::Keyword(Keyword::Observe),
+        Token::Delimiter(Delimiter::OpenBrace),
+        // イベントハンドラー1: Tickイベント
+        Token::Keyword(Keyword::On),
+        Token::Identifier("Tick".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Literal(Literal::Null),
+        Token::Delimiter(Delimiter::CloseBrace),
+        // イベントハンドラー2: カスタムイベント
+        Token::Keyword(Keyword::On),
+        Token::Identifier("CustomEvent".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Identifier("param".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Identifier("param".to_string()),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+        
+    ];
+
+    let expected = ast::ObserveDef {
+        handlers: vec![
+            ast::EventHandler {
+                event_type: ast::EventType::Tick,
+                parameters: vec![],
+                block: HandlerBlock {
+                    statements: vec![ast::Statement::Return(ast::Expression::Literal(ast::Literal::Null))],
+                },
+            },
+            ast::EventHandler {
+                event_type: ast::EventType::Custom("CustomEvent".to_string()),
+                parameters: vec![ast::Parameter {
+                    name: "param".to_string(),
+                    type_info: TypeInfo::Simple("String".to_string()),
+                }],
+                block: HandlerBlock {
+                    statements: vec![ast::Statement::Return(ast::Expression::Variable("param".to_string()))],
+                },
+            },
+        ],
+    };
+
+    assert_eq!(parse_observe().parse(&input, 0), Ok((input.len(), expected)));
+}
+
+
+#[test]
+fn test_parse_answer() {
+    let input = vec![
+        Token::Keyword(Keyword::Answer),
+        Token::Delimiter(Delimiter::OpenBrace),
+        // リクエストハンドラー1: シンプルなクエリ
+        Token::Keyword(Keyword::On),
+        Token::Keyword(Keyword::Query),
+        Token::Operator(Operator::Dot),
+        Token::Identifier("GetData".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Operator(Operator::Arrow),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Literal(Literal::String(vec![StringPart::Literal("data".to_string())])),
+        Token::Delimiter(Delimiter::CloseBrace),
+        // リクエストハンドラー2: 制約付きアクション
+        Token::Keyword(Keyword::On),
+        Token::Keyword(Keyword::Action),
+        Token::Operator(Operator::Dot),
+        Token::Identifier("DoSomething".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Identifier("input".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Operator(Operator::Arrow),
+        Token::Identifier("Result".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::Comma),
+        Token::Identifier("Error".to_string()),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Keyword(Keyword::With),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("strictness".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::Float(0.8)),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Identifier("Ok".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Identifier("input".to_string()),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+
+    let expected = ast::AnswerDef {
+        handlers: vec![
+            ast::RequestHandler {
+                request_type: ast::RequestType::Query {
+                    query_type: "GetData".to_string(),
+                },
+                parameters: vec![],
+                return_type: TypeInfo::Simple("String".to_string()),
+                constraints: None,
+                block: HandlerBlock {
+                    statements: vec![Statement::Return(ast::Expression::Literal(
+                        ast::Literal::String("data".to_string()),
+                    ))],
+                },
+            },
+            ast::RequestHandler {
+                request_type: ast::RequestType::Action {
+                    action_type: "DoSomething".to_string(),
+                },
+                parameters: vec![ast::Parameter {
+                    name: "input".to_string(),
+                    type_info: TypeInfo::Simple("String".to_string()),
+                }],
+                return_type: TypeInfo::Result {
+                    ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+                    err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                },
+                constraints: Some(ast::Constraints {
+                    strictness: Some(0.8),
+                    stability: None,
+                    latency: None,
+                }),
+                block: HandlerBlock {
+                    statements: vec![Statement::Return(ast::Expression::Ok(Box::new(
+                        ast::Expression::Variable("input".to_string()),
+                    )))],
+                },
+            },
+        ],
+    };
+
+    assert_eq!(parse_answer().parse(&input, 0), Ok((input.len(), expected)));
+}
+
+
+#[test]
+fn test_parse_react() {
+    let input = vec![
+        Token::Keyword(Keyword::React),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::On),
+        Token::Identifier("StateUpdated".to_string()),
+        Token::Operator(Operator::Dot),
+        Token::Identifier("other_agent".to_string()),
+        Token::Operator(Operator::Dot),
+        Token::Identifier("status".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Identifier("new_status".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Identifier("new_status".to_string()),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+
+    let expected = ast::ReactDef {
+        handlers: vec![ast::EventHandler {
+            event_type: ast::EventType::StateUpdated {
+                agent_name: "other_agent".to_string(),
+                state_name: "status".to_string(),
+            },
+            parameters: vec![ast::Parameter {
+                name: "new_status".to_string(),
+                type_info: TypeInfo::Simple("String".to_string()),
+            }],
+            block: HandlerBlock {
+                statements: vec![Statement::Return(ast::Expression::Variable(
+                    "new_status".to_string(),
+                ))],
+            },
+        }],
+    };
+
+    assert_eq!(parse_react().parse(&input, 0), Ok((input.len(), expected)));
+}
+
+
+#[test]
+fn test_parse_world() {
+    let input = vec![
+        Token::Keyword(Keyword::World),
+        Token::Identifier("test".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Policy),
+        Token::Literal(Literal::String(vec![StringPart::Literal("test".to_string())])),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+    let (rest, world) = parse_world().parse(&input, 0).unwrap();
+    assert_eq!(rest, 6);
+    assert_eq!(
+        world,
+        ast::WorldDef {
+            name: "test".to_string(),
+            policies: vec![ast::Policy {
+                text: "test".to_string(),
+                scope: ast::PolicyScope::World(Default::default()),
+                internal_id: world.policies[0].internal_id.clone(), // PolicyId is randomly generated
+            }],
+            config: None,
+            events: ast::EventsDef { events: vec![] },
+            handlers: ast::HandlersDef { handlers: vec![] },
+        }
+    );
+}
+
+
+#[test]
+fn test_parse_config() {
+    let input = vec![
+        Token::Keyword(Keyword::Config),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("name".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::Integer(1)),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+    let (rest, config) = parse_config().parse(&input, 0).unwrap();
+    assert_eq!(rest, 6);
+    let mut items = HashMap::new();
+    items.insert("name".to_string(), ast::Literal::Integer(1));
+    assert_eq!(config, ast::ConfigDef::from(items));
+}
+
+#[test]
+fn test_parse_config_item() {
+    let input = vec![
+        Token::Identifier("name".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::Integer(1)),
+    ];
+    let (rest, item) = parse_config_item().parse(&input, 0).unwrap();
+    assert_eq!(rest, 3);
+    assert_eq!(item, ("name".to_string(), ast::Literal::Integer(1)));
+}
+
+    #[test]
+    fn test_parse_events() {
+        let input = vec![
+            Token::Keyword(Keyword::Events),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Identifier("test".to_string()),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Delimiter(Delimiter::CloseBrace),
+        ];
+        let result = parse_events().parse(&input, 0);
+        assert_eq!(
+            result,
+            Ok((
+                6,
+                ast::EventsDef {
+                    events: vec![ast::CustomEventDef {
+                        name: "test".to_string(),
+                        parameters: vec![]
+                    }]
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_parse_hadlers() {
+        let input = vec![
+            Token::Keyword(Keyword::Handlers),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Keyword(Keyword::On),
+            Token::Identifier("event".to_string()),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("param1".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Identifier("String".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Keyword(Keyword::Return),
+            Token::Identifier("param1".to_string()),
+            Token::Delimiter(Delimiter::CloseBrace),
+            Token::Delimiter(Delimiter::CloseBrace),
+        ];
+        let expected = ast::HandlersDef {
+            handlers: vec![ast::HandlerDef {
+                event_name: "event".to_string(),
+                parameters: vec![ast::Parameter {
+                    name: "param1".to_string(),
+                    type_info: TypeInfo::Simple("String".to_string()),
+                }],
+                block: HandlerBlock {
+                    statements: vec![Statement::Return(ast::Expression::Variable(
+                        "param1".to_string(),
+                    ))],
+                },
+            }],
+        };
+        assert_eq!(
+            parse_handlers().parse(&input, 0),
+            Ok((input.len(), expected))
+        );
+    }
+
+    #[test]
+    fn test_parse_handler() {
+        let input = vec![
+            Token::Keyword(Keyword::On),
+            Token::Identifier("event".to_string()),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("param1".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Identifier("String".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+            Token::Delimiter(Delimiter::OpenBrace),
+            Token::Keyword(Keyword::Return),
+            Token::Identifier("param1".to_string()),
+            Token::Delimiter(Delimiter::CloseBrace),
+        ];
+        let expected = ast::HandlerDef {
+            event_name: "event".to_string(),
+            parameters: vec![ast::Parameter {
+                name: "param1".to_string(),
+                type_info: TypeInfo::Simple("String".to_string()),
+            }],
+            block: HandlerBlock {
+                statements: vec![Statement::Return(ast::Expression::Variable(
+                    "param1".to_string(),
+                ))],
+            },
+        };
+        assert_eq!(
+            parse_handler().parse(&input, 0),
+            Ok((input.len(), expected))
+        );
+    }
+
+    #[test]
+    fn test_parse_parameter() {
+        let input = vec![
+            Token::Identifier("name".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Identifier("String".to_string()),
+        ];
+        let expected = ast::Parameter {
+            name: "name".to_string(),
+            type_info: TypeInfo::Simple("String".to_string()),
+        };
+        assert_eq!(parse_parameter().parse(&input, 0), Ok((3, expected)));
+    }
+
+    #[test]
+    fn test_parse_parameters() {
+        let input = vec![
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Identifier("param1".to_string()),
+            Token::Delimiter(Delimiter::Colon),
+            Token::Identifier("String".to_string()),
+            Token::Delimiter(Delimiter::CloseParen),
+        ];
+        let expected = vec![ast::Parameter {
+            name: "param1".to_string(),
+            type_info: TypeInfo::Simple("String".to_string()),
+        }];
+        assert_eq!(parse_parameters().parse(&input, 0), Ok((5, expected)));
+    }
 
     #[test]
     fn test_parse_type_info() {
@@ -3157,6 +4346,22 @@ mod tests {
                 }
             }
             _ => panic!("Expected UnaryOp"),
+        }
+        // without unary operator
+        let input = &[Token::Literal(Literal::Integer(42))];
+        let (pos, expr) = parse_unary().parse(input, 0).unwrap();
+        assert_eq!(pos, 1);
+        match expr {
+            ast::Expression::Literal(ast::Literal::Integer(n)) => assert_eq!(n, 42),
+            _ => panic!("Expected Integer literal 42"),
+        }
+        // without unary operator, null
+        let input = &[Token::Literal(Literal::Null)];
+        let (pos, expr) = parse_unary().parse(input, 0).unwrap();
+        assert_eq!(pos, 1);
+        match expr {
+            ast::Expression::Literal(ast::Literal::Null) => {}
+            _ => panic!("Expected Null literal"),
         }
     }
 

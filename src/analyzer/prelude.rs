@@ -37,10 +37,10 @@ pub fn choice<I, O: Clone>(parsers: Vec<Box<dyn Parser<I, O>>>) -> Choice<I, O> 
     Choice::new(parsers)
 }
 
-pub fn preceded<P1, P2, I, O1, O2>(parser1: P1, parser2: P2) -> Preceded<P1, P2, I, O1, O2>
+pub fn preceded<P1, P2, I, O>(parser1: P1, parser2: P2) -> Preceded<P1, P2, I, O>
 where
-    P1: Parser<I, O1>,
-    P2: Parser<I, O2>,
+    P1: Parser<I, ()>,
+    P2: Parser<I, O>,
     I: Clone,
 {
     Preceded::new(parser1, parser2)
