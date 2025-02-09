@@ -1,8 +1,6 @@
 use super::core::ParseError;
 use super::core::ParseResult;
 use super::core::Parser;
-use core::fmt;
-use std::fmt::Display;
 use std::marker::PhantomData;
 
 // Expected: 入力値を変換し、その結果が value と一致する場合のみ成功し、value を返す
@@ -1001,7 +999,7 @@ mod tests {
         // 失敗するケース (最初の要素で失敗)
         let separated_list_parser =
             SeparatedList::new(item_parser.clone(), separator_parser.clone());
-        assert_eq!(separated_list_parser.parse(&input, 1), Err(ParseError::EOF));
+        assert_eq!(separated_list_parser.parse(&[], 1), Err(ParseError::EOF));
 
         // 失敗するケース (セパレータで失敗)
         let separated_list_parser =
