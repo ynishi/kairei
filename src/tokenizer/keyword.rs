@@ -4,7 +4,6 @@ use nom::{
     combinator::{map, value},
     error::context,
 };
-use serde::de::value;
 
 use super::token::{ParserResult, Token};
 
@@ -42,6 +41,7 @@ pub enum Keyword {
     Lifecycle,
     With,
     On,
+    #[strum(serialize = "reThrow")]
     ReThrow,
 }
 
@@ -77,11 +77,12 @@ pub fn parse_keyword(input: &str) -> ParserResult<Token> {
                 )),
                 alt((
                     value(Keyword::OnDestroy, tag("onDestroy")),
+                    value(Keyword::Lifecycle, tag("lifecycle")),
                     value(Keyword::With, tag("with")),
                     value(Keyword::On, tag("on")),
                     value(Keyword::ReThrow, tag("reThrow")),
                     // TODO: Add more keywords when Keywords enum is updated
-                ))
+                )),
             )),
             Token::Keyword,
         ),
@@ -118,6 +119,7 @@ mod tests {
     #[test]
     fn test_all_keyword() {
         for keyword_string in Keyword::iter().map(|t| t.to_string()) {
+            debug!("Testing keyword: {}", keyword_string);
             let (rest, token) = parse_keyword(&keyword_string).unwrap();
             let k = Keyword::from_str(&keyword_string).unwrap();
             assert_eq!(token, Token::Keyword(k));

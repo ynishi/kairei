@@ -58,7 +58,9 @@ fn test_parse_agent_def() {
                 event_type: ast::EventType::Tick,
                 parameters: vec![],
                 block: ast::HandlerBlock {
-                    statements: vec![ast::Statement::Return(ast::Expression::Literal(ast::Literal::Null))],
+                    statements: vec![ast::Statement::Return(ast::Expression::Literal(
+                        ast::Literal::Null,
+                    ))],
                 },
             }],
         }),
@@ -66,7 +68,10 @@ fn test_parse_agent_def() {
         react: None,
     };
 
-    assert_eq!(parse_agent_def().parse(&input, 0), Ok((input.len(), expected)));
+    assert_eq!(
+        parse_agent_def().parse(&input, 0),
+        Ok((input.len(), expected))
+    );
 }
 
 #[test]
@@ -95,14 +100,21 @@ fn test_parse_lifecycle() {
 
     let expected = ast::LifecycleDef {
         on_init: Some(ast::HandlerBlock {
-            statements: vec![ast::Statement::Return(ast::Expression::Literal(ast::Literal::Null))],
+            statements: vec![ast::Statement::Return(ast::Expression::Literal(
+                ast::Literal::Null,
+            ))],
         }),
         on_destroy: Some(ast::HandlerBlock {
-            statements: vec![ast::Statement::Return(ast::Expression::Literal(ast::Literal::Null))],
+            statements: vec![ast::Statement::Return(ast::Expression::Literal(
+                ast::Literal::Null,
+            ))],
         }),
     };
 
-    assert_eq!(parse_lifecycle().parse(&input, 0), Ok((input.len(), expected)));
+    assert_eq!(
+        parse_lifecycle().parse(&input, 0),
+        Ok((input.len(), expected))
+    );
 }
 
 #[test]
@@ -150,4 +162,3 @@ fn test_parse_state() {
 
     assert_eq!(parse_state().parse(&input, 0), Ok((input.len(), expected)));
 }
-

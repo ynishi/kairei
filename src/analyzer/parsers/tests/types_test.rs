@@ -1,10 +1,9 @@
 use crate::analyzer::parsers::types::*;
-use crate::analyzer::{parsers::*, Parser};
+use crate::analyzer::Parser;
 use crate::ast;
 use crate::tokenizer::literal::StringPart;
 use crate::tokenizer::symbol::Delimiter;
 use crate::tokenizer::{literal::Literal, token::Token};
-
 
 #[test]
 fn test_parse_type_info() {
@@ -103,7 +102,10 @@ fn test_parse_custom_type_with_type_only() {
         ast::TypeInfo::Custom { name, fields } => {
             assert_eq!(name, "Person");
             let field = fields.get("age").unwrap();
-            assert_eq!(field.type_info, Some(ast::TypeInfo::Simple("Int".to_string())));
+            assert_eq!(
+                field.type_info,
+                Some(ast::TypeInfo::Simple("Int".to_string()))
+            );
             assert_eq!(field.default_value, None);
         }
         _ => panic!("Expected Custom type"),

@@ -1,6 +1,12 @@
-use crate::{analyzer::parsers::{expression::*, statement::*, *}, tokenizer::{keyword::Keyword, literal::{Literal, StringPart}, symbol::Delimiter, token::Token}};
-use super::{super::super::{core::*, prelude::*}, react::*};
+use super::{
+    super::super::{core::*, prelude::*},
+    react::*,
+};
 use crate::ast;
+use crate::{
+    analyzer::parsers::{expression::*, statement::*, *},
+    tokenizer::{keyword::Keyword, token::Token},
+};
 
 pub fn parse_observe() -> impl Parser<Token, ast::ObserveDef> {
     with_context(
@@ -36,7 +42,6 @@ pub fn parse_event_handler() -> impl Parser<Token, ast::EventHandler> {
     )
 }
 
-
 fn parse_event_type() -> impl Parser<Token, ast::EventType> {
     with_context(
         choice(vec![
@@ -53,9 +58,7 @@ fn parse_event_type() -> impl Parser<Token, ast::EventType> {
                     state_name,
                 },
             )),
-            Box::new(map(parse_identifier(), |name| {
-                ast::EventType::Custom(name)
-            })),
+            Box::new(map(parse_identifier(), ast::EventType::Custom)),
         ]),
         "event type",
     )
