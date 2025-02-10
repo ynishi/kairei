@@ -1,7 +1,12 @@
-use crate::{analyzer::parsers::{statement::*, types::*, *}, tokenizer::{keyword::Keyword,  token::Token}};
-use super::{super::super::{core::*, prelude::*}, observe::*};
+use super::{
+    super::super::{core::*, prelude::*},
+    observe::*,
+};
 use crate::ast;
-
+use crate::{
+    analyzer::parsers::{statement::*, types::*, *},
+    tokenizer::{keyword::Keyword, token::Token},
+};
 
 pub fn parse_react() -> impl Parser<Token, ast::ReactDef> {
     with_context(
@@ -9,7 +14,7 @@ pub fn parse_react() -> impl Parser<Token, ast::ReactDef> {
             tuple4(
                 as_unit(parse_react_keyword()),
                 as_unit(parse_open_brace()),
-                many(parse_event_handler()),  // ObserveDefと同じEventHandlerを使用
+                many(parse_event_handler()), // ObserveDefと同じEventHandlerを使用
                 as_unit(parse_close_brace()),
             ),
             |(_, _, handlers, _)| ast::ReactDef { handlers },

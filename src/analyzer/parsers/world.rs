@@ -1,8 +1,16 @@
 use uuid::Uuid;
 
-use crate::{tokenizer::{keyword::Keyword, token::Token}, PolicyId};
-use super::{handlers::react::*, super::{core::*, prelude::*}, types::parse_type_info, *};
+use super::{
+    super::{core::*, prelude::*},
+    handlers::react::*,
+    types::parse_type_info,
+    *,
+};
 use crate::ast;
+use crate::{
+    tokenizer::{keyword::Keyword, token::Token},
+    PolicyId,
+};
 use std::collections::HashMap;
 
 pub fn parse_world() -> impl Parser<Token, ast::WorldDef> {
@@ -48,7 +56,6 @@ pub fn parse_world() -> impl Parser<Token, ast::WorldDef> {
     )
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
 enum WorldDefItem {
     Policy(ast::Policy),
@@ -81,11 +88,7 @@ fn parse_policy_keyword() -> impl Parser<Token, Token> {
 fn parse_policy_item() -> impl Parser<Token, (String, ast::Literal)> {
     with_context(
         map(
-            tuple3(
-                parse_identifier(),
-                as_unit(parse_colon()),
-                parse_literal(),
-            ),
+            tuple3(parse_identifier(), as_unit(parse_colon()), parse_literal()),
             |(name, _, value)| (name, value),
         ),
         "policy item",
@@ -166,7 +169,6 @@ pub fn parse_parameters() -> impl Parser<Token, Vec<ast::Parameter>> {
         "parameters",
     )
 }
-
 
 pub fn parse_parameter() -> impl Parser<Token, ast::Parameter> {
     with_context(

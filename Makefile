@@ -7,6 +7,7 @@ test_all:
 	RUN_API_TESTS=true RUST_LOG=error cargo test
 
 fmt:
+	cargo fmt
 	cargo clippy -- -D warnings
 	cargo fmt
 

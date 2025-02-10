@@ -1,4 +1,8 @@
-use super::{super::{core::*, prelude::*}, expression::*, *};
+use super::{
+    super::{core::*, prelude::*},
+    expression::*,
+    *,
+};
 use crate::{ast, tokenizer::token::Token};
 use std::collections::HashMap;
 
@@ -39,7 +43,7 @@ pub fn parse_field_typed_with_default() -> impl Parser<Token, ast::FieldInfo> {
                 parse_equal(),
                 parse_expression(),
             ),
-            |(_, type_info, _, value)|ast::FieldInfo {
+            |(_, type_info, _, value)| ast::FieldInfo {
                 type_info: Some(ast::TypeInfo::Simple(type_info)),
                 default_value: Some(value),
             },
@@ -48,11 +52,11 @@ pub fn parse_field_typed_with_default() -> impl Parser<Token, ast::FieldInfo> {
     )
 }
 
-fn parse_field_typed() -> impl Parser<Token,ast::FieldInfo> {
+fn parse_field_typed() -> impl Parser<Token, ast::FieldInfo> {
     with_context(
         map(
             preceded(as_unit(parse_colon()), parse_type_reference()),
-            |type_info|ast::FieldInfo {
+            |type_info| ast::FieldInfo {
                 type_info: Some(type_info),
                 default_value: None,
             },
@@ -61,14 +65,15 @@ fn parse_field_typed() -> impl Parser<Token,ast::FieldInfo> {
     )
 }
 
-fn parse_field_inferred() -> impl Parser<Token,ast::FieldInfo> {
+fn parse_field_inferred() -> impl Parser<Token, ast::FieldInfo> {
     with_context(
-        map(preceded(as_unit(parse_equal()), parse_expression()), |value| {
-           ast::FieldInfo {
+        map(
+            preceded(as_unit(parse_equal()), parse_expression()),
+            |value| ast::FieldInfo {
                 type_info: None,
                 default_value: Some(value),
-            }
-        }),
+            },
+        ),
         "inferred field",
     )
 }
@@ -86,7 +91,7 @@ fn parse_type_reference() -> impl Parser<Token, ast::TypeInfo> {
     })
 }
 
-pub fn parse_custom_type() -> impl Parser<Token,ast::TypeInfo> {
+pub fn parse_custom_type() -> impl Parser<Token, ast::TypeInfo> {
     with_context(
         map(
             tuple2(
@@ -99,7 +104,7 @@ pub fn parse_custom_type() -> impl Parser<Token,ast::TypeInfo> {
             ),
             |(name, fields)| {
                 let field_map = fields.into_iter().collect::<HashMap<_, _>>();
-               ast::TypeInfo::Custom {
+                ast::TypeInfo::Custom {
                     name,
                     fields: field_map,
                 }

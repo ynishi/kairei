@@ -1,16 +1,11 @@
 use crate::analyzer::parsers::expression::*;
-use crate::analyzer::parsers::handlers::{
-    observe::*,
-    answer::*,
-    react::*,
-};
+use crate::analyzer::parsers::handlers::{answer::*, observe::*, react::*};
 use crate::analyzer::parsers::world::parse_parameter;
 use crate::analyzer::Parser;
 use crate::ast;
 use crate::tokenizer::literal::StringPart;
 use crate::tokenizer::symbol::Operator;
 use crate::tokenizer::{keyword::Keyword, literal::Literal, symbol::Delimiter, token::Token};
-
 
 #[test]
 fn test_parse_observe() {
@@ -39,7 +34,6 @@ fn test_parse_observe() {
         Token::Identifier("param".to_string()),
         Token::Delimiter(Delimiter::CloseBrace),
         Token::Delimiter(Delimiter::CloseBrace),
-        
     ];
 
     let expected = ast::ObserveDef {
@@ -48,7 +42,9 @@ fn test_parse_observe() {
                 event_type: ast::EventType::Tick,
                 parameters: vec![],
                 block: ast::HandlerBlock {
-                    statements: vec![ast::Statement::Return(ast::Expression::Literal(ast::Literal::Null))],
+                    statements: vec![ast::Statement::Return(ast::Expression::Literal(
+                        ast::Literal::Null,
+                    ))],
                 },
             },
             ast::EventHandler {
@@ -58,17 +54,19 @@ fn test_parse_observe() {
                     type_info: ast::TypeInfo::Simple("String".to_string()),
                 }],
                 block: ast::HandlerBlock {
-                    statements: vec![ast::Statement::Return(ast::Expression::Variable("param".to_string()))],
+                    statements: vec![ast::Statement::Return(ast::Expression::Variable(
+                        "param".to_string(),
+                    ))],
                 },
             },
         ],
     };
 
-    assert_eq!(parse_observe().parse(&input, 0), Ok((input.len(), expected)));
+    assert_eq!(
+        parse_observe().parse(&input, 0),
+        Ok((input.len(), expected))
+    );
 }
-
-
-
 
 #[test]
 fn test_parse_answer() {
@@ -86,7 +84,9 @@ fn test_parse_answer() {
         Token::Identifier("String".to_string()),
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Keyword(Keyword::Return),
-        Token::Literal(Literal::String(vec![StringPart::Literal("data".to_string())])),
+        Token::Literal(Literal::String(vec![StringPart::Literal(
+            "data".to_string(),
+        )])),
         Token::Delimiter(Delimiter::CloseBrace),
         // リクエストハンドラー2: 制約付きアクション
         Token::Keyword(Keyword::On),
@@ -165,7 +165,6 @@ fn test_parse_answer() {
     assert_eq!(parse_answer().parse(&input, 0), Ok((input.len(), expected)));
 }
 
-
 #[test]
 fn test_parse_react() {
     let input = vec![
@@ -213,39 +212,39 @@ fn test_parse_react() {
 #[test]
 fn test_parse_handler() {
     let input = vec![
-    Token::Keyword(Keyword::Handlers),
-    Token::Delimiter(Delimiter::OpenBrace),
-    Token::Keyword(Keyword::On),
-    Token::Identifier("event".to_string()),
-    Token::Delimiter(Delimiter::OpenParen),
-    Token::Identifier("param1".to_string()),
-    Token::Delimiter(Delimiter::Colon),
-    Token::Identifier("String".to_string()),
-    Token::Delimiter(Delimiter::CloseParen),
-    Token::Delimiter(Delimiter::OpenBrace),
-    Token::Keyword(Keyword::Return),
-    Token::Identifier("param1".to_string()),
-    Token::Delimiter(Delimiter::CloseBrace),
-    Token::Delimiter(Delimiter::CloseBrace),
-];
-let expected = ast::HandlersDef {
-    handlers: vec![ast::HandlerDef {
-        event_name: "event".to_string(),
-        parameters: vec![ast::Parameter {
-            name: "param1".to_string(),
-            type_info: ast::TypeInfo::Simple("String".to_string()),
+        Token::Keyword(Keyword::Handlers),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::On),
+        Token::Identifier("event".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Identifier("param1".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Identifier("param1".to_string()),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+    let expected = ast::HandlersDef {
+        handlers: vec![ast::HandlerDef {
+            event_name: "event".to_string(),
+            parameters: vec![ast::Parameter {
+                name: "param1".to_string(),
+                type_info: ast::TypeInfo::Simple("String".to_string()),
+            }],
+            block: ast::HandlerBlock {
+                statements: vec![ast::Statement::Return(ast::Expression::Variable(
+                    "param1".to_string(),
+                ))],
+            },
         }],
-        block: ast::HandlerBlock {
-            statements: vec![ast::Statement::Return(ast::Expression::Variable(
-                "param1".to_string(),
-            ))],
-        },
-    }],
-};
-assert_eq!(
-    parse_handlers().parse(&input, 0),
-    Ok((input.len(), expected))
-);
+    };
+    assert_eq!(
+        parse_handlers().parse(&input, 0),
+        Ok((input.len(), expected))
+    );
 }
 
 #[test]

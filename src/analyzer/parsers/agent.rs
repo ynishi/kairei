@@ -1,6 +1,14 @@
-use crate::tokenizer::{keyword::Keyword,  token::Token};
-use super::{super::{core::*, prelude::*}, expression::*, handlers::{answer::*, observe::*, react::*}, statement::*, types::*, world::parse_policy, *};
+use super::{
+    super::{core::*, prelude::*},
+    expression::*,
+    handlers::{answer::*, observe::*, react::*},
+    statement::*,
+    types::*,
+    world::parse_policy,
+    *,
+};
 use crate::ast;
+use crate::tokenizer::{keyword::Keyword, token::Token};
 
 pub fn parse_agent_def() -> impl Parser<Token, ast::MicroAgentDef> {
     with_context(
@@ -67,7 +75,6 @@ fn parse_init_handler() -> impl Parser<Token, ast::HandlerBlock> {
     )
 }
 
-
 pub fn parse_lifecycle() -> impl Parser<Token, ast::LifecycleDef> {
     with_context(
         map(
@@ -116,9 +123,11 @@ fn parse_destroy_handler() -> impl Parser<Token, ast::HandlerBlock> {
     )
 }
 
-
 fn parse_lifecycle_keyword() -> impl Parser<Token, Token> {
-    with_context(equal(Token::Keyword(Keyword::Lifecycle)), "lifecycle keyword")
+    with_context(
+        equal(Token::Keyword(Keyword::Lifecycle)),
+        "lifecycle keyword",
+    )
 }
 
 fn parse_init_keyword() -> impl Parser<Token, Token> {
@@ -128,7 +137,6 @@ fn parse_init_keyword() -> impl Parser<Token, Token> {
 fn parse_destroy_keyword() -> impl Parser<Token, Token> {
     with_context(equal(Token::Keyword(Keyword::OnDestroy)), "destroy keyword")
 }
-
 
 pub fn parse_state() -> impl Parser<Token, ast::StateDef> {
     with_context(
@@ -155,10 +163,7 @@ fn parse_state_var() -> impl Parser<Token, (String, ast::StateVarDef)> {
                 parse_identifier(),
                 as_unit(parse_colon()),
                 parse_type_info(),
-                optional(preceded(
-                    as_unit(parse_equal()),
-                    parse_expression(),
-                )),
+                optional(preceded(as_unit(parse_equal()), parse_expression())),
                 as_unit(parse_semicolon()),
             ),
             |(name, _, type_info, initial_value, _)| {
@@ -183,4 +188,3 @@ fn parse_state_keyword() -> impl Parser<Token, Token> {
 fn parse_micro_agent_keyword() -> impl Parser<Token, Token> {
     with_context(equal(Token::Keyword(Keyword::Micro)), "micro agent keyword")
 }
-

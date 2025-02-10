@@ -1,7 +1,19 @@
-use crate::{analyzer::parsers::{expression::{parse_dot, parse_with_keyword}, statement::parse_statements, types::parse_type_info}, tokenizer::{keyword::Keyword, symbol::Operator, token::Token}};
-use super::{super::{super::{core::*, prelude::*}, *}, react::*};
+use super::{
+    super::{
+        super::{core::*, prelude::*},
+        *,
+    },
+    react::*,
+};
 use crate::ast;
-
+use crate::{
+    analyzer::parsers::{
+        expression::{parse_dot, parse_with_keyword},
+        statement::parse_statements,
+        types::parse_type_info,
+    },
+    tokenizer::{keyword::Keyword, symbol::Operator, token::Token},
+};
 
 pub fn parse_answer() -> impl Parser<Token, ast::AnswerDef> {
     with_context(
@@ -26,27 +38,21 @@ fn parse_request_handler() -> impl Parser<Token, ast::RequestHandler> {
                 as_unit(parse_on_keyword()),
                 parse_request_type(),
                 parse_parameters(),
-                preceded(
-                    as_unit(parse_arrow()),
-                    parse_type_info(),
-                ),
+                preceded(as_unit(parse_arrow()), parse_type_info()),
                 optional(parse_constraints()),
                 parse_statements(),
             ),
-            |(_, request_type, parameters, return_type, constraints, block)| {
-                ast::RequestHandler {
-                    request_type,
-                    parameters,
-                    return_type,
-                    constraints,
-                    block: ast::HandlerBlock { statements: block },
-                }
+            |(_, request_type, parameters, return_type, constraints, block)| ast::RequestHandler {
+                request_type,
+                parameters,
+                return_type,
+                constraints,
+                block: ast::HandlerBlock { statements: block },
             },
         ),
         "request handler",
     )
 }
-
 
 fn parse_request_type() -> impl Parser<Token, ast::RequestType> {
     with_context(
@@ -73,40 +79,42 @@ fn parse_request_type() -> impl Parser<Token, ast::RequestType> {
     )
 }
 
-
 fn parse_constraints() -> impl Parser<Token, ast::Constraints> {
     with_context(
         map(
-        preceded(
-            as_unit(parse_with_keyword()),
-            map(
-                delimited(
-                    as_unit(parse_open_brace()),
-                    separated_list(
-                        parse_constraint_item(),
-                        as_unit(parse_comma()),
+            preceded(
+                as_unit(parse_with_keyword()),
+                map(
+                    delimited(
+                        as_unit(parse_open_brace()),
+                        separated_list(parse_constraint_item(), as_unit(parse_comma())),
+                        as_unit(parse_close_brace()),
                     ),
-                    as_unit(parse_close_brace()),
-                ),
-                |items| {
-                    let mut constraints = ast::Constraints {
-                        strictness: None,
-                        stability: None,
-                        latency: None,
-                    };
-                    for (key, value) in items {
-                        match (key.as_str(), value) {
-                            ("strictness", ast::Literal::Float(v)) => constraints.strictness = Some(v),
-                            ("stability", ast::Literal::Float(v)) => constraints.stability = Some(v),
-                            ("latency", ast::Literal::Integer(v)) => {
-                                constraints.latency = Some(v as u32)
+                    |items| {
+                        let mut constraints = ast::Constraints {
+                            strictness: None,
+                            stability: None,
+                            latency: None,
+                        };
+                        for (key, value) in items {
+                            match (key.as_str(), value) {
+                                ("strictness", ast::Literal::Float(v)) => {
+                                    constraints.strictness = Some(v)
+                                }
+                                ("stability", ast::Literal::Float(v)) => {
+                                    constraints.stability = Some(v)
+                                }
+                                ("latency", ast::Literal::Integer(v)) => {
+                                    constraints.latency = Some(v as u32)
+                                }
+                                _ => {}
                             }
-                            _ => {}
                         }
-                    }
-                    constraints
-                },
-            )),|constraints| constraints,
+                        constraints
+                    },
+                ),
+            ),
+            |constraints| constraints,
         ),
         "constraints",
     )
@@ -115,11 +123,7 @@ fn parse_constraints() -> impl Parser<Token, ast::Constraints> {
 fn parse_constraint_item() -> impl Parser<Token, (String, ast::Literal)> {
     with_context(
         map(
-            tuple3(
-                parse_identifier(),
-                as_unit(parse_colon()),
-                parse_literal(),
-            ),
+            tuple3(parse_identifier(), as_unit(parse_colon()), parse_literal()),
             |(key, _, value)| (key, value),
         ),
         "constraint item",
