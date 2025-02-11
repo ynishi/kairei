@@ -1,9 +1,39 @@
 use regex::Regex;
+use crate::tokenizer::token::{Token, TokenSpan, Tokenizer};
 
 /// A trait for preprocessing different types of input
 pub trait Preprocessor<T> {
     /// Process the input of type T and return the processed result
     fn process(&self, input: T) -> T;
+}
+
+/// Token-specific preprocessor implementation
+pub struct TokenPreprocessor {
+    tokenizer: Tokenizer,
+}
+
+impl Default for TokenPreprocessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TokenPreprocessor {
+    pub fn new() -> Self {
+        Self {
+            tokenizer: Tokenizer::new(),
+        }
+    }
+}
+
+impl Preprocessor<Vec<TokenSpan>> for TokenPreprocessor {
+    fn process(&self, input: Vec<TokenSpan>) -> Vec<TokenSpan> {
+        // Filter out comments and normalize whitespace
+        input
+            .into_iter()
+            .filter(|span| !span.token.is_comment())
+            .collect()
+    }
 }
 
 /// String-specific preprocessor implementation
