@@ -1,15 +1,13 @@
 use std::time::Duration;
 
-use kairei::{
-    config::{self, SystemConfig},
-    event_bus::{Event, Value},
-    system::System,
-};
+use kairei::{event_bus::Value, system::System};
 use tokio::time::sleep;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::{micro_agent_tests::setup_secret, should_run_external_api_tests};
+use crate::{micro_agent_tests::create_request, should_run_external_api_tests};
+
+use super::setup_system;
 
 const TRAVEL_PLANNING_DSL: &str = r#"
 world TravelPlanning {
@@ -158,7 +156,6 @@ micro LocalExpertAgent {
         }
     }
 }
-*/
 "#;
 
 const SYSTEM_CONFIG: &str = r#"
@@ -182,67 +179,28 @@ const SYSTEM_CONFIG: &str = r#"
 }
 "#;
 
-fn create_request(
-    agnent_name: &str,
-    request_id: &Uuid,
-    request_type: &str,
-    requests: Vec<(&str, Value)>,
-    timeout: Option<u64>,
-) -> Event {
-    let mut builder = Event::request_buidler()
-        .request_type(request_type)
-        .requester("test")
-        .responder(agnent_name)
-        .request_id(request_id.to_string().as_str());
-
-    for request in requests.clone() {
-        builder = builder.clone().parameter(request.0, &request.1);
-    }
-    if let Some(timeout) = timeout {
-        builder = builder.parameter("timeout", &Value::Duration(Duration::from_secs(timeout)));
-    } else {
-        builder = builder.parameter("timeout", &Value::Duration(Duration::from_secs(240)));
-    }
-
-    builder.build().unwrap()
-}
-
-async fn setup_system() -> System {
-    let system_config: SystemConfig = config::from_str(SYSTEM_CONFIG).unwrap();
-    let secret = setup_secret();
-    debug!("System Config: {:?}", system_config);
-
-    let mut system = System::new(&system_config, &secret).await;
-
-    let root = system.parse_dsl(TRAVEL_PLANNING_DSL).await.unwrap();
-    debug!("Root: {:?}", root);
-    let required = vec![
-        "TravelPlanner",
-        "HotelFinder",
-        "FlightFinder",
-        "AttractionRecommender",
-        "LocalExpertAgent",
-    ];
-    root.micro_agent_defs
-        .is_empty()
-        .then(|| panic!("No micro agents found"));
-    root.micro_agent_defs
-        .iter()
-        .map(|x| x.name.as_str())
-        .any(|name| !required.contains(&name))
-        .then(|| panic!("Missing required micro agents"));
-
-    system.initialize(root).await.unwrap();
-    system
+async fn setup_travel_planner() -> System {
+    setup_system(
+        SYSTEM_CONFIG,
+        TRAVEL_PLANNING_DSL,
+        &[
+            "TravelPlanner",
+            "HotelFinder",
+            "FlightFinder",
+            "AttractionRecommender",
+            "LocalExpertAgent",
+        ],
+    )
+    .await
 }
 
 #[tokio::test]
 async fn test_travel_planner() {
     if !should_run_external_api_tests() {
-        // return;
+        return;
     }
 
-    let system = setup_system().await;
+    let system = setup_travel_planner().await;
     system.start().await.unwrap();
     sleep(Duration::from_millis(100)).await;
 
@@ -268,7 +226,7 @@ async fn test_hotel_finder() {
         return;
     }
 
-    let system = setup_system().await;
+    let system = setup_travel_planner().await;
     system.start().await.unwrap();
     sleep(Duration::from_millis(100)).await;
 
@@ -301,7 +259,7 @@ async fn test_flight_finder() {
         return;
     }
 
-    let system = setup_system().await;
+    let system = setup_travel_planner().await;
     system.start().await.unwrap();
     sleep(Duration::from_millis(100)).await;
 
