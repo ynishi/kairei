@@ -564,4 +564,149 @@ mod tests {
         let output = visitor.output;
         assert!(output.contains("\n  policy"));  // Check 2-space indentation
     }
+
+    #[test]
+    fn test_format_world_config() {
+        let mut visitor = FormatterVisitor::new(create_test_config());
+        let config = ConfigDef {
+            tick_interval: Duration::from_secs(2),
+            max_agents: 500,
+            event_buffer_size: 2000,
+        };
+
+        visitor.format_world_config(&config).unwrap();
+        let output = visitor.output;
+        assert!(output.contains("config {"));
+        assert!(output.contains("tick_interval: 2"));
+        assert!(output.contains("max_agents: 500"));
+        assert!(output.contains("event_buffer_size: 2000"));
+        assert!(output.ends_with("}"));
+    }
+
+    #[test]
+    fn test_format_events() {
+        let mut visitor = FormatterVisitor::new(create_test_config());
+        let events = EventsDef {
+            events: vec![
+                CustomEventDef {
+                    name: "TestEvent".to_string(),
+                    parameters: vec![Parameter {
+                        name: "param1".to_string(),
+                        type_info: TypeInfo::Simple("String".to_string()),
+                    }],
+                },
+            ],
+        };
+
+        visitor.format_events(&events).unwrap();
+        let output = visitor.output;
+        assert!(output.contains("events {"));
+        assert!(output.contains("TestEvent(param1: String)"));
+        assert!(output.ends_with("}\n"));
+    }
+
+    #[test]
+    fn test_format_type_info() {
+        let mut visitor = FormatterVisitor::new(create_test_config());
+        
+        // Test simple type
+        visitor.format_type_info(&TypeInfo::Simple("String".to_string())).unwrap();
+        assert_eq!(visitor.output, "String");
+        visitor.output.clear();
+
+        // Test Result type
+        let result_type = TypeInfo::Result {
+            ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+        };
+        visitor.format_type_info(&result_type).unwrap();
+        assert_eq!(visitor.output, "Result{String, Error}");
+        visitor.output.clear();
+
+        // Test Option type
+        let option_type = TypeInfo::Option(Box::new(TypeInfo::Simple("Int".to_string())));
+        visitor.format_type_info(&option_type).unwrap();
+        assert_eq!(visitor.output, "Option{Int}");
+        visitor.output.clear();
+
+        // Test Custom type
+        let mut fields = HashMap::new();
+        fields.insert("name".to_string(), FieldInfo {
+            type_info: Some(TypeInfo::Simple("String".to_string())),
+            default_value: Some(Expression::Literal(Literal::String("test".to_string()))),
+        });
+        let custom_type = TypeInfo::Custom {
+            name: "Person".to_string(),
+            fields,
+        };
+        visitor.format_type_info(&custom_type).unwrap();
+        let output = visitor.output;
+        assert!(output.contains("Person {"));
+        assert!(output.contains("name: String = \"test\""));
+        assert!(output.ends_with("}"));
+    }
+
+    #[test]
+    fn test_format_expression() {
+        let mut visitor = FormatterVisitor::new(create_test_config());
+        
+        // Test literal
+        let literal_expr = Expression::Literal(Literal::Integer(42));
+        visitor.format_expression(&literal_expr).unwrap();
+        assert_eq!(visitor.output, "42");
+        visitor.output.clear();
+
+        // Test variable
+        let var_expr = Expression::Variable("x".to_string());
+        visitor.format_expression(&var_expr).unwrap();
+        assert_eq!(visitor.output, "x");
+        visitor.output.clear();
+
+        // Test function call
+        let func_expr = Expression::FunctionCall {
+            function: "test".to_string(),
+            arguments: vec![Expression::Literal(Literal::String("hello".to_string()))],
+        };
+        visitor.format_expression(&func_expr).unwrap();
+        assert_eq!(visitor.output, "test(\"hello\")");
+        visitor.output.clear();
+
+        // Test binary op
+        let binary_expr = Expression::BinaryOp {
+            op: BinaryOperator::Add,
+            left: Box::new(Expression::Literal(Literal::Integer(1))),
+            right: Box::new(Expression::Literal(Literal::Integer(2))),
+        };
+        visitor.format_expression(&binary_expr).unwrap();
+        assert_eq!(visitor.output, "1 + 2");
+    }
+
+    #[test]
+    fn test_format_literal() {
+        let mut visitor = FormatterVisitor::new(create_test_config());
+        
+        // Test integer
+        visitor.format_literal(&Literal::Integer(42)).unwrap();
+        assert_eq!(visitor.output, "42");
+        visitor.output.clear();
+
+        // Test string
+        visitor.format_literal(&Literal::String("test".to_string())).unwrap();
+        assert_eq!(visitor.output, "\"test\"");
+        visitor.output.clear();
+
+        // Test list
+        visitor.format_literal(&Literal::List(vec![
+            Literal::Integer(1),
+            Literal::Integer(2),
+        ])).unwrap();
+        assert_eq!(visitor.output, "[1, 2]");
+        visitor.output.clear();
+
+        // Test map
+        let mut map = HashMap::new();
+        map.insert("key".to_string(), Literal::String("value".to_string()));
+        visitor.format_literal(&Literal::Map(map)).unwrap();
+        assert_eq!(visitor.output, "{key: \"value\"}");
+    }
 }
