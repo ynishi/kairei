@@ -18,7 +18,7 @@ impl Root {
 }
 
 // MicroAgentのトップレベル構造
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct MicroAgentDef {
     pub name: String,
     pub policies: Vec<Policy>,
@@ -92,6 +92,37 @@ impl Default for ConfigDef {
             tick_interval: Duration::from_secs(1),
             max_agents: 1000,
             event_buffer_size: 1000,
+        }
+    }
+}
+
+impl From<HashMap<String, Literal>> for ConfigDef {
+    fn from(map: HashMap<String, Literal>) -> Self {
+        let tick_interval = map
+            .get("tick_interval")
+            .and_then(|v| match v {
+                Literal::Duration(d) => Some(*d),
+                _ => None,
+            })
+            .unwrap_or(Duration::from_secs(1));
+        let max_agents = map
+            .get("max_agents")
+            .and_then(|v| match v {
+                Literal::Integer(i) => Some(*i as usize),
+                _ => None,
+            })
+            .unwrap_or(1000);
+        let event_buffer_size = map
+            .get("event_buffer_size")
+            .and_then(|v| match v {
+                Literal::Integer(i) => Some(*i as usize),
+                _ => None,
+            })
+            .unwrap_or(1000);
+        Self {
+            tick_interval,
+            max_agents,
+            event_buffer_size,
         }
     }
 }
@@ -279,7 +310,7 @@ pub enum TypeInfo {
     Map(Box<TypeInfo>, Box<TypeInfo>),
     Custom {
         name: String,
-        constraints: HashMap<String, Expression>,
+        fields: HashMap<String, FieldInfo>,
     },
 }
 
@@ -289,13 +320,19 @@ impl From<&str> for TypeInfo {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldInfo {
+    pub type_info: Option<TypeInfo>, // None の場合は型推論
+    pub default_value: Option<Expression>,
+}
+
 // コードブロック
 #[derive(Debug, Clone, PartialEq)]
 pub struct HandlerBlock {
     pub statements: Vec<Statement>,
 }
 
-type Statements = Vec<Statement>;
+pub type Statements = Vec<Statement>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ErrorHandlerBlock {
@@ -506,6 +543,40 @@ pub enum Literal {
     Map(HashMap<String, Literal>),
     Retry(RetryConfig),
     Null,
+}
+
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Literal::Integer(i) => write!(f, "{}", i),
+            Literal::Float(f_data) => write!(f, "{}", f_data),
+            Literal::String(s) => write!(f, "{}", s),
+            Literal::Boolean(b) => write!(f, "{}", b),
+            Literal::Duration(d) => write!(f, "{:?}", d),
+            Literal::List(literals) => {
+                write!(f, "[")?;
+                for (i, literal) in literals.iter().enumerate() {
+                    write!(f, "{}", literal)?;
+                    if i < literals.len() - 1 {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, "]")
+            }
+            Literal::Map(hash_map) => {
+                write!(f, "{{")?;
+                for (i, (key, value)) in hash_map.iter().enumerate() {
+                    write!(f, "{}: {}", key, value)?;
+                    if i < hash_map.len() - 1 {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, "}}")
+            }
+            Literal::Retry(retry_config) => write!(f, "{:?}", retry_config),
+            Literal::Null => write!(f, "null"),
+        }
+    }
 }
 
 // Argumentの型
