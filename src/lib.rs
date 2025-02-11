@@ -9,7 +9,6 @@ pub mod eval;
 pub mod event;
 pub mod gen;
 pub mod native_feature;
-pub mod parser;
 pub mod preprocessor;
 pub mod provider;
 pub mod runtime;
@@ -22,7 +21,6 @@ pub use ast::*;
 pub use error::*;
 pub use eval::*;
 pub use event::*;
-pub use parser::*;
 
 #[cfg(test)]
 mod tests {

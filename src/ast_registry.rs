@@ -6,6 +6,7 @@ use crate::{
     analyzer::{self, Parser},
     ast,
     config::AgentConfig,
+    preprocessor::{self, Preprocessor},
     tokenizer, ASTError, ASTResult, AnswerDef, EventsDef, Expression, HandlerBlock, HandlersDef,
     Literal, MicroAgentDef, RequestHandler, RequestType, StateAccessPath, StateDef, StateVarDef,
     Statement, TypeInfo, WorldDef,
@@ -19,16 +20,10 @@ impl AstRegistry {
     pub async fn create_ast_from_dsl(&self, dsl: &str) -> ASTResult<ast::Root> {
         let mut tokenizer = tokenizer::token::Tokenizer::new();
         let tokens = tokenizer.tokenize(dsl).unwrap();
+        let preprocessor = preprocessor::TokenPreprocessor::default();
+        let tokens = preprocessor.process(tokens);
         let (pos, root) = analyzer::parsers::world::parse_root()
-            .parse(
-                tokens
-                    .iter()
-                    .map(|e| e.token.clone())
-                    .filter(|e| !e.is_whitespace() && e.is_comment())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-                0,
-            )
+            .parse(tokens.as_slice(), 0)
             .map_err(|e| ASTError::ParseError {
                 message: format!("failed to parse DSL {}", e),
                 target: "root".to_string(),

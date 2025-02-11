@@ -1,11 +1,12 @@
 use std::{collections::HashMap, time::Duration};
 
+use kairei::analyzer::Parser;
 use kairei::config::SecretConfig;
-use kairei::parse_root;
+use kairei::preprocessor::Preprocessor;
 use kairei::system::SystemResult;
 use kairei::{
-    config::SystemConfig, event_bus::Event, event_registry::EventType, parse_micro_agent,
-    system::System, MicroAgentDef,
+    config::SystemConfig, event_bus::Event, event_registry::EventType, system::System,
+    MicroAgentDef,
 };
 use tokio::{self, time::sleep};
 use tracing::debug;
@@ -150,10 +151,19 @@ async fn test_request_response() -> SystemResult<()> {
             }
         }
     "#;
+    let result = kairei::tokenizer::token::Tokenizer::new()
+        .tokenize(test_agent_dsl)
+        .unwrap();
+    let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
+    let tokens = preprocessor.process(result);
+    let (_, ast) = kairei::analyzer::parsers::world::parse_root()
+        .parse(tokens.as_slice(), 0)
+        .unwrap();
 
-    let ast = parse_root(test_agent_dsl).unwrap().1;
     system.initialize(ast).await?;
-    let test_ast = parse_micro_agent(test_agent_dsl).unwrap().1;
+    let (_, test_ast) = kairei::analyzer::parsers::agent::parse_agent_def()
+        .parse(tokens.as_slice(), 0)
+        .unwrap();
 
     system.register_agent_ast("Responder", &test_ast).await?;
 
