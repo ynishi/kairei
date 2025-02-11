@@ -6,7 +6,7 @@ pub mod expression;
 mod handlers;
 mod statement;
 mod types;
-mod world;
+pub mod world;
 
 #[cfg(test)]
 mod tests;

@@ -94,6 +94,7 @@ mod tests {
     use std::str::FromStr;
 
     use strum::IntoEnumIterator;
+    use tracing::debug;
 
     use super::*;
 

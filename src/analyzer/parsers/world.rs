@@ -2,6 +2,7 @@ use uuid::Uuid;
 
 use super::{
     super::{core::*, prelude::*},
+    agent::parse_agent_def,
     handlers::react::*,
     types::parse_type_info,
     *,
@@ -12,6 +13,16 @@ use crate::{
     PolicyId,
 };
 use std::collections::HashMap;
+
+pub fn parse_root() -> impl Parser<Token, ast::Root> {
+    with_context(
+        map(
+            tuple2(optional(parse_world()), many(parse_agent_def())),
+            |(world_def, micro_agent_defs)| ast::Root::new(world_def, micro_agent_defs),
+        ),
+        "root",
+    )
+}
 
 pub fn parse_world() -> impl Parser<Token, ast::WorldDef> {
     with_context(
