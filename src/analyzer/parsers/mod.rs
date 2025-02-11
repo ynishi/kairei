@@ -1,7 +1,7 @@
 pub mod common;
 pub use common::*;
 
-mod agent;
+pub mod agent;
 pub mod expression;
 mod handlers;
 mod statement;

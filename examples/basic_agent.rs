@@ -20,6 +20,6 @@ micro Counter {
 "#;
 
 fn main() {
-    let result = kairei::parser::parse_micro_agent(EXAMPLE);
+    let result = kairei::tokenizer::token::Tokenizer::new().tokenize(EXAMPLE);
     println!("Parse result: {:?}", result);
 }
