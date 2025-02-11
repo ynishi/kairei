@@ -91,3 +91,111 @@ impl FormatterVisitor {
         self.write(&" ".repeat(self.indent_level * self.config.indent_spaces))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{Policy, PolicyScope, PolicyId};
+
+    fn create_test_config() -> FormatterConfig {
+        FormatterConfig {
+            indent_spaces: 4,
+            max_width: 80,
+            operator_spacing: true,
+            block_spacing: true,
+        }
+    }
+
+    #[test]
+    fn test_format_world() {
+        let config = create_test_config();
+        let mut visitor = FormatterVisitor::new(config);
+        let world = WorldDef {
+            name: "TestWorld".to_string(),
+            policies: vec![Policy {
+                text: "Test policy".to_string(),
+                scope: PolicyScope::World("TestWorld".to_string()),
+                internal_id: PolicyId::new(),
+            }],
+            config: None,
+            events: Default::default(),
+            handlers: Default::default(),
+        };
+
+        visitor.format_world(&world).unwrap();
+        let output = visitor.output;
+        assert!(output.contains("world TestWorld {"));
+        assert!(output.contains("    policy \"Test policy\""));
+        assert!(output.ends_with("}"));
+    }
+
+    #[test]
+    fn test_format_micro_agent() {
+        let config = create_test_config();
+        let mut visitor = FormatterVisitor::new(config);
+        let agent = MicroAgentDef {
+            name: "TestAgent".to_string(),
+            policies: vec![Policy {
+                text: "Agent policy".to_string(),
+                scope: PolicyScope::Agent("TestAgent".to_string()),
+                internal_id: PolicyId::new(),
+            }],
+            lifecycle: None,
+            state: None,
+            observe: None,
+            answer: None,
+            react: None,
+        };
+
+        visitor.format_micro_agent(&agent).unwrap();
+        let output = visitor.output;
+        assert!(output.contains("micro TestAgent {"));
+        assert!(output.contains("    policy \"Agent policy\""));
+        assert!(output.ends_with("}"));
+    }
+
+    #[test]
+    fn test_format_root() {
+        let config = create_test_config();
+        let mut visitor = FormatterVisitor::new(config);
+        let root = Root::new(None, vec![MicroAgentDef {
+            name: "TestAgent".to_string(),
+            policies: vec![],
+            lifecycle: None,
+            state: None,
+            observe: None,
+            answer: None,
+            react: None,
+        }]);
+
+        let output = visitor.format_root(&root).unwrap();
+        assert!(output.contains("micro TestAgent {"));
+        assert!(output.ends_with("}\n"));
+    }
+
+    #[test]
+    fn test_indentation() {
+        let config = FormatterConfig {
+            indent_spaces: 2,
+            max_width: 80,
+            operator_spacing: true,
+            block_spacing: true,
+        };
+        let mut visitor = FormatterVisitor::new(config);
+        let world = WorldDef {
+            name: "TestWorld".to_string(),
+            policies: vec![Policy {
+                text: "Test policy".to_string(),
+                scope: PolicyScope::World("TestWorld".to_string()),
+                internal_id: PolicyId::new(),
+            }],
+            config: None,
+            events: Default::default(),
+            handlers: Default::default(),
+        };
+
+        visitor.format_world(&world).unwrap();
+        let output = visitor.output;
+        assert!(output.contains("\n  policy"));  // Check 2-space indentation
+    }
+}
