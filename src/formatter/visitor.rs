@@ -1,4 +1,4 @@
-use crate::ast::{MicroAgentDef, Root, WorldDef, TypeInfo, Expression, Literal, BinaryOperator, RetryDelay, Argument, ThinkAttributes, PromptGeneratorType, RequestAttributes};
+use crate::ast::*;
 use crate::formatter::config::FormatterConfig;
 use crate::formatter::error::FormatterError;
 use std::time::Duration;
@@ -66,9 +66,12 @@ impl FormatterVisitor {
         self.write("config {")?;
         self.indent();
         self.newline()?;
-        
+
         if config.tick_interval != Duration::from_secs(1) {
-            self.write(&format!("tick_interval: {}", config.tick_interval.as_secs()))?;
+            self.write(&format!(
+                "tick_interval: {}",
+                config.tick_interval.as_secs()
+            ))?;
             self.newline()?;
         }
         if config.max_agents != 1000 {
@@ -79,7 +82,7 @@ impl FormatterVisitor {
             self.write(&format!("event_buffer_size: {}", config.event_buffer_size))?;
             self.newline()?;
         }
-        
+
         self.dedent();
         self.write("}")?;
         Ok(())
@@ -90,12 +93,12 @@ impl FormatterVisitor {
             self.write("events {")?;
             self.indent();
             self.newline()?;
-            
+
             for event in &events.events {
                 self.format_custom_event(event)?;
                 self.newline()?;
             }
-            
+
             self.dedent();
             self.write("}")?;
             self.newline()?;
@@ -128,7 +131,10 @@ impl FormatterVisitor {
             Expression::Literal(lit) => self.format_literal(lit)?,
             Expression::Variable(name) => self.write(name)?,
             Expression::StateAccess(path) => self.write(&path.0.join("."))?,
-            Expression::FunctionCall { function, arguments } => {
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => {
                 self.write(function)?;
                 self.write("(")?;
                 for (i, arg) in arguments.iter().enumerate() {
@@ -153,7 +159,12 @@ impl FormatterVisitor {
                     self.format_think_attributes(attrs)?;
                 }
             }
-            Expression::Request { agent, request_type, parameters, options } => {
+            Expression::Request {
+                agent,
+                request_type,
+                parameters,
+                options,
+            } => {
                 self.write(&format!("{}.{}", agent, request_type))?;
                 self.write("(")?;
                 for (i, param) in parameters.iter().enumerate() {
@@ -344,7 +355,10 @@ impl FormatterVisitor {
         Ok(())
     }
 
-    fn format_request_attributes(&mut self, attrs: &RequestAttributes) -> Result<(), FormatterError> {
+    fn format_request_attributes(
+        &mut self,
+        attrs: &RequestAttributes,
+    ) -> Result<(), FormatterError> {
         self.write("{")?;
         self.indent();
         self.newline()?;
@@ -396,7 +410,7 @@ impl FormatterVisitor {
                     self.write(" {")?;
                     self.indent();
                     self.newline()?;
-                    
+
                     for (name, field) in fields {
                         self.write(name)?;
                         if let Some(type_info) = &field.type_info {
@@ -409,7 +423,7 @@ impl FormatterVisitor {
                         }
                         self.newline()?;
                     }
-                    
+
                     self.dedent();
                     self.write("}")?;
                 }
@@ -517,14 +531,17 @@ impl FormatterVisitor {
         self.write("on ")?;
         match &handler.event_type {
             EventType::Tick => self.write("tick")?,
-            EventType::StateUpdated { agent_name, state_name } => {
+            EventType::StateUpdated {
+                agent_name,
+                state_name,
+            } => {
                 self.write(&format!("state_updated({}.{})", agent_name, state_name))?;
             }
             EventType::Message { content_type } => self.write(content_type)?,
             EventType::Custom(name) => self.write(name)?,
         }
         self.write("(")?;
-        
+
         for (i, param) in handler.parameters.iter().enumerate() {
             if i > 0 {
                 self.write(", ")?;
@@ -532,7 +549,7 @@ impl FormatterVisitor {
             self.format_parameter(param)?;
         }
         self.write(") ")?;
-        
+
         self.format_handler_block(&handler.block)?;
         Ok(())
     }
@@ -545,7 +562,7 @@ impl FormatterVisitor {
             RequestType::Custom(name) => self.write(name)?,
         }
         self.write("(")?;
-        
+
         for (i, param) in handler.parameters.iter().enumerate() {
             if i > 0 {
                 self.write(", ")?;
@@ -554,12 +571,12 @@ impl FormatterVisitor {
         }
         self.write(") -> ")?;
         self.format_type_info(&handler.return_type)?;
-        
+
         if let Some(constraints) = &handler.constraints {
             self.write(" with {")?;
             self.indent();
             self.newline()?;
-            
+
             if let Some(strictness) = constraints.strictness {
                 self.write(&format!("strictness: {}", strictness))?;
                 self.newline()?;
@@ -572,11 +589,11 @@ impl FormatterVisitor {
                 self.write(&format!("latency: {}", latency))?;
                 self.newline()?;
             }
-            
+
             self.dedent();
             self.write("} ")?;
         }
-        
+
         self.format_handler_block(&handler.block)?;
         Ok(())
     }
@@ -613,7 +630,11 @@ impl FormatterVisitor {
                 self.write("return ")?;
                 self.format_expression(expr)?;
             }
-            Statement::Emit { event_type, parameters, target } => {
+            Statement::Emit {
+                event_type,
+                parameters,
+                target,
+            } => {
                 self.write("emit ")?;
                 if let Some(t) = target {
                     self.write(&format!("to {} ", t))?;
@@ -639,7 +660,10 @@ impl FormatterVisitor {
                 self.dedent();
                 self.write("}")?;
             }
-            Statement::WithError { statement, error_handler_block } => {
+            Statement::WithError {
+                statement,
+                error_handler_block,
+            } => {
                 self.format_statement(statement)?;
                 self.write(" on_fail ")?;
                 if let Some(binding) = &error_handler_block.error_binding {
@@ -655,31 +679,35 @@ impl FormatterVisitor {
                 self.dedent();
                 self.write("}")?;
             }
-            Statement::If { condition, then_block, else_block } => {
+            Statement::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
                 self.write("if ")?;
                 self.format_expression(condition)?;
                 self.write(" {")?;
                 self.indent();
                 self.newline()?;
-                
+
                 for stmt in then_block {
                     self.format_statement(stmt)?;
                     self.newline()?;
                 }
-                
+
                 self.dedent();
                 self.write("}")?;
-                
+
                 if let Some(else_stmts) = else_block {
                     self.write(" else {")?;
                     self.indent();
                     self.newline()?;
-                    
+
                     for stmt in else_stmts {
                         self.format_statement(stmt)?;
                         self.newline()?;
                     }
-                    
+
                     self.dedent();
                     self.write("}")?;
                 }
@@ -703,8 +731,12 @@ impl FormatterVisitor {
         }
 
         // Add newline after policies if there are other components
-        if agent.state.is_some() || agent.lifecycle.is_some() || agent.observe.is_some() || 
-           agent.answer.is_some() || agent.react.is_some() {
+        if agent.state.is_some()
+            || agent.lifecycle.is_some()
+            || agent.observe.is_some()
+            || agent.answer.is_some()
+            || agent.react.is_some()
+        {
             self.newline()?;
         }
 
@@ -766,8 +798,10 @@ impl FormatterVisitor {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
-    use crate::ast::{Policy, PolicyScope, PolicyId};
+    use crate::ast::*;
 
     fn create_test_config() -> FormatterConfig {
         FormatterConfig {
@@ -814,16 +848,26 @@ mod tests {
             state: Some(StateDef {
                 variables: {
                     let mut map = HashMap::new();
-                    map.insert("current_plan".to_string(), StateVarDef {
-                        name: "current_plan".to_string(),
-                        type_info: TypeInfo::Simple("String".to_string()),
-                        initial_value: Some(Expression::Literal(Literal::String("none".to_string()))),
-                    });
-                    map.insert("planning_stage".to_string(), StateVarDef {
-                        name: "planning_stage".to_string(),
-                        type_info: TypeInfo::Simple("String".to_string()),
-                        initial_value: Some(Expression::Literal(Literal::String("none".to_string()))),
-                    });
+                    map.insert(
+                        "current_plan".to_string(),
+                        StateVarDef {
+                            name: "current_plan".to_string(),
+                            type_info: TypeInfo::Simple("String".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::String(
+                                "none".to_string(),
+                            ))),
+                        },
+                    );
+                    map.insert(
+                        "planning_stage".to_string(),
+                        StateVarDef {
+                            name: "planning_stage".to_string(),
+                            type_info: TypeInfo::Simple("String".to_string()),
+                            initial_value: Some(Expression::Literal(Literal::String(
+                                "none".to_string(),
+                            ))),
+                        },
+                    );
                     map
                 },
             }),
@@ -859,9 +903,7 @@ mod tests {
                         err_type: Box::new(TypeInfo::Simple("Error".to_string())),
                     },
                     constraints: None,
-                    block: HandlerBlock {
-                        statements: vec![],
-                    },
+                    block: HandlerBlock { statements: vec![] },
                 }],
             }),
             react: None,
@@ -913,16 +955,22 @@ mod tests {
         let state = StateDef {
             variables: {
                 let mut map = HashMap::new();
-                map.insert("counter".to_string(), StateVarDef {
-                    name: "counter".to_string(),
-                    type_info: TypeInfo::Simple("Int".to_string()),
-                    initial_value: Some(Expression::Literal(Literal::Integer(0))),
-                });
-                map.insert("name".to_string(), StateVarDef {
-                    name: "name".to_string(),
-                    type_info: TypeInfo::Simple("String".to_string()),
-                    initial_value: None,
-                });
+                map.insert(
+                    "counter".to_string(),
+                    StateVarDef {
+                        name: "counter".to_string(),
+                        type_info: TypeInfo::Simple("Int".to_string()),
+                        initial_value: Some(Expression::Literal(Literal::Integer(0))),
+                    },
+                );
+                map.insert(
+                    "name".to_string(),
+                    StateVarDef {
+                        name: "name".to_string(),
+                        type_info: TypeInfo::Simple("String".to_string()),
+                        initial_value: None,
+                    },
+                );
                 map
             },
         };
@@ -987,15 +1035,18 @@ mod tests {
     fn test_format_root() {
         let config = create_test_config();
         let mut visitor = FormatterVisitor::new(config);
-        let root = Root::new(None, vec![MicroAgentDef {
-            name: "TestAgent".to_string(),
-            policies: vec![],
-            lifecycle: None,
-            state: None,
-            observe: None,
-            answer: None,
-            react: None,
-        }]);
+        let root = Root::new(
+            None,
+            vec![MicroAgentDef {
+                name: "TestAgent".to_string(),
+                policies: vec![],
+                lifecycle: None,
+                state: None,
+                observe: None,
+                answer: None,
+                react: None,
+            }],
+        );
 
         let output = visitor.format_root(&root).unwrap();
         assert!(output.contains("micro TestAgent {"));
@@ -1025,7 +1076,7 @@ mod tests {
 
         visitor.format_world(&world).unwrap();
         let output = visitor.output;
-        assert!(output.contains("\n  policy"));  // Check 2-space indentation
+        assert!(output.contains("\n  policy")); // Check 2-space indentation
     }
 
     #[test]
@@ -1050,15 +1101,13 @@ mod tests {
     fn test_format_events() {
         let mut visitor = FormatterVisitor::new(create_test_config());
         let events = EventsDef {
-            events: vec![
-                CustomEventDef {
-                    name: "TestEvent".to_string(),
-                    parameters: vec![Parameter {
-                        name: "param1".to_string(),
-                        type_info: TypeInfo::Simple("String".to_string()),
-                    }],
-                },
-            ],
+            events: vec![CustomEventDef {
+                name: "TestEvent".to_string(),
+                parameters: vec![Parameter {
+                    name: "param1".to_string(),
+                    type_info: TypeInfo::Simple("String".to_string()),
+                }],
+            }],
         };
 
         visitor.format_events(&events).unwrap();
@@ -1071,9 +1120,11 @@ mod tests {
     #[test]
     fn test_format_type_info() {
         let mut visitor = FormatterVisitor::new(create_test_config());
-        
+
         // Test simple type
-        visitor.format_type_info(&TypeInfo::Simple("String".to_string())).unwrap();
+        visitor
+            .format_type_info(&TypeInfo::Simple("String".to_string()))
+            .unwrap();
         assert_eq!(visitor.output, "String");
         visitor.output.clear();
 
@@ -1094,10 +1145,13 @@ mod tests {
 
         // Test Custom type
         let mut fields = HashMap::new();
-        fields.insert("name".to_string(), FieldInfo {
-            type_info: Some(TypeInfo::Simple("String".to_string())),
-            default_value: Some(Expression::Literal(Literal::String("test".to_string()))),
-        });
+        fields.insert(
+            "name".to_string(),
+            FieldInfo {
+                type_info: Some(TypeInfo::Simple("String".to_string())),
+                default_value: Some(Expression::Literal(Literal::String("test".to_string()))),
+            },
+        );
         let custom_type = TypeInfo::Custom {
             name: "Person".to_string(),
             fields,
@@ -1112,7 +1166,7 @@ mod tests {
     #[test]
     fn test_format_expression() {
         let mut visitor = FormatterVisitor::new(create_test_config());
-        
+
         // Test literal
         let literal_expr = Expression::Literal(Literal::Integer(42));
         visitor.format_expression(&literal_expr).unwrap();
@@ -1147,22 +1201,26 @@ mod tests {
     #[test]
     fn test_format_literal() {
         let mut visitor = FormatterVisitor::new(create_test_config());
-        
+
         // Test integer
         visitor.format_literal(&Literal::Integer(42)).unwrap();
         assert_eq!(visitor.output, "42");
         visitor.output.clear();
 
         // Test string
-        visitor.format_literal(&Literal::String("test".to_string())).unwrap();
+        visitor
+            .format_literal(&Literal::String("test".to_string()))
+            .unwrap();
         assert_eq!(visitor.output, "\"test\"");
         visitor.output.clear();
 
         // Test list
-        visitor.format_literal(&Literal::List(vec![
-            Literal::Integer(1),
-            Literal::Integer(2),
-        ])).unwrap();
+        visitor
+            .format_literal(&Literal::List(vec![
+                Literal::Integer(1),
+                Literal::Integer(2),
+            ]))
+            .unwrap();
         assert_eq!(visitor.output, "[1, 2]");
         visitor.output.clear();
 
