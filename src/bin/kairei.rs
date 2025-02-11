@@ -1,9 +1,10 @@
 use clap::{command, Parser};
 use kairei::{
-    analyzer::Parser,
+    analyzer::Parser as _,
     config::{self, SecretConfig, SystemConfig},
     preprocessor::Preprocessor,
     system::System,
+    tokenizer::token::Token,
     Error,
 };
 use std::path::PathBuf;
@@ -57,17 +58,19 @@ async fn format_file(args: &FmtArgs) -> Result<(), Error> {
     let tokens = kairei::tokenizer::token::Tokenizer::new()
         .tokenize(&input)
         .map_err(|e| Error::Internal(format!("Failed to tokenize: {}", e)))?;
-    
+
     let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
-    let tokens = preprocessor.process(tokens);
-    
-    let (_, ast) = kairei::analyzer::parsers::agent::parse_agent_def()
+    let tokens: Vec<Token> = preprocessor.process(tokens);
+
+    let (_, root) = kairei::analyzer::parsers::world::parse_root()
         .parse(tokens.as_slice(), 0)
         .map_err(|e| Error::Internal(format!("Failed to parse: {}", e)))?;
 
     // Format using existing formatter
-    let formatter = kairei::formatter::Formatter::new(kairei::formatter::config::FormatterConfig::default());
-    let formatted = formatter.format(&ast)
+    let formatter =
+        kairei::formatter::Formatter::new(kairei::formatter::config::FormatterConfig::default());
+    let formatted = formatter
+        .format(&root)
         .map_err(|e| Error::Internal(format!("Failed to format: {}", e)))?;
 
     // Output
