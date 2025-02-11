@@ -42,7 +42,7 @@ struct Cli {
     verbose: bool,
 }
 
-async fn fmt(args: &FmtArgs) -> Result<(), Error> {
+async fn format_file(args: &FmtArgs) -> Result<(), Error> {
     // Read input file
     let input = std::fs::read_to_string(&args.file)
         .map_err(|e| Error::Internal(format!("Failed to read input file: {}", e)))?;
@@ -77,7 +77,7 @@ async fn fmt(args: &FmtArgs) -> Result<(), Error> {
 
 async fn run(cli: &Cli) -> Result<(), Error> {
     match &cli.command {
-        Some(Commands::Fmt(args)) => fmt(args).await,
+        Some(Commands::Fmt(args)) => format_file(args).await,
         None => {
             // Load config
             let config_path = cli.config.clone();
