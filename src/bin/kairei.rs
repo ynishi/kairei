@@ -1,6 +1,8 @@
 use clap::{command, Parser};
 use kairei::{
+    analyzer::Parser,
     config::{self, SecretConfig, SystemConfig},
+    preprocessor::Preprocessor,
     system::System,
     Error,
 };
@@ -33,6 +35,10 @@ struct Cli {
     /// Path to config file
     #[arg(short, long, default_value = "config.json")]
     config: PathBuf,
+
+    /// Path to DSL file
+    #[arg(short, long, default_value = "data/default.kairei")]
+    dsl: PathBuf,
 
     #[arg(short, long, default_value = "secret.json")]
     secret: PathBuf,
