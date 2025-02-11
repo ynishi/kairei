@@ -1,4 +1,4 @@
-use kairei::{analyzer::Parser, core::types::generate_event_enum, preprocessor::Preprocessor};
+use kairei::{analyzer::Parser, core::types::generate_event_enum, preprocessor::Preprocessor, tokenizer::token::Token};
 use quote::quote;
 use std::{fs::File, io::Write, process::Command};
 use syn::{parse_quote, ItemFn};
@@ -79,7 +79,7 @@ async fn main() {
         .tokenize(EXAMPLE)
         .unwrap();
     let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
-    let tokens = preprocessor.process(result);
+    let tokens: Vec<Token> = preprocessor.process(result);
     let (_, agent_def) = kairei::analyzer::parsers::agent::parse_agent_def()
         .parse(tokens.as_slice(), 0)
         .unwrap();
