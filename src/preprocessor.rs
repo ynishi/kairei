@@ -1,10 +1,40 @@
-use crate::tokenizer::token::{TokenSpan, Tokenizer};
+use crate::tokenizer::token::{Token, TokenSpan, Tokenizer};
 use regex::Regex;
 
 /// A trait for preprocessing different types of input
-pub trait Preprocessor<T> {
+pub trait Preprocessor<T, U = T> {
     /// Process the input of type T and return the processed result
-    fn process(&self, input: T) -> T;
+    fn process(&self, input: T) -> U;
+}
+
+/// Token-specific preprocessor implementation
+pub struct TokenPreprocessor {
+    tokenizer: Tokenizer,
+}
+
+impl Default for TokenPreprocessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TokenPreprocessor {
+    pub fn new() -> Self {
+        Self {
+            tokenizer: Tokenizer::new(),
+        }
+    }
+}
+
+impl Preprocessor<Vec<TokenSpan>, Vec<Token>> for TokenPreprocessor {
+    fn process(&self, input: Vec<TokenSpan>) -> Vec<Token> {
+        // Filter out comments and normalize whitespace
+        input
+            .into_iter()
+            .map(|span| span.token)
+            .filter(|token| !token.is_comment() && !token.is_whitespace())
+            .collect()
+    }
 }
 
 /// Token-specific preprocessor implementation
@@ -78,7 +108,7 @@ impl StringPreprocessor {
     }
 }
 
-impl Preprocessor<&str> for StringPreprocessor {
+impl Preprocessor<&str, String> for StringPreprocessor {
     fn process(&self, input: &str) -> String {
         let mut output = input.to_string();
 

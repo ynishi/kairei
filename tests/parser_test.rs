@@ -1,4 +1,4 @@
-use kairei::parse_micro_agent;
+use kairei::{analyzer::Parser, preprocessor::Preprocessor};
 
 extern crate kairei;
 
@@ -47,8 +47,14 @@ fn it_parse_micro_agent() {
             }
         }
     "#;
-    let result = parse_micro_agent(input);
-    assert!(result.is_ok());
-    let agent = result.unwrap().1;
-    assert_eq!(agent.name, "TestAgent");
+    let result = kairei::tokenizer::token::Tokenizer::new()
+        .tokenize(input)
+        .unwrap();
+    let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
+    let tokens = preprocessor.process(result);
+    let (_, agent_def) = kairei::analyzer::parsers::agent::parse_agent_def()
+        .parse(tokens.as_slice(), 0)
+        .unwrap();
+
+    assert_eq!(agent_def.name, "TestAgent");
 }

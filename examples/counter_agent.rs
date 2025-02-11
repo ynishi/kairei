@@ -1,4 +1,4 @@
-use kairei::core::types::generate_event_enum;
+use kairei::{analyzer::Parser, core::types::generate_event_enum, preprocessor::Preprocessor};
 use quote::quote;
 use std::{fs::File, io::Write, process::Command};
 use syn::{parse_quote, ItemFn};
@@ -75,7 +75,14 @@ fn generate_main(code: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
 async fn main() {
     use kairei::ast::CodeGen;
 
-    let (_, agent_def) = kairei::parser::parse_micro_agent(EXAMPLE).unwrap();
+    let result = kairei::tokenizer::token::Tokenizer::new()
+        .tokenize(EXAMPLE)
+        .unwrap();
+    let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
+    let tokens = preprocessor.process(result);
+    let (_, agent_def) = kairei::analyzer::parsers::agent::parse_agent_def()
+        .parse(tokens.as_slice(), 0)
+        .unwrap();
 
     let rust_code = agent_def.generate_rust();
 
