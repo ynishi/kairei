@@ -1,5 +1,5 @@
+use crate::tokenizer::token::{TokenSpan, Tokenizer};
 use regex::Regex;
-use crate::tokenizer::token::{Token, TokenSpan, Tokenizer};
 
 /// A trait for preprocessing different types of input
 pub trait Preprocessor<T> {
