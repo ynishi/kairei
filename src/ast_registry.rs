@@ -3,10 +3,12 @@ use std::{collections::HashMap, sync::Arc};
 use dashmap::DashMap;
 
 use crate::{
-    ast, config::AgentConfig, parse_root, preprocessor::Preprocessor, ASTError, ASTResult,
-    AnswerDef, EventsDef, Expression, HandlerBlock, HandlersDef, Literal, MicroAgentDef,
-    RequestHandler, RequestType, StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
-    WorldDef,
+    analyzer::{self, Parser},
+    ast,
+    config::AgentConfig,
+    tokenizer, ASTError, ASTResult, AnswerDef, EventsDef, Expression, HandlerBlock, HandlersDef,
+    Literal, MicroAgentDef, RequestHandler, RequestType, StateAccessPath, StateDef, StateVarDef,
+    Statement, TypeInfo, WorldDef,
 };
 #[derive(Debug, Clone, Default)]
 pub struct AstRegistry {
@@ -15,13 +17,28 @@ pub struct AstRegistry {
 
 impl AstRegistry {
     pub async fn create_ast_from_dsl(&self, dsl: &str) -> ASTResult<ast::Root> {
-        let preprocessor = Preprocessor::new();
-        let dsl = preprocessor.process(dsl);
-
-        let (_, root) = parse_root(&dsl).map_err(|e| ASTError::ParseError {
-            message: format!("failed to parse DSL {}", e),
-            target: "root".to_string(),
-        })?;
+        let mut tokenizer = tokenizer::token::Tokenizer::new();
+        let tokens = tokenizer.tokenize(dsl).unwrap();
+        let (pos, root) = analyzer::parsers::world::parse_root()
+            .parse(
+                tokens
+                    .iter()
+                    .map(|e| e.token.clone())
+                    .filter(|e| !e.is_whitespace() && e.is_comment())
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                0,
+            )
+            .map_err(|e| ASTError::ParseError {
+                message: format!("failed to parse DSL {}", e),
+                target: "root".to_string(),
+            })?;
+        if pos != tokens.len() {
+            return Err(ASTError::ParseError {
+                message: "failed to parse DSL".to_string(),
+                target: "root".to_string(),
+            });
+        }
         Ok(root)
     }
     pub async fn register_agent_ast(

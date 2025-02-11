@@ -1,4 +1,5 @@
 pub mod agent_registry;
+pub mod analyzer;
 pub mod ast;
 pub mod ast_registry;
 pub mod config;
@@ -14,6 +15,7 @@ pub mod provider;
 pub mod runtime;
 pub mod system;
 pub mod timestamp;
+pub mod tokenizer;
 
 // Re-exports
 pub use ast::*;

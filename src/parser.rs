@@ -876,6 +876,7 @@ fn parse_multiplicative(input: &str) -> IResult<&str, Expression> {
     )(input)
 }
 
+// RESERVED_KEYWORDS in the block
 const RESERVED_KEYWORDS: [&str; 13] = [
     "think",
     "emit",
@@ -1269,7 +1270,7 @@ fn parse_type_info(input: &str) -> IResult<&str, TypeInfo> {
                 }
                 TypeInfo::Custom {
                     name: name.to_string(),
-                    constraints: constraint_map,
+                    fields: Default::default(),
                 }
             },
         ),
@@ -2134,7 +2135,7 @@ mod tests {
             player_joined.parameters[0].type_info,
             TypeInfo::Custom {
                 name: "String".to_string(),
-                constraints: HashMap::new()
+                fields: HashMap::new()
             }
         );
 
@@ -2169,7 +2170,7 @@ mod tests {
             tick_handler.parameters[0].type_info,
             TypeInfo::Custom {
                 name: "Float".to_string(),
-                constraints: Default::default(),
+                fields: Default::default(),
             }
         );
 
@@ -2769,7 +2770,7 @@ mod tests {
     #[test]
     fn test_parse_optional_error_handler() {
         let input = r#"onFail (err) { return Err(err) }"#;
-        let (_, (statement)) = parse_optional_error_handler(
+        let (_, statement) = parse_optional_error_handler(
             input,
             Statement::Expression(Expression::Literal(Literal::Null)),
         )
