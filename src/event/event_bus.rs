@@ -4,7 +4,7 @@ use crate::{eval::expression, event_registry::EventType, RetryDelay};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tokio::sync::broadcast;
-use tracing::debug;
+use tracing::{debug, trace};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Event {
@@ -455,7 +455,7 @@ impl EventBus {
     }
 
     pub async fn publish(&self, event: Event) -> EventResult<()> {
-        debug!("Publishing event: {:?}", event);
+        debug_event("Publishing", &event);
         self.event_sender
             .send(event)
             .map_err(|e| EventError::SendFailed {
@@ -465,7 +465,7 @@ impl EventBus {
     }
 
     pub fn sync_publish(&self, event: Event) -> EventResult<()> {
-        debug!("Publishing event: {:?}", event);
+        debug_event("Sync Publishing", &event);
         self.event_sender
             .send(event)
             .map_err(|e| EventError::SendFailed {
@@ -501,6 +501,15 @@ impl EventBus {
 
     pub fn capacity(&self) -> usize {
         self.capacity
+    }
+}
+
+pub fn debug_event(prefix: &str, event: &Event) {
+    match event.event_type {
+        EventType::Tick => trace!("{} Event: {:?}", prefix, event),
+        EventType::MetricsSummary => trace!("{} Event: {:?}", prefix, event),
+        EventType::StateUpdated { .. } => trace!("{} Event: {:?}", prefix, event),
+        _ => debug!("{} Event: {:?}", prefix, event),
     }
 }
 

@@ -400,6 +400,98 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_block_statement_with_error() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        // エラーが発生するブロック
+        let stmt = Statement::Block(vec![
+            Statement::Assignment {
+                target: vec![Expression::Variable("x".to_string())],
+                value: Expression::Literal(Literal::Integer(10)),
+            },
+            Statement::Assignment {
+                target: vec![Expression::Variable("y".to_string())],
+                // 未定義変数zを参照してエラーを発生させる
+                value: Expression::Variable("z".to_string()),
+            },
+        ]);
+
+        // ブロック全体がエラーになることを確認
+        let result = evaluator.eval_statement(&stmt, context.clone()).await;
+        assert!(result.is_err());
+
+        // xは最初の代入が実行されていることを確認
+        let x_value = context.get_variable("x").await.unwrap();
+        assert_eq!(x_value, Value::Integer(10));
+    }
+
+    #[tokio::test]
+    async fn test_with_error_statement() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        // エラーハンドラー付きのブロック
+        let stmt = Statement::WithError {
+            statement: Box::new(Statement::Block(vec![
+                Statement::Assignment {
+                    target: vec![Expression::Variable("x".to_string())],
+                    value: Expression::Literal(Literal::Integer(10)),
+                },
+                Statement::Assignment {
+                    target: vec![Expression::Variable("y".to_string())],
+                    // エラーを発生させる
+                    value: Expression::Variable("undefined".to_string()),
+                },
+            ])),
+            error_handler_block: ErrorHandlerBlock {
+                error_binding: Some("err".to_string()),
+                error_handler_statements: vec![Statement::Assignment {
+                    target: vec![Expression::Variable("x".to_string())],
+                    value: Expression::Literal(Literal::Integer(100)),
+                }],
+                control: None,
+            },
+        };
+
+        let result = evaluator.eval_statement(&stmt, context.clone()).await;
+        assert!(result.is_ok());
+
+        let x_value = context.get_variable("x").await.unwrap();
+        assert_eq!(x_value, Value::Integer(10));
+    }
+
+    #[tokio::test]
+    async fn test_with_error_statement_no_binding() {
+        let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
+        let context = setup_context().await;
+
+        let stmt = Statement::WithError {
+            statement: Box::new(Statement::Block(vec![Statement::Assignment {
+                target: vec![Expression::Variable("x".to_string())],
+                value: Expression::Variable("undefined".to_string()),
+            }])),
+            error_handler_block: ErrorHandlerBlock {
+                error_binding: None,
+                error_handler_statements: vec![Statement::Assignment {
+                    target: vec![Expression::Variable("fallback".to_string())],
+                    value: Expression::Literal(Literal::Integer(42)),
+                }],
+                control: None,
+            },
+        };
+
+        evaluator
+            .eval_statement(&stmt, context.clone())
+            .await
+            .unwrap();
+
+        // エラーハンドラーが実行され、fallbackが設定されていることを確認
+        let fallback_value = context.get_variable("fallback").await;
+        assert!(fallback_value.is_err());
+    }
+
+    #[tokio::test]
     async fn test_if_statement() {
         let evaluator = StatementEvaluator::new(Arc::new(ExpressionEvaluator::new()));
         let context = setup_context().await;
