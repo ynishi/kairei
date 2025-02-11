@@ -39,6 +39,16 @@ pub enum Token {
     },
 }
 
+impl Token {
+    pub fn is_whitespace(&self) -> bool {
+        matches!(self, Token::Whitespace(_))
+    }
+
+    pub fn is_comment(&self) -> bool {
+        matches!(self, Token::Comment { .. })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommentType {
     Line,               // //
