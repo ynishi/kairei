@@ -7,7 +7,7 @@ use crate::{
     ast,
     config::AgentConfig,
     preprocessor::{self, Preprocessor},
-    tokenizer, ASTError, ASTResult, AnswerDef, EventsDef, Expression, HandlerBlock, HandlersDef,
+    tokenizer::{self, token::Token}, ASTError, ASTResult, AnswerDef, EventsDef, Expression, HandlerBlock, HandlersDef,
     Literal, MicroAgentDef, RequestHandler, RequestType, StateAccessPath, StateDef, StateVarDef,
     Statement, TypeInfo, WorldDef,
 };
@@ -21,7 +21,7 @@ impl AstRegistry {
         let mut tokenizer = tokenizer::token::Tokenizer::new();
         let tokens = tokenizer.tokenize(dsl).unwrap();
         let preprocessor = preprocessor::TokenPreprocessor::default();
-        let tokens = preprocessor.process(tokens);
+        let tokens: Vec<Token> = preprocessor.process(tokens);
         let (pos, root) = analyzer::parsers::world::parse_root()
             .parse(tokens.as_slice(), 0)
             .map_err(|e| ASTError::ParseError {

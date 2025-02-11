@@ -4,6 +4,7 @@ use kairei::analyzer::Parser;
 use kairei::config::SecretConfig;
 use kairei::preprocessor::Preprocessor;
 use kairei::system::SystemResult;
+use kairei::tokenizer::token::Token;
 use kairei::{
     config::SystemConfig, event_bus::Event, event_registry::EventType, system::System,
     MicroAgentDef,
@@ -155,7 +156,7 @@ async fn test_request_response() -> SystemResult<()> {
         .tokenize(test_agent_dsl)
         .unwrap();
     let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
-    let tokens = preprocessor.process(result);
+    let tokens:Vec<Token> = preprocessor.process(result);
     let (_, ast) = kairei::analyzer::parsers::world::parse_root()
         .parse(tokens.as_slice(), 0)
         .unwrap();
