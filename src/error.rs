@@ -5,6 +5,7 @@ use crate::evaluator::EvalError;
 use crate::native_feature::types::FeatureError;
 use crate::runtime::RuntimeError;
 use crate::system::SystemError;
+use crate::type_checker::TypeCheckError;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -27,6 +28,9 @@ pub enum Error {
     // event error
     #[error("Event error: {0}")]
     Event(#[from] crate::event_bus::EventError),
+    // type checking
+    #[error("Type check error: {0}")]
+    TypeCheck(#[from] crate::type_checker::TypeCheckError),
 
     #[error("Internal error: {0}")]
     Internal(String),
