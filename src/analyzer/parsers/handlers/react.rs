@@ -27,25 +27,6 @@ fn parse_react_keyword() -> impl Parser<Token, Token> {
     with_context(equal(Token::Keyword(Keyword::React)), "react keyword")
 }
 
-pub fn parse_handlers() -> impl Parser<Token, ast::HandlersDef> {
-    with_context(
-        map(
-            tuple4(
-                as_unit(parse_handlers_keyword()),
-                as_unit(parse_open_brace()),
-                many(parse_handler()),
-                as_unit(parse_close_brace()),
-            ),
-            |(_, _, handlers, _)| ast::HandlersDef { handlers },
-        ),
-        "handlers",
-    )
-}
-
-pub fn parse_handlers_keyword() -> impl Parser<Token, Token> {
-    with_context(equal(Token::Keyword(Keyword::Handlers)), "handlers keyword")
-}
-
 pub fn parse_handler() -> impl Parser<Token, ast::HandlerDef> {
     with_context(
         map(

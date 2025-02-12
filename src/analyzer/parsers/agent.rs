@@ -156,6 +156,7 @@ pub fn parse_state() -> impl Parser<Token, ast::StateDef> {
     )
 }
 
+// TODO: parse_type_info, parse_field を使用するようにする
 fn parse_state_var() -> impl Parser<Token, (String, ast::StateVarDef)> {
     with_context(
         map(

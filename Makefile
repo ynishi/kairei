@@ -13,3 +13,6 @@ fmt:
 
 dev:
 	RUST_LOG=kairei=debug cargo run --bin kairei
+
+build:
+	cargo build
