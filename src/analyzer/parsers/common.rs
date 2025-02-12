@@ -26,6 +26,7 @@ pub fn parse_literal() -> impl Parser<Token, ast::Literal> {
             Box::new(parse_integer()),
             Box::new(parse_string()),
             Box::new(parse_boolean()),
+            Box::new(parse_duration()),
             Box::new(parse_list()),
             Box::new(parse_map()),
             Box::new(parse_retry()),
@@ -294,6 +295,7 @@ fn parse_duration() -> impl Parser<Token, ast::Literal> {
 }
 
 // unitをまとめて取得するヘルパー関数
+#[allow(dead_code)]
 fn parse_duration_unit() -> impl Parser<Token, String> {
     choice(vec![
         Box::new(parse_ms()),

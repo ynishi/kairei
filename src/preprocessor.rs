@@ -1,4 +1,4 @@
-use crate::tokenizer::token::{Token, TokenSpan, Tokenizer};
+use crate::tokenizer::token::{Token, TokenSpan};
 use regex::Regex;
 
 /// A trait for preprocessing different types of input
@@ -8,9 +8,7 @@ pub trait Preprocessor<T, U = T> {
 }
 
 /// Token-specific preprocessor implementation
-pub struct TokenPreprocessor {
-    tokenizer: Tokenizer,
-}
+pub struct TokenPreprocessor {}
 
 impl Default for TokenPreprocessor {
     fn default() -> Self {
@@ -20,9 +18,7 @@ impl Default for TokenPreprocessor {
 
 impl TokenPreprocessor {
     pub fn new() -> Self {
-        Self {
-            tokenizer: Tokenizer::new(),
-        }
+        Self {}
     }
 }
 

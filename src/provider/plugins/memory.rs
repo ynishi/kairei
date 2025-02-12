@@ -14,6 +14,7 @@ use crate::provider::types::ProviderResult;
 
 /// メモリエントリ
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Memory {
     content: String,
     timestamp: DateTime<Utc>,
