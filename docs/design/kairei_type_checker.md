@@ -542,21 +542,344 @@ The type system supports limited type inference with clear rules and limitations
 ## 3. Implementation Guide
 
 ### 3.1 Core Module Design
-- TypeChecker implementation
-- Visitor pattern for AST traversal
-- Error collection implementation
+
+The type checker implementation follows a modular design pattern:
+
+1. Core Type Checker
+   ```rust
+   pub struct TypeChecker {
+       context: TypeContext,
+       visitors: Vec<Box<dyn TypeVisitor>>,
+   }
+   
+   impl TypeChecker {
+       // Main entry point
+       pub fn check(&self, ast: &Root) -> TypeCheckResult<()> {
+           // Initialize context
+           self.context.clear();
+           
+           // Run all visitors
+           for visitor in &self.visitors {
+               visitor.visit(ast, &self.context)?;
+           }
+           
+           // Return collected errors if any
+           if self.context.has_errors() {
+               Err(TypeCheckError::Multiple(self.context.take_errors()))
+           } else {
+               Ok(())
+           }
+       }
+   }
+   ```
+
+2. AST Visitors
+   ```rust
+   pub trait TypeVisitor {
+       // Visit methods for each AST node type
+       fn visit_micro_agent(&self, agent: &MicroAgentDef, ctx: &TypeContext) -> TypeCheckResult<()>;
+       fn visit_state(&self, state: &StateDef, ctx: &TypeContext) -> TypeCheckResult<()>;
+       fn visit_handler(&self, handler: &HandlerDef, ctx: &TypeContext) -> TypeCheckResult<()>;
+       fn visit_expression(&self, expr: &Expression, ctx: &TypeContext) -> TypeCheckResult<()>;
+   }
+   
+   // Specialized visitors
+   pub struct StateTypeVisitor;
+   pub struct HandlerTypeVisitor;
+   pub struct ExpressionTypeVisitor;
+   pub struct PluginTypeVisitor;
+   ```
+
+3. Type Resolution
+   ```rust
+   pub struct TypeResolver {
+       type_cache: HashMap<String, ResolvedType>,
+       inference_context: InferenceContext,
+   }
+   
+   impl TypeResolver {
+       // Type resolution methods
+       fn resolve_type(&self, type_info: &TypeInfo) -> TypeCheckResult<ResolvedType>;
+       fn infer_type(&self, expr: &Expression) -> TypeCheckResult<TypeInfo>;
+       fn unify_types(&self, t1: &TypeInfo, t2: &TypeInfo) -> TypeCheckResult<TypeInfo>;
+   }
+   ```
+
+4. Error Collection
+   ```rust
+   pub struct ErrorCollector {
+       errors: Vec<TypeCheckError>,
+       current_location: Location,
+   }
+   
+   impl ErrorCollector {
+       // Error collection methods
+       fn add_error(&mut self, error: TypeCheckError);
+       fn add_with_help(&mut self, error: TypeCheckError, help: String);
+       fn has_critical_error(&self) -> bool;
+   }
+   ```
 
 ### 3.2 Class/Interface Definitions
-- TypeValidator trait
-- ErrorCollector interface
-- PluginTypeValidator interface
+
+The type checker defines the following core interfaces:
+
+1. Type Validator Interface
+   ```rust
+   pub trait TypeValidator {
+       // Core validation methods
+       fn validate_type(&self, type_info: &TypeInfo) -> TypeCheckResult<()>;
+       fn validate_expression(&self, expr: &Expression) -> TypeCheckResult<()>;
+       fn validate_statement(&self, stmt: &Statement) -> TypeCheckResult<()>;
+       
+       // Specialized validation
+       fn validate_state_def(&self, state: &StateDef) -> TypeCheckResult<()>;
+       fn validate_handler_def(&self, handler: &HandlerDef) -> TypeCheckResult<()>;
+       fn validate_think_block(&self, think: &Expression) -> TypeCheckResult<()>;
+   }
+   ```
+
+2. Error Collector Interface
+   ```rust
+   pub trait ErrorCollector {
+       // Error collection
+       fn add_error(&mut self, error: TypeCheckError);
+       fn add_with_help(&mut self, error: TypeCheckError, help: String);
+       fn add_with_suggestion(&mut self, error: TypeCheckError, suggestion: String);
+       
+       // Error management
+       fn has_errors(&self) -> bool;
+       fn error_count(&self) -> usize;
+       fn take_errors(&mut self) -> Vec<TypeCheckError>;
+       fn clear_errors(&mut self);
+       
+       // Error filtering
+       fn has_critical_errors(&self) -> bool;
+       fn filter_errors(&self, severity: ErrorSeverity) -> Vec<&TypeCheckError>;
+   }
+   ```
+
+3. Plugin Validator Interface
+   ```rust
+   pub trait PluginValidator {
+       // Plugin type validation
+       fn validate_plugin(&self, plugin: &ProviderPlugin) -> TypeCheckResult<()>;
+       fn validate_plugin_config(&self, config: &PluginConfig) -> TypeCheckResult<()>;
+       
+       // Request/Response validation
+       fn validate_request(&self, request: &ProviderRequest) -> TypeCheckResult<()>;
+       fn validate_response(&self, response: &ProviderResponse) -> TypeCheckResult<()>;
+       
+       // Schema validation
+       fn validate_schema(&self, schema: &PluginSchema) -> TypeCheckResult<()>;
+       fn validate_against_schema(&self, value: &Value, schema: &PluginSchema) -> TypeCheckResult<()>;
+   }
+   ```
+
+4. Type Context Interface
+   ```rust
+   pub trait TypeContext {
+       // Scope management
+       fn enter_scope(&mut self);
+       fn exit_scope(&mut self);
+       fn in_scope<F>(&mut self, f: F) where F: FnOnce(&mut Self);
+       
+       // Type management
+       fn add_type(&mut self, name: &str, type_info: TypeInfo);
+       fn get_type(&self, name: &str) -> Option<&TypeInfo>;
+       fn resolve_type(&self, type_info: &TypeInfo) -> TypeCheckResult<ResolvedType>;
+       
+       // Error handling
+       fn report_error(&mut self, error: TypeCheckError);
+       fn has_errors(&self) -> bool;
+       fn take_errors(&mut self) -> Vec<TypeCheckError>;
+   }
+   ```
 
 ### 3.3 Error Handling Strategy
-- Error collection pattern
-- Error message formatting
-- Error propagation flow
+
+The type checker implements a robust error handling strategy:
+
+1. Error Collection Pattern
+   ```rust
+   impl TypeChecker {
+       fn check_with_collection(&self, ast: &Root) -> TypeCheckResult<()> {
+           let mut collector = ErrorCollector::new();
+           
+           // Collect errors from all phases
+           self.check_types(ast, &mut collector)?;
+           self.check_plugins(ast, &mut collector)?;
+           self.check_think_blocks(ast, &mut collector)?;
+           
+           // Process collected errors
+           if collector.has_critical_errors() {
+               // Fail fast on critical errors
+               Err(collector.take_critical_errors().into())
+           } else if collector.has_errors() {
+               // Return all non-critical errors
+               Err(collector.take_errors().into())
+           } else {
+               Ok(())
+           }
+       }
+   }
+   ```
+
+2. Error Message Formatting
+   ```rust
+   impl ErrorFormatter {
+       fn format_error(&self, error: &TypeCheckError) -> String {
+           match error {
+               TypeCheckError::TypeMismatch { expected, found, location } => {
+                   format!(
+                       "Error[E0001]: Type mismatch at {}
+                        Expected type: {}
+                        Found type: {}
+                        Help: {}",
+                       location,
+                       self.format_type(expected),
+                       self.format_type(found),
+                       self.suggest_fix(expected, found)
+                   )
+               }
+               // Other error types...
+           }
+       }
+       
+       fn suggest_fix(&self, expected: &TypeInfo, found: &TypeInfo) -> String {
+           // Generate helpful suggestions based on type mismatch
+           match (expected, found) {
+               (TypeInfo::String, TypeInfo::Int) => 
+                   "Consider using .to_string() to convert the number",
+               // Other cases...
+               _ => "Types are incompatible"
+           }
+       }
+   }
+   ```
+
+3. Error Recovery Strategy
+   ```rust
+   impl TypeChecker {
+       fn recover_from_error(&self, error: &TypeCheckError) -> TypeCheckResult<()> {
+           match error {
+               // Continue checking after non-critical errors
+               TypeCheckError::TypeMismatch { .. } => {
+                   self.report_error(error);
+                   Ok(()) // Continue checking
+               }
+               
+               // Stop on critical errors
+               TypeCheckError::InvalidPlugin { .. } => {
+                   Err(error.clone()) // Stop checking
+               }
+               
+               // Other cases...
+           }
+       }
+   }
+   ```
+
+4. Error Propagation Flow
+   ```rust
+   // Error flow through validation chain
+   fn validate_agent(&self, agent: &MicroAgentDef) -> TypeCheckResult<()> {
+       // Collect errors from all components
+       let mut errors = Vec::new();
+       
+       // Continue checking even if components fail
+       if let Err(e) = self.validate_state(&agent.state) {
+           errors.push(e);
+       }
+       if let Err(e) = self.validate_handlers(&agent.handlers) {
+           errors.push(e);
+       }
+       
+       // Return collected errors
+       if errors.is_empty() {
+           Ok(())
+       } else {
+           Err(TypeCheckError::Multiple(errors))
+       }
+   }
+   ```
 
 ### 3.4 Performance Requirements
-- Single-pass validation
-- Error collection optimization
-- Memory usage considerations
+
+The type checker implementation must meet the following performance requirements:
+
+1. Single-Pass Validation
+   ```rust
+   impl TypeChecker {
+       // Efficient single-pass validation
+       fn check_types(&self, ast: &Root) -> TypeCheckResult<()> {
+           // Pre-allocate visitors for efficiency
+           let visitors = vec![
+               Box::new(StateTypeVisitor::new()),
+               Box::new(HandlerTypeVisitor::new()),
+               Box::new(ExpressionTypeVisitor::new()),
+           ];
+           
+           // Single pass through AST
+           for visitor in visitors {
+               visitor.visit(ast, &self.context)?;
+           }
+           
+           Ok(())
+       }
+   }
+   ```
+
+2. Memory Management
+   ```rust
+   impl TypeContext {
+       // Efficient type caching
+       fn with_type_cache(&self) -> TypeCache {
+           TypeCache {
+               resolved_types: HashMap::with_capacity(100),
+               inferred_types: HashMap::with_capacity(100),
+           }
+       }
+       
+       // Scope-based memory management
+       fn enter_scope(&mut self) {
+           self.scopes.push(HashMap::with_capacity(10));
+       }
+       
+       fn exit_scope(&mut self) {
+           self.scopes.pop();
+       }
+   }
+   ```
+
+3. Error Collection Optimization
+   ```rust
+   impl ErrorCollector {
+       // Efficient error collection
+       fn new() -> Self {
+           Self {
+               errors: Vec::with_capacity(10),
+               critical_errors: Vec::with_capacity(5),
+           }
+       }
+       
+       // Early exit on critical errors
+       fn add_error(&mut self, error: TypeCheckError) {
+           if error.is_critical() {
+               self.critical_errors.push(error);
+           } else {
+               self.errors.push(error);
+           }
+       }
+   }
+   ```
+
+4. Performance Considerations
+   - Single pass through AST for type checking
+   - Efficient type caching to avoid redundant resolution
+   - Scope-based memory management
+   - Early exit on critical errors
+   - Pre-allocation of common data structures
+   - Minimal cloning of type information
+   - Efficient error collection and reporting
+   - Lazy type resolution where possible
