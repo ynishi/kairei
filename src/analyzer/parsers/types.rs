@@ -20,6 +20,7 @@ pub fn parse_type_info() -> impl Parser<Token, ast::TypeInfo> {
     )
 }
 
+#[allow(dead_code)]
 fn parse_field() -> impl Parser<Token, (String, ast::FieldInfo)> {
     with_context(
         tuple2(
@@ -91,6 +92,7 @@ fn parse_type_reference() -> impl Parser<Token, ast::TypeInfo> {
     })
 }
 
+#[allow(dead_code)]
 pub fn parse_custom_type() -> impl Parser<Token, ast::TypeInfo> {
     with_context(
         map(

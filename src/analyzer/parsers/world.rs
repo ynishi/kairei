@@ -96,16 +96,6 @@ fn parse_policy_keyword() -> impl Parser<Token, Token> {
     with_context(equal(Token::Keyword(Keyword::Policy)), "policy keyword")
 }
 
-fn parse_policy_item() -> impl Parser<Token, (String, ast::Literal)> {
-    with_context(
-        map(
-            tuple3(parse_identifier(), as_unit(parse_colon()), parse_literal()),
-            |(name, _, value)| (name, value),
-        ),
-        "policy item",
-    )
-}
-
 pub fn parse_config() -> impl Parser<Token, ast::ConfigDef> {
     with_context(
         map(
@@ -195,7 +185,7 @@ pub fn parse_parameter() -> impl Parser<Token, ast::Parameter> {
     )
 }
 
-fn parse_handlers() -> impl Parser<Token, ast::HandlersDef> {
+pub fn parse_handlers() -> impl Parser<Token, ast::HandlersDef> {
     with_context(
         map(
             tuple4(
@@ -208,4 +198,8 @@ fn parse_handlers() -> impl Parser<Token, ast::HandlersDef> {
         ),
         "handlers",
     )
+}
+
+pub fn parse_handlers_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Handlers)), "handlers keyword")
 }
