@@ -156,7 +156,7 @@ async fn test_request_response() -> SystemResult<()> {
         .tokenize(test_agent_dsl)
         .unwrap();
     let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
-    let tokens:Vec<Token> = preprocessor.process(result);
+    let tokens: Vec<Token> = preprocessor.process(result);
     let (_, ast) = kairei::analyzer::parsers::world::parse_root()
         .parse(tokens.as_slice(), 0)
         .unwrap();
