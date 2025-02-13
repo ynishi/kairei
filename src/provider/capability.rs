@@ -23,21 +23,18 @@ pub enum CapabilityType {
     Thread,
     /// メモリ/状態保持機能
     Memory,
-    /// ストリーミング処理機能
+    // /// ストリーミング処理機能
     // Streaming,
-
     // Knowledge Capabilities
     /// RAG (Retrieval Augmented Generation)
     Rag,
     /// Web検索機能
     Search,
-    /// 外部データソースとの連携
+    // /// 外部データソースとの連携
     // ExternalData,
-
     // Function Capabilities
-    /// 関数呼び出し機能
+    // /// 関数呼び出し機能
     // FunctionCall,
-
     // Model Capabilities
     /// モデルの最大トークン数
     // MaxTokens(usize),
@@ -45,9 +42,8 @@ pub enum CapabilityType {
     // WindowSize(usize),
     /// システムプロンプトのサポート
     SystemPrompt,
-    /// 独自のトークン化方式
+    // /// 独自のトークン化方式
     // TokenEncoding,
-
     // Custom Capabilities
     /// カスタム機能
     Custom(String),

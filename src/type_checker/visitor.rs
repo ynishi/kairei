@@ -6,12 +6,12 @@ pub trait TypeVisitor {
     /// Visit a micro agent definition
     fn visit_micro_agent(
         &self,
-        agent: &MicroAgentDef,
+        agent: &mut MicroAgentDef,
         ctx: &mut TypeContext,
     ) -> TypeCheckResult<()>;
 
     /// Visit a state definition
-    fn visit_state(&self, state: &StateDef, ctx: &mut TypeContext) -> TypeCheckResult<()>;
+    fn visit_state(&self, state: &mut StateDef, ctx: &mut TypeContext) -> TypeCheckResult<()>;
 
     /// Visit a handler definition
     fn visit_handler(&self, handler: &HandlerDef, ctx: &mut TypeContext) -> TypeCheckResult<()>;
@@ -26,11 +26,11 @@ pub struct DefaultTypeVisitor;
 impl TypeVisitor for DefaultTypeVisitor {
     fn visit_micro_agent(
         &self,
-        agent: &MicroAgentDef,
+        agent: &mut MicroAgentDef,
         ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
         // Visit state definition if present
-        if let Some(state) = &agent.state {
+        if let Some(state) = &mut agent.state {
             self.visit_state(state, ctx)?;
         }
 
@@ -58,10 +58,27 @@ impl TypeVisitor for DefaultTypeVisitor {
         Ok(())
     }
 
-    fn visit_state(&self, state: &StateDef, ctx: &mut TypeContext) -> TypeCheckResult<()> {
-        for (name, var) in &state.variables {
-            // Validate type info
-            self.validate_type_info(&var.type_info, ctx)?;
+    fn visit_state(&self, state: &mut StateDef, ctx: &mut TypeContext) -> TypeCheckResult<()> {
+        for (name, var) in &mut state.variables {
+            // Infer type if not explicitly specified
+            if var.type_info == TypeInfo::Simple("".to_string()) {
+                if let Some(init) = &var.initial_value {
+                    let inferred_type = self.infer_type(init, ctx)?;
+                    ctx.scope.insert_type(name.clone(), inferred_type.clone());
+                    // Update the variable's type info with inferred type
+                    var.type_info = inferred_type;
+                } else {
+                    return Err(TypeCheckError::TypeInferenceError {
+                        message: format!(
+                            "Cannot infer type for state variable '{}' without initial value",
+                            name
+                        ),
+                    });
+                }
+            } else {
+                // Validate explicit type info
+                self.validate_type_info(&var.type_info, ctx)?;
+            }
 
             // Validate initial value if present
             if let Some(init) = &var.initial_value {
@@ -101,7 +118,9 @@ impl TypeVisitor for DefaultTypeVisitor {
             Expression::StateAccess(path) => {
                 // Check state variable exists and is accessible
                 if !ctx.scope.contains_type(&path.0.join(".")) {
-                    return Err(TypeCheckError::InvalidStateVariable(path.0.join(".")));
+                    return Err(TypeCheckError::InvalidStateVariable {
+                        message: path.0.join("."),
+                    });
                 }
                 Ok(())
             }
@@ -314,14 +333,44 @@ impl DefaultTypeVisitor {
         // Validate plugin configurations
         for (plugin_name, config) in &attrs.plugins {
             if !ctx.plugins.contains_key(plugin_name) {
-                return Err(TypeCheckError::InvalidPluginConfig(format!(
-                    "Unknown plugin: {}",
-                    plugin_name
-                )));
+                return Err(TypeCheckError::InvalidPluginConfig {
+                    message: format!("Unknown plugin: {}", plugin_name),
+                });
             }
             // Additional plugin config validation could be added here
         }
         Ok(())
+    }
+
+    #[allow(clippy::only_used_in_recursion)]
+    fn infer_type(&self, expr: &Expression, _ctx: &mut TypeContext) -> TypeCheckResult<TypeInfo> {
+        match expr {
+            Expression::Literal(lit) => Ok(match lit {
+                Literal::Integer(_) => TypeInfo::Simple("Int".to_string()),
+                Literal::Float(_) => TypeInfo::Simple("Float".to_string()),
+                Literal::String(_) => TypeInfo::Simple("String".to_string()),
+                Literal::Boolean(_) => TypeInfo::Simple("Boolean".to_string()),
+                Literal::Duration(_) => TypeInfo::Simple("Duration".to_string()),
+                Literal::List(items) => {
+                    if items.is_empty() {
+                        return Err(TypeCheckError::TypeInferenceError {
+                            message: "Cannot infer type of empty list".to_string(),
+                        });
+                    }
+                    let item_type =
+                        self.infer_type(&Expression::Literal(items[0].clone()), _ctx)?;
+                    TypeInfo::Array(Box::new(item_type))
+                }
+                _ => {
+                    return Err(TypeCheckError::TypeInferenceError {
+                        message: "Cannot infer type from this literal".to_string(),
+                    })
+                }
+            }),
+            _ => Err(TypeCheckError::TypeInferenceError {
+                message: "Type inference not supported for this expression".to_string(),
+            }),
+        }
     }
 
     #[allow(unused_variables)]
