@@ -4,14 +4,18 @@ use crate::ast::*;
 /// Visitor trait for type checking AST nodes
 pub trait TypeVisitor {
     /// Visit a micro agent definition
-    fn visit_micro_agent(&self, agent: &MicroAgentDef, ctx: &mut TypeContext) -> TypeCheckResult<()>;
-    
+    fn visit_micro_agent(
+        &self,
+        agent: &MicroAgentDef,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()>;
+
     /// Visit a state definition
     fn visit_state(&self, state: &StateDef, ctx: &mut TypeContext) -> TypeCheckResult<()>;
-    
+
     /// Visit a handler definition
     fn visit_handler(&self, handler: &HandlerDef, ctx: &mut TypeContext) -> TypeCheckResult<()>;
-    
+
     /// Visit an expression
     fn visit_expression(&self, expr: &Expression, ctx: &mut TypeContext) -> TypeCheckResult<()>;
 }
@@ -20,7 +24,11 @@ pub trait TypeVisitor {
 pub struct DefaultTypeVisitor;
 
 impl TypeVisitor for DefaultTypeVisitor {
-    fn visit_micro_agent(&self, agent: &MicroAgentDef, ctx: &mut TypeContext) -> TypeCheckResult<()> {
+    fn visit_micro_agent(
+        &self,
+        agent: &MicroAgentDef,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()> {
         // Visit state definition if present
         if let Some(state) = &agent.state {
             self.visit_state(state, ctx)?;
@@ -29,7 +37,7 @@ impl TypeVisitor for DefaultTypeVisitor {
         // Visit answer handlers if present
         if let Some(answer) = &agent.answer {
             for handler in &answer.handlers {
-                self.visit_handler(handler, ctx)?;
+                self.visit_request_handler(handler, ctx)?;
             }
         }
 
@@ -145,7 +153,11 @@ impl TypeVisitor for DefaultTypeVisitor {
 }
 
 impl DefaultTypeVisitor {
-    fn visit_event_handler(&self, handler: &EventHandler, ctx: &mut TypeContext) -> TypeCheckResult<()> {
+    fn visit_request_handler(
+        &self,
+        handler: &RequestHandler,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()> {
         // Validate parameter types
         for param in &handler.parameters {
             self.validate_type_info(&param.type_info, ctx)?;
@@ -155,7 +167,25 @@ impl DefaultTypeVisitor {
         self.visit_handler_block(&handler.block, ctx)
     }
 
-    fn visit_handler_block(&self, block: &HandlerBlock, ctx: &mut TypeContext) -> TypeCheckResult<()> {
+    fn visit_event_handler(
+        &self,
+        handler: &EventHandler,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()> {
+        // Validate parameter types
+        for param in &handler.parameters {
+            self.validate_type_info(&param.type_info, ctx)?;
+        }
+
+        // Visit handler block
+        self.visit_handler_block(&handler.block, ctx)
+    }
+
+    fn visit_handler_block(
+        &self,
+        block: &HandlerBlock,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()> {
         // Create new scope for block
         ctx.scope.enter_scope();
 
@@ -200,7 +230,10 @@ impl DefaultTypeVisitor {
                 ctx.scope.exit_scope();
                 Ok(())
             }
-            Statement::WithError { statement, error_handler_block } => {
+            Statement::WithError {
+                statement,
+                error_handler_block,
+            } => {
                 self.visit_statement(statement, ctx)?;
                 ctx.scope.enter_scope();
                 for stmt in &error_handler_block.error_handler_statements {
@@ -209,9 +242,13 @@ impl DefaultTypeVisitor {
                 ctx.scope.exit_scope();
                 Ok(())
             }
-            Statement::If { condition, then_block, else_block } => {
+            Statement::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
                 self.visit_expression(condition, ctx)?;
-                
+
                 ctx.scope.enter_scope();
                 for stmt in then_block {
                     self.visit_statement(stmt, ctx)?;
@@ -230,7 +267,11 @@ impl DefaultTypeVisitor {
         }
     }
 
-    fn validate_type_info(&self, type_info: &TypeInfo, ctx: &mut TypeContext) -> TypeCheckResult<()> {
+    fn validate_type_info(
+        &self,
+        type_info: &TypeInfo,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()> {
         match type_info {
             TypeInfo::Simple(name) => {
                 if !ctx.scope.contains_type(name) {
@@ -242,9 +283,7 @@ impl DefaultTypeVisitor {
                 self.validate_type_info(ok_type, ctx)?;
                 self.validate_type_info(err_type, ctx)
             }
-            TypeInfo::Option(inner) | TypeInfo::Array(inner) => {
-                self.validate_type_info(inner, ctx)
-            }
+            TypeInfo::Option(inner) | TypeInfo::Array(inner) => self.validate_type_info(inner, ctx),
             TypeInfo::Map(key_type, value_type) => {
                 self.validate_type_info(key_type, ctx)?;
                 self.validate_type_info(value_type, ctx)
@@ -266,12 +305,18 @@ impl DefaultTypeVisitor {
         }
     }
 
-    fn validate_think_attributes(&self, attrs: &ThinkAttributes, ctx: &mut TypeContext) -> TypeCheckResult<()> {
+    #[allow(unused_variables)]
+    fn validate_think_attributes(
+        &self,
+        attrs: &ThinkAttributes,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()> {
         // Validate plugin configurations
         for (plugin_name, config) in &attrs.plugins {
             if !ctx.plugins.contains_key(plugin_name) {
                 return Err(TypeCheckError::InvalidPluginConfig(format!(
-                    "Unknown plugin: {}", plugin_name
+                    "Unknown plugin: {}",
+                    plugin_name
                 )));
             }
             // Additional plugin config validation could be added here
@@ -279,7 +324,13 @@ impl DefaultTypeVisitor {
         Ok(())
     }
 
-    fn check_type_compatibility(&self, expected: &TypeInfo, expr: &Expression, ctx: &mut TypeContext) -> TypeCheckResult<()> {
+    #[allow(unused_variables)]
+    fn check_type_compatibility(
+        &self,
+        expected: &TypeInfo,
+        expr: &Expression,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()> {
         // This is a placeholder for actual type compatibility checking
         // In a full implementation, this would infer the type of the expression
         // and check if it's compatible with the expected type

@@ -1,8 +1,8 @@
-use thiserror::Error;
 use crate::ast::TypeInfo;
+use thiserror::Error;
 
 /// Error type for type checking operations
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum TypeCheckError {
     #[error("Type mismatch: expected {expected}, found {found}")]
     TypeMismatch {

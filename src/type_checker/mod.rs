@@ -1,5 +1,5 @@
 //! Type checker module for KAIREI DSL
-//! 
+//!
 //! This module implements type checking for the KAIREI DSL, validating type
 //! correctness across all language constructs including state definitions,
 //! request handlers, think blocks, and plugin interactions.
@@ -10,18 +10,18 @@ mod visitor;
 
 pub use error::{TypeCheckError, TypeCheckResult};
 pub use scope::TypeScope;
-pub use visitor::{TypeVisitor, DefaultTypeVisitor};
+pub use visitor::{DefaultTypeVisitor, TypeVisitor};
 
 use crate::ast::Root;
-use std::sync::Arc;
-use dashmap::DashMap;
 use crate::provider::plugin::ProviderPlugin;
+use dashmap::DashMap;
+use std::sync::Arc;
 
 /// Core type checker trait defining the main interface for type validation
 pub trait TypeChecker {
     /// Perform type checking on an entire AST
-    fn check_types(&self, ast: &Root) -> TypeCheckResult<()>;
-    
+    fn check_types(&mut self, ast: &Root) -> TypeCheckResult<()>;
+
     /// Get any collected type errors
     fn collect_errors(&self) -> Vec<TypeCheckError>;
 }
@@ -34,6 +34,12 @@ pub struct TypeContext {
     scope: TypeScope,
     /// Plugin type information
     plugins: Arc<DashMap<String, Box<dyn ProviderPlugin>>>,
+}
+
+impl Default for TypeContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TypeContext {
@@ -91,7 +97,7 @@ impl DefaultTypeChecker {
 }
 
 impl TypeChecker for DefaultTypeChecker {
-    fn check_types(&self, ast: &Root) -> TypeCheckResult<()> {
+    fn check_types(&mut self, ast: &Root) -> TypeCheckResult<()> {
         // Clear any previous state
         self.context.clear();
 

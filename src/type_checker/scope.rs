@@ -1,5 +1,5 @@
-use dashmap::DashMap;
 use crate::ast::TypeInfo;
+use dashmap::DashMap;
 
 /// Manages type scopes for type checking
 pub struct TypeScope {
@@ -11,11 +11,23 @@ struct TypeScopeLayer {
     types: DashMap<String, TypeInfo>,
 }
 
+impl Default for TypeScopeLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TypeScopeLayer {
     fn new() -> Self {
         Self {
             types: DashMap::new(),
         }
+    }
+}
+
+impl Default for TypeScope {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -83,20 +95,14 @@ mod tests {
         assert_eq!(scope.depth(), 1);
 
         // Test inserting and getting types
-        scope.insert_type(
-            "int".to_string(),
-            TypeInfo::Simple("Int".to_string()),
-        );
+        scope.insert_type("int".to_string(), TypeInfo::Simple("Int".to_string()));
         assert!(scope.contains_type("int"));
         assert!(!scope.contains_type("float"));
 
         // Test scope nesting
         scope.enter_scope();
         assert_eq!(scope.depth(), 2);
-        scope.insert_type(
-            "float".to_string(),
-            TypeInfo::Simple("Float".to_string()),
-        );
+        scope.insert_type("float".to_string(), TypeInfo::Simple("Float".to_string()));
         assert!(scope.contains_type("int")); // Can see outer scope
         assert!(scope.contains_type("float")); // Can see current scope
 
