@@ -14,84 +14,13 @@ pub fn parse_type_info() -> impl Parser<Token, ast::TypeInfo> {
                 Box::new(parse_option_type()),
                 Box::new(parse_array_type()),
                 Box::new(parse_simple_type()),
+                Box::new(parse_custom_type()),
             ])
         }),
         "type info",
     )
 }
 
-pub fn parse_field() -> impl Parser<Token, (String, ast::FieldInfo)> {
-    with_context(
-        tuple2(
-            parse_identifier(),
-            choice(vec![
-                Box::new(parse_field_typed_with_default()),
-                Box::new(parse_field_typed()),
-                Box::new(parse_field_inferred()),
-            ]),
-        ),
-        "field",
-    )
-}
-
-pub fn parse_field_typed_with_default() -> impl Parser<Token, ast::FieldInfo> {
-    with_context(
-        map(
-            tuple4(
-                parse_colon(),
-                parse_identifier(),
-                parse_equal(),
-                parse_expression(),
-            ),
-            |(_, type_info, _, value)| ast::FieldInfo {
-                type_info: Some(ast::TypeInfo::Simple(type_info)),
-                default_value: Some(value),
-            },
-        ),
-        "typed field with default value",
-    )
-}
-
-fn parse_field_typed() -> impl Parser<Token, ast::FieldInfo> {
-    with_context(
-        map(
-            preceded(as_unit(parse_colon()), parse_type_reference()),
-            |type_info| ast::FieldInfo {
-                type_info: Some(type_info),
-                default_value: None,
-            },
-        ),
-        "typed field",
-    )
-}
-
-fn parse_field_inferred() -> impl Parser<Token, ast::FieldInfo> {
-    with_context(
-        map(
-            preceded(as_unit(parse_equal()), parse_expression()),
-            |value| ast::FieldInfo {
-                type_info: None,
-                default_value: Some(value),
-            },
-        ),
-        "inferred field",
-    )
-}
-
-// 型参照のみを許可（インライン定義は不可）
-fn parse_type_reference() -> impl Parser<Token, ast::TypeInfo> {
-    lazy(|| {
-        choice(vec![
-            Box::new(parse_simple_type()), // String, Intなど
-            Box::new(parse_result_type()), // Result<T, E>
-            Box::new(parse_option_type()), // Option<T>
-            Box::new(parse_array_type()),  // Array<T>
-                                           // カスタム型の参照はOK、定義は不可
-        ])
-    })
-}
-
-#[allow(dead_code)]
 pub fn parse_custom_type() -> impl Parser<Token, ast::TypeInfo> {
     with_context(
         map(
@@ -174,29 +103,73 @@ fn parse_simple_type() -> impl Parser<Token, ast::TypeInfo> {
     )
 }
 
-fn parse_field_error() -> impl Parser<Token, (String, ast::FieldInfo)> {
-    fail("Type inference not implemented yet")
-}
-
-fn parse_field_success() -> impl Parser<Token, (String, ast::FieldInfo)> {
-    map(
-        parse_field(),
-        |(name, field_info)| {
-            if field_info.type_info.is_some() {
-                (name, field_info)
-            } else {
-                (name, field_info)
-            }
-        },
-    )
-}
-
-pub fn parse_field_has_initial() -> impl Parser<Token, (String, ast::FieldInfo)> {
+pub fn parse_field() -> impl Parser<Token, (String, ast::FieldInfo)> {
     with_context(
-        choice(vec![
-            Box::new(parse_field_success()),
-            Box::new(parse_field_error()),
-        ]),
-        "field with required type",
+        tuple2(
+            parse_identifier(),
+            choice(vec![
+                Box::new(parse_field_typed_with_default()),
+                Box::new(parse_field_typed()),
+                Box::new(parse_field_inferred()),
+            ]),
+        ),
+        "field",
     )
+}
+
+pub fn parse_field_typed_with_default() -> impl Parser<Token, ast::FieldInfo> {
+    with_context(
+        map(
+            tuple4(
+                parse_colon(),
+                parse_identifier(),
+                parse_equal(),
+                parse_expression(),
+            ),
+            |(_, type_info, _, value)| ast::FieldInfo {
+                type_info: Some(ast::TypeInfo::Simple(type_info)),
+                default_value: Some(value),
+            },
+        ),
+        "typed field with default value",
+    )
+}
+
+fn parse_field_typed() -> impl Parser<Token, ast::FieldInfo> {
+    with_context(
+        map(
+            preceded(as_unit(parse_colon()), parse_type_reference()),
+            |type_info| ast::FieldInfo {
+                type_info: Some(type_info),
+                default_value: None,
+            },
+        ),
+        "typed field",
+    )
+}
+
+fn parse_field_inferred() -> impl Parser<Token, ast::FieldInfo> {
+    with_context(
+        map(
+            preceded(as_unit(parse_equal()), parse_expression()),
+            |value| ast::FieldInfo {
+                type_info: None,
+                default_value: Some(value),
+            },
+        ),
+        "inferred field",
+    )
+}
+
+// 型参照のみを許可（インライン定義は不可）
+fn parse_type_reference() -> impl Parser<Token, ast::TypeInfo> {
+    lazy(|| {
+        choice(vec![
+            Box::new(parse_simple_type()), // String, Intなど
+            Box::new(parse_result_type()), // Result<T, E>
+            Box::new(parse_option_type()), // Option<T>
+            Box::new(parse_array_type()),  // Array<T>
+                                           // カスタム型の参照はOK、定義は不可
+        ])
+    })
 }
