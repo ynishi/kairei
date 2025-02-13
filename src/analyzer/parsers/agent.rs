@@ -164,9 +164,9 @@ fn parse_state_var() -> impl Parser<Token, (String, ast::StateVarDef)> {
                     name.clone(),
                     ast::StateVarDef {
                         name,
-                        type_info: field_info.type_info.unwrap_or_else(||
-                            // Infer type from default value if not specified
-                            panic!("Type inference not implemented yet")),
+                        type_info: field_info.type_info.ok_or_else(||
+                            // Type inference not implemented yet
+                            "Type inference not implemented yet".to_string())?,
                         initial_value: field_info.default_value,
                     },
                 )
