@@ -160,13 +160,16 @@ fn parse_state_var() -> impl Parser<Token, (String, ast::StateVarDef)> {
         map(
             tuple2(parse_identifier(), parse_field()),
             |(name, (_, field_info))| {
+                if field_info.type_info.is_none() {
+                    let err = ParseError::Fail("Type inference not implemented yet".to_string());
+                    let _: Result<(String, ast::StateVarDef), ParseError> = Err(err);
+                }
+                let type_info = field_info.type_info.unwrap();
                 (
                     name.clone(),
                     ast::StateVarDef {
                         name,
-                        type_info: field_info.type_info.ok_or_else(||
-                            // Type inference not implemented yet
-                            "Type inference not implemented yet".to_string())?,
+                        type_info,
                         initial_value: field_info.default_value,
                     },
                 )
