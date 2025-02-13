@@ -1,6 +1,7 @@
 use super::{
     super::super::{core::*, prelude::*},
     observe::*,
+    parse_handler_def,
 };
 use crate::ast;
 use crate::{
@@ -28,22 +29,7 @@ fn parse_react_keyword() -> impl Parser<Token, Token> {
 }
 
 pub fn parse_handler() -> impl Parser<Token, ast::HandlerDef> {
-    with_context(
-        map(
-            tuple4(
-                as_unit(parse_on_keyword()),
-                parse_identifier(),
-                parse_parameters(),
-                parse_statements(),
-            ),
-            |(_, event_name, parameters, block)| ast::HandlerDef {
-                event_name,
-                parameters,
-                block: ast::HandlerBlock { statements: block },
-            },
-        ),
-        "handler",
-    )
+    parse_handler_def()
 }
 
 pub fn parse_parameters() -> impl Parser<Token, Vec<ast::Parameter>> {
