@@ -3,8 +3,7 @@ use uuid::Uuid;
 use super::{
     super::{core::*, prelude::*},
     agent::parse_agent_def,
-    handlers::parse_handler_def,
-    types::parse_type_info,
+    handlers::{parse_handler_def, parse_parameters},
     *,
 };
 use crate::ast;
@@ -154,34 +153,6 @@ fn parse_event() -> impl Parser<Token, ast::CustomEventDef> {
             |(name, parameters)| ast::CustomEventDef { name, parameters },
         ),
         "event",
-    )
-}
-
-pub fn parse_parameters() -> impl Parser<Token, Vec<ast::Parameter>> {
-    with_context(
-        map(
-            delimited(
-                as_unit(parse_open_paren()),
-                separated_list(parse_parameter(), as_unit(parse_comma())),
-                as_unit(parse_close_paren()),
-            ),
-            |parameters| parameters,
-        ),
-        "parameters",
-    )
-}
-
-pub fn parse_parameter() -> impl Parser<Token, ast::Parameter> {
-    with_context(
-        map(
-            tuple3(
-                parse_identifier(),
-                as_unit(parse_colon()),
-                parse_type_info(),
-            ),
-            |(name, _, type_info)| ast::Parameter { name, type_info },
-        ),
-        "parameter",
     )
 }
 
