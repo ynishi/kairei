@@ -5,7 +5,6 @@ use crate::evaluator::EvalError;
 use crate::native_feature::types::FeatureError;
 use crate::runtime::RuntimeError;
 use crate::system::SystemError;
-use crate::type_checker::TypeCheckError;
 
 #[derive(Error, Debug)]
 pub enum Error {

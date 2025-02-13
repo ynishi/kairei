@@ -314,6 +314,33 @@ pub enum TypeInfo {
     },
 }
 
+impl fmt::Display for TypeInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TypeInfo::Simple(name) => write!(f, "{}", name),
+            TypeInfo::Result { ok_type, err_type } => {
+                write!(f, "Result<{}, {}>", ok_type, err_type)
+            }
+            TypeInfo::Option(inner) => write!(f, "Option<{}>", inner),
+            TypeInfo::Array(inner) => write!(f, "Array<{}>", inner),
+            TypeInfo::Map(key, value) => write!(f, "Map<{}, {}>", key, value),
+            TypeInfo::Custom { name, fields } => {
+                write!(f, "{}", name)?;
+
+                if !fields.is_empty() {
+                    write!(f, " {{")?;
+                    for field_name in fields.keys() {
+                        write!(f, "{}", field_name)?;
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "}}")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 impl From<&str> for TypeInfo {
     fn from(value: &str) -> Self {
         Self::Simple(value.to_string())
@@ -324,6 +351,12 @@ impl From<&str> for TypeInfo {
 pub struct FieldInfo {
     pub type_info: Option<TypeInfo>, // None の場合は型推論
     pub default_value: Option<Expression>,
+}
+
+impl fmt::Display for FieldInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.type_info.as_ref().unwrap())
+    }
 }
 
 // コードブロック

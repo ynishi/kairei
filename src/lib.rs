@@ -16,6 +16,7 @@ pub mod runtime;
 pub mod system;
 pub mod timestamp;
 pub mod tokenizer;
+pub mod type_checker;
 
 // Re-exports
 pub use ast::*;
