@@ -27,6 +27,9 @@ pub enum Error {
     // event error
     #[error("Event error: {0}")]
     Event(#[from] crate::event_bus::EventError),
+    // type checking
+    #[error("Type check error: {0}")]
+    TypeCheck(#[from] crate::type_checker::TypeCheckError),
 
     #[error("Internal error: {0}")]
     Internal(String),
