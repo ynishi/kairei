@@ -1,8 +1,9 @@
 use super::{
     super::{core::*, prelude::*},
+    expression::parse_expression,
     handlers::{answer::*, observe::*, react::*},
     statement::*,
-    types::parse_field_has_initial,
+    types::parse_type_info,
     world::parse_policy,
     *,
 };
@@ -158,15 +159,20 @@ pub fn parse_state() -> impl Parser<Token, ast::StateDef> {
 fn parse_state_var() -> impl Parser<Token, (String, ast::StateVarDef)> {
     with_context(
         map(
-            parse_field_has_initial(),
-            |(name, field_info)| {
-                let type_info = field_info.type_info.unwrap();
+            tuple5(
+                parse_identifier(),
+                as_unit(parse_colon()),
+                parse_type_info(),
+                optional(preceded(as_unit(parse_equal()), parse_expression())),
+                as_unit(parse_semicolon()),
+            ),
+            |(name, _, type_info, initial_value, _)| {
                 (
                     name.clone(),
                     ast::StateVarDef {
                         name,
                         type_info,
-                        initial_value: field_info.default_value,
+                        initial_value,
                     },
                 )
             },
