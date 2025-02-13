@@ -1,4 +1,7 @@
-use kairei::{analyzer::Parser, core::types::generate_event_enum, preprocessor::Preprocessor, tokenizer::token::Token};
+use kairei::{
+    analyzer::Parser, core::types::generate_event_enum, preprocessor::Preprocessor,
+    tokenizer::token::Token,
+};
 use quote::quote;
 use std::{fs::File, io::Write, process::Command};
 use syn::{parse_quote, ItemFn};

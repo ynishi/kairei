@@ -51,7 +51,7 @@ fn it_parse_micro_agent() {
         .tokenize(input)
         .unwrap();
     let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
-    let tokens:Vec<Token> = preprocessor.process(result);
+    let tokens: Vec<Token> = preprocessor.process(result);
     let (_, agent_def) = kairei::analyzer::parsers::agent::parse_agent_def()
         .parse(tokens.as_slice(), 0)
         .unwrap();

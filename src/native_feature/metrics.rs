@@ -32,6 +32,7 @@ pub struct MetricsFeature {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct MetricsStore {
     request_metrics: HashMap<String, RequestMetrics>,
     response_metrics: HashMap<String, ResponseMetrics>,
@@ -46,12 +47,14 @@ pub struct RequestMetrics {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ResponseMetrics {
     end_time: Instant,
     execution_time: Duration,
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct LLMMetrics {
     calls: usize,
     tokens: usize,

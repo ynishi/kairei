@@ -57,7 +57,6 @@ pub enum Operator {
 }
 
 // CloseBrace のシリアライザに直接設定するとエラーになるため、定数を定義
-#[allow(dead_code)]
 const CLOSE_BRACE: &str = "}";
 
 #[derive(Debug, Clone, PartialEq, EnumString, Display, AsRefStr)]

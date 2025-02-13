@@ -7,6 +7,7 @@ pub mod core;
 pub mod error;
 pub mod eval;
 pub mod event;
+pub mod formatter;
 pub mod gen;
 pub mod native_feature;
 pub mod preprocessor;
@@ -15,7 +16,6 @@ pub mod runtime;
 pub mod system;
 pub mod timestamp;
 pub mod tokenizer;
-pub mod formatter;
 
 // Re-exports
 pub use ast::*;

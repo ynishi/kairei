@@ -606,7 +606,7 @@ fn parse_operator_divide() -> impl Parser<Token, ast::BinaryOperator> {
     )
 }
 
-fn parse_literal_expression() -> impl Parser<Token, ast::Expression> {
+pub fn parse_literal_expression() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(parse_literal(), ast::Expression::Literal),
         "literal expression",
