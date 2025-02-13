@@ -20,17 +20,20 @@ pub enum TypeCheckError {
     #[error("Plugin type error: {message}")]
     PluginTypeError { message: String },
 
-    #[error("Invalid state variable: {0}")]
-    InvalidStateVariable(String),
+    #[error("Invalid state variable: {message}")]
+    InvalidStateVariable { message: String },
 
-    #[error("Invalid handler signature: {0}")]
-    InvalidHandlerSignature(String),
+    #[error("Invalid handler signature: {message}")]
+    InvalidHandlerSignature { message: String },
 
-    #[error("Invalid think block: {0}")]
-    InvalidThinkBlock(String),
+    #[error("Invalid think block: {message}")]
+    InvalidThinkBlock { message: String },
 
-    #[error("Invalid plugin configuration: {0}")]
-    InvalidPluginConfig(String),
+    #[error("Invalid plugin configuration: {message}")]
+    InvalidPluginConfig { message: String },
+
+    #[error("Type inference error: {message}")]
+    TypeInferenceError { message: String },
 }
 
 /// Location information for error reporting

@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// Core type checker trait defining the main interface for type validation
 pub trait TypeChecker {
     /// Perform type checking on an entire AST
-    fn check_types(&mut self, ast: &Root) -> TypeCheckResult<()>;
+    fn check_types(&mut self, ast: &mut Root) -> TypeCheckResult<()>;
 
     /// Get any collected type errors
     fn collect_errors(&self) -> Vec<TypeCheckError>;
@@ -97,12 +97,12 @@ impl DefaultTypeChecker {
 }
 
 impl TypeChecker for DefaultTypeChecker {
-    fn check_types(&mut self, ast: &Root) -> TypeCheckResult<()> {
+    fn check_types(&mut self, ast: &mut Root) -> TypeCheckResult<()> {
         // Clear any previous state
         self.context.clear();
 
         // Visit all micro agents
-        for agent in &ast.micro_agent_defs {
+        for agent in &mut ast.micro_agent_defs {
             self.visitor.visit_micro_agent(agent, &mut self.context)?;
         }
 
