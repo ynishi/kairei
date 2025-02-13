@@ -173,3 +173,30 @@ fn parse_simple_type() -> impl Parser<Token, ast::TypeInfo> {
         "simple type",
     )
 }
+
+fn parse_field_error() -> impl Parser<Token, (String, ast::FieldInfo)> {
+    fail("Type inference not implemented yet")
+}
+
+fn parse_field_success() -> impl Parser<Token, (String, ast::FieldInfo)> {
+    map(
+        parse_field(),
+        |(name, field_info)| {
+            if field_info.type_info.is_some() {
+                (name, field_info)
+            } else {
+                (name, field_info)
+            }
+        },
+    )
+}
+
+pub fn parse_field_has_initial() -> impl Parser<Token, (String, ast::FieldInfo)> {
+    with_context(
+        choice(vec![
+            Box::new(parse_field_success()),
+            Box::new(parse_field_error()),
+        ]),
+        "field with required type",
+    )
+}

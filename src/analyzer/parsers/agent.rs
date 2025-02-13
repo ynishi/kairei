@@ -2,7 +2,7 @@ use super::{
     super::{core::*, prelude::*},
     handlers::{answer::*, observe::*, react::*},
     statement::*,
-    types::parse_field,
+    types::parse_field_has_initial,
     world::parse_policy,
     *,
 };
@@ -158,12 +158,8 @@ pub fn parse_state() -> impl Parser<Token, ast::StateDef> {
 fn parse_state_var() -> impl Parser<Token, (String, ast::StateVarDef)> {
     with_context(
         map(
-            tuple2(parse_identifier(), parse_field()),
-            |(name, (_, field_info))| {
-                if field_info.type_info.is_none() {
-                    let err = ParseError::Fail("Type inference not implemented yet".to_string());
-                    let _: Result<(String, ast::StateVarDef), ParseError> = Err(err);
-                }
+            parse_field_has_initial(),
+            |(name, field_info)| {
                 let type_info = field_info.type_info.unwrap();
                 (
                     name.clone(),
