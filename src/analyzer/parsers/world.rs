@@ -3,7 +3,7 @@ use uuid::Uuid;
 use super::{
     super::{core::*, prelude::*},
     agent::parse_agent_def,
-    handlers::react::*,
+    handlers::parse_handler_def,
     types::parse_type_info,
     *,
 };
@@ -191,7 +191,7 @@ pub fn parse_handlers() -> impl Parser<Token, ast::HandlersDef> {
             tuple4(
                 as_unit(parse_handlers_keyword()),
                 as_unit(parse_open_brace()),
-                many(parse_handler()),
+                many(parse_handler_def()),
                 as_unit(parse_close_brace()),
             ),
             |(_, _, handlers, _)| ast::HandlersDef { handlers },
