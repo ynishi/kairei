@@ -238,12 +238,9 @@ fn parse_assignment_statement() -> impl Parser<Token, ast::Statement> {
             tuple3(
                 parse_assignment_target(),
                 as_unit(parse_equal()),
-                parse_literal(),
+                parse_literal_expression(),
             ),
-            |(target, _, value)| ast::Statement::Assignment {
-                target,
-                value: ast::Expression::Literal(value),
-            },
+            |(target, _, value)| ast::Statement::Assignment { target, value },
         ),
         "assignment statement",
     )

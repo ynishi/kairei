@@ -3,7 +3,7 @@ use uuid::Uuid;
 use super::{
     super::{core::*, prelude::*},
     agent::parse_agent_def,
-    handlers::react::*,
+    handlers::parse_handler_def,
     types::parse_type_info,
     *,
 };
@@ -96,16 +96,6 @@ fn parse_policy_keyword() -> impl Parser<Token, Token> {
     with_context(equal(Token::Keyword(Keyword::Policy)), "policy keyword")
 }
 
-fn parse_policy_item() -> impl Parser<Token, (String, ast::Literal)> {
-    with_context(
-        map(
-            tuple3(parse_identifier(), as_unit(parse_colon()), parse_literal()),
-            |(name, _, value)| (name, value),
-        ),
-        "policy item",
-    )
-}
-
 pub fn parse_config() -> impl Parser<Token, ast::ConfigDef> {
     with_context(
         map(
@@ -195,17 +185,21 @@ pub fn parse_parameter() -> impl Parser<Token, ast::Parameter> {
     )
 }
 
-fn parse_handlers() -> impl Parser<Token, ast::HandlersDef> {
+pub fn parse_handlers() -> impl Parser<Token, ast::HandlersDef> {
     with_context(
         map(
             tuple4(
                 as_unit(parse_handlers_keyword()),
                 as_unit(parse_open_brace()),
-                many(parse_handler()),
+                many(parse_handler_def()),
                 as_unit(parse_close_brace()),
             ),
             |(_, _, handlers, _)| ast::HandlersDef { handlers },
         ),
         "handlers",
     )
+}
+
+pub fn parse_handlers_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Handlers)), "handlers keyword")
 }
