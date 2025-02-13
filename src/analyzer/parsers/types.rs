@@ -20,8 +20,7 @@ pub fn parse_type_info() -> impl Parser<Token, ast::TypeInfo> {
     )
 }
 
-#[allow(dead_code)]
-fn parse_field() -> impl Parser<Token, (String, ast::FieldInfo)> {
+pub fn parse_field() -> impl Parser<Token, (String, ast::FieldInfo)> {
     with_context(
         tuple2(
             parse_identifier(),

@@ -1,9 +1,8 @@
 use super::{
     super::{core::*, prelude::*},
-    expression::*,
     handlers::{answer::*, observe::*, react::*},
     statement::*,
-    types::*,
+    types::parse_field,
     world::parse_policy,
     *,
 };
@@ -156,24 +155,19 @@ pub fn parse_state() -> impl Parser<Token, ast::StateDef> {
     )
 }
 
-// TODO: parse_type_info, parse_field を使用するようにする
 fn parse_state_var() -> impl Parser<Token, (String, ast::StateVarDef)> {
     with_context(
         map(
-            tuple5(
-                parse_identifier(),
-                as_unit(parse_colon()),
-                parse_type_info(),
-                optional(preceded(as_unit(parse_equal()), parse_expression())),
-                as_unit(parse_semicolon()),
-            ),
-            |(name, _, type_info, initial_value, _)| {
+            tuple2(parse_identifier(), parse_field()),
+            |(name, (_, field_info))| {
                 (
                     name.clone(),
                     ast::StateVarDef {
                         name,
-                        type_info,
-                        initial_value,
+                        type_info: field_info.type_info.unwrap_or_else(||
+                            // Infer type from default value if not specified
+                            panic!("Type inference not implemented yet")),
+                        initial_value: field_info.default_value,
                     },
                 )
             },
