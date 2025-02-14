@@ -139,10 +139,23 @@ impl TypeVisitor for DefaultTypeVisitor {
                 for arg in args {
                     match arg {
                         Argument::Named { value, .. } | Argument::Positional(value) => {
+                            // First validate the expression itself
                             self.visit_expression(value, ctx)?;
+
+                            // Then check if it can be stringified (has Display trait)
+                            let value_type = self.infer_type(value, ctx)?;
+                            if !self.has_display_trait(&value_type) {
+                                return Err(TypeCheckError::InvalidThinkBlock {
+                                    message: format!(
+                                        "Type {} cannot be interpolated in think block - must implement Display",
+                                        value_type
+                                    ),
+                                });
+                            }
                         }
                     }
                 }
+
                 // Validate think attributes if present
                 if let Some(attrs) = with_block {
                     self.validate_think_attributes(attrs, ctx)?;
@@ -367,7 +380,6 @@ impl DefaultTypeVisitor {
         }
     }
 
-    #[allow(unused_variables)]
     fn validate_think_attributes(
         &self,
         attrs: &ThinkAttributes,
@@ -380,7 +392,20 @@ impl DefaultTypeVisitor {
                     message: format!("Unknown plugin: {}", plugin_name),
                 });
             }
-            // Additional plugin config validation could be added here
+
+            // Validate config values
+            for (key, value) in config {
+                if let Literal::Float(v) = value {
+                    if *v < 0.0 || *v > 1.0 {
+                        return Err(TypeCheckError::InvalidPluginConfig {
+                            message: format!(
+                                "Invalid value for {}: {} (must be between 0 and 1)",
+                                key, v
+                            ),
+                        });
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -427,5 +452,21 @@ impl DefaultTypeVisitor {
         // In a full implementation, this would infer the type of the expression
         // and check if it's compatible with the expected type
         Ok(())
+    }
+
+    #[allow(clippy::only_used_in_recursion)]
+    fn has_display_trait(&self, type_info: &TypeInfo) -> bool {
+        match type_info {
+            // Basic types that implement Display
+            TypeInfo::Simple(name) => matches!(
+                name.as_str(),
+                "String" | "Int" | "Float" | "Boolean" | "Duration"
+            ),
+            // Container types if their contents implement Display
+            TypeInfo::Option(inner) | TypeInfo::Array(inner) => self.has_display_trait(inner),
+            TypeInfo::Result { ok_type, .. } => self.has_display_trait(ok_type),
+            // Custom types would need explicit Display implementation
+            _ => false,
+        }
     }
 }
