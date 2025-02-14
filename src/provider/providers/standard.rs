@@ -145,9 +145,9 @@ impl StandardProvider {
         Ok(())
     }
 
-    async fn generate_plugin_sections<'a>(
+    async fn generate_plugin_sections(
         &self,
-        context: &PluginContext<'a>,
+        context: &PluginContext<'_>,
     ) -> ProviderResult<Vec<Section>> {
         let mut sections = Vec::new();
 
@@ -167,9 +167,9 @@ impl StandardProvider {
         Ok(sections)
     }
 
-    async fn process_plugins_response<'a>(
+    async fn process_plugins_response(
         &self,
-        context: &PluginContext<'a>,
+        context: &PluginContext<'_>,
         response: &LLMResponse,
     ) -> ProviderResult<()> {
         let mut plugins = self.plugins.clone();

@@ -1,6 +1,7 @@
 use crate::analyzer::parsers::expression::*;
 use crate::analyzer::parsers::handlers::{answer::*, observe::*, react::*};
-use crate::analyzer::parsers::world::{parse_handlers, parse_parameter};
+use crate::analyzer::parsers::world::parse_handlers;
+use crate::analyzer::parsers::handlers::parse_parameters;
 use crate::analyzer::Parser;
 use crate::ast;
 use crate::tokenizer::literal::StringPart;
