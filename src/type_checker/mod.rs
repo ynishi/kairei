@@ -10,7 +10,7 @@ mod visitor;
 
 pub use error::{TypeCheckError, TypeCheckResult};
 pub use scope::TypeScope;
-pub use visitor::{DefaultTypeVisitor, TypeVisitor};
+pub use visitor::{DefaultTypeVisitor, PluginTypeVisitor, TypeVisitor};
 
 use crate::ast::Root;
 use crate::provider::plugin::ProviderPlugin;
