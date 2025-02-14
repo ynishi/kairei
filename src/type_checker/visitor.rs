@@ -96,7 +96,17 @@ impl TypeVisitor for DefaultTypeVisitor {
     fn visit_handler(&self, handler: &HandlerDef, ctx: &mut TypeContext) -> TypeCheckResult<()> {
         // Validate parameter types
         for param in &handler.parameters {
+            // Validate type exists
             self.validate_type_info(&param.type_info, ctx)?;
+
+            // Ensure concrete type (not generic)
+            if let TypeInfo::Simple(name) = &param.type_info {
+                if name.is_empty() {
+                    return Err(TypeCheckError::InvalidHandlerSignature {
+                        message: format!("Parameter '{}' must have a concrete type", param.name),
+                    });
+                }
+            }
         }
 
         // Visit handler block
@@ -180,6 +190,27 @@ impl DefaultTypeVisitor {
         // Validate parameter types
         for param in &handler.parameters {
             self.validate_type_info(&param.type_info, ctx)?;
+
+            // Ensure concrete type for request parameters
+            match &param.type_info {
+                TypeInfo::Simple(name) if name.is_empty() => {
+                    return Err(TypeCheckError::InvalidHandlerSignature {
+                        message: format!(
+                            "Request parameter '{}' must have a concrete type",
+                            param.name
+                        ),
+                    });
+                }
+                TypeInfo::Result { .. } | TypeInfo::Option(_) => {
+                    return Err(TypeCheckError::InvalidHandlerSignature {
+                        message: format!(
+                            "Request parameter '{}' cannot be Result or Option",
+                            param.name
+                        ),
+                    });
+                }
+                _ => {}
+            }
         }
 
         // Visit handler block
@@ -194,6 +225,18 @@ impl DefaultTypeVisitor {
         // Validate parameter types
         for param in &handler.parameters {
             self.validate_type_info(&param.type_info, ctx)?;
+
+            // Ensure concrete type for event parameters
+            if let TypeInfo::Simple(name) = &param.type_info {
+                if name.is_empty() {
+                    return Err(TypeCheckError::InvalidHandlerSignature {
+                        message: format!(
+                            "Event parameter '{}' must have a concrete type",
+                            param.name
+                        ),
+                    });
+                }
+            }
         }
 
         // Visit handler block
