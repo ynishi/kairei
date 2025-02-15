@@ -1,6 +1,6 @@
 use crate::analyzer::parsers::expression::*;
-use crate::analyzer::parsers::handlers::{answer::*, observe::*, react::*};
-use crate::analyzer::parsers::world::{parse_handlers, parse_parameter};
+use crate::analyzer::parsers::handlers::{answer::*, observe::*, react::*, *};
+use crate::analyzer::parsers::world::*;
 use crate::analyzer::Parser;
 use crate::ast;
 use crate::tokenizer::literal::StringPart;
@@ -100,11 +100,11 @@ fn test_parse_answer() {
         Token::Delimiter(Delimiter::CloseParen),
         Token::Operator(Operator::Arrow),
         Token::Identifier("Result".to_string()),
-        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Operator(Operator::Less),
         Token::Identifier("String".to_string()),
         Token::Delimiter(Delimiter::Comma),
         Token::Identifier("Error".to_string()),
-        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Operator(Operator::Greater),
         Token::Keyword(Keyword::With),
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Identifier("strictness".to_string()),

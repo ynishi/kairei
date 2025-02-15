@@ -110,8 +110,8 @@ fn on_fail_return_from_expr(expr: ast::Expression) -> Option<ast::OnFailControl>
 fn error_handling_statements() -> impl Parser<Token, ErrorHandlingStatements> {
     with_context(
         map(
-            tuple2(parse_statement_list(), optional(parse_on_fail_control())),
-            |(statements, control)| {
+            tuple2(optional(parse_on_fail_control()), parse_statement_list()),
+            |(control, statements)| {
                 if control.is_none() {
                     if let Some(ast::Statement::Return(expr)) = statements.last().cloned() {
                         if let Some(on_fail_return) = on_fail_return_from_expr(expr) {

@@ -2,7 +2,7 @@ use crate::analyzer::parsers::types::*;
 use crate::analyzer::Parser;
 use crate::ast;
 use crate::tokenizer::literal::StringPart;
-use crate::tokenizer::symbol::Delimiter;
+use crate::tokenizer::symbol::{Delimiter, Operator};
 use crate::tokenizer::{literal::Literal, token::Token};
 
 #[test]
@@ -10,11 +10,11 @@ fn test_parse_type_info() {
     // Result型のテスト
     let input = &[
         Token::Identifier("Result".to_string()),
-        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Operator(Operator::Less),
         Token::Identifier("String".to_string()),
         Token::Delimiter(Delimiter::Comma),
         Token::Identifier("Error".to_string()),
-        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Operator(Operator::Greater),
     ];
     let (pos, result) = parse_type_info().parse(input, 0).unwrap();
     assert_eq!(pos, 6);
@@ -256,11 +256,11 @@ fn test_parse_option_type() {
 fn test_parse_result_type() {
     let input = &[
         Token::Identifier("Result".to_string()),
-        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Operator(Operator::Less),
         Token::Identifier("Success".to_string()),
         Token::Delimiter(Delimiter::Comma),
         Token::Identifier("Error".to_string()),
-        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Operator(Operator::Greater),
     ];
     let (pos, result) = parse_result_type().parse(input, 0).unwrap();
     assert_eq!(pos, 6);

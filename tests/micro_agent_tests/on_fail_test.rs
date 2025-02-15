@@ -5,8 +5,8 @@ use std::{
 use tokio::sync::RwLock;
 
 use kairei::{
-    config::{self, ProviderConfig, SystemConfig},
-    event_bus::{Event, Value},
+    config::ProviderConfig,
+    event_bus::Value,
     event_registry::EventType,
     provider::{
         capability::Capabilities,
@@ -18,13 +18,9 @@ use kairei::{
     system::System,
 };
 use tokio::time::sleep;
-use tracing::debug;
 use uuid::Uuid;
 
-use crate::{
-    micro_agent_tests::{create_request, setup_secret},
-    should_run_external_api_tests,
-};
+use crate::{micro_agent_tests::create_request, should_run_external_api_tests};
 
 use super::setup_system;
 
@@ -126,7 +122,7 @@ async fn setup_on_fail() -> System {
 #[tokio::test]
 async fn test_on_fail() {
     if !should_run_external_api_tests() {
-        // return;
+        return;
     }
 
     let system = setup_on_fail().await;

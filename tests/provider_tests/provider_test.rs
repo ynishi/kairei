@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use kairei::{
     config::{SecretConfig, SystemConfig},
@@ -25,7 +25,8 @@ async fn test_travel_agent_basic_flow() {
                             "Tokyo": "Tokyo is a great city!",
                             "Osaka": "Osaka is a great city!",
                             "Kyoto": "Kyoto is a great city!"
-                        }
+                        },
+                        "plugin_configs": {}
                     }
                 }
             }
@@ -103,6 +104,9 @@ async fn test_travel_agent_basic_flow() {
 
     assert_eq!(
         response,
-        Value::String("Tokyo is a great city!".to_string())
+        Value::Map(HashMap::from_iter(vec![(
+            "output".to_string(),
+            Value::String("Tokyo is a great city!".to_string())
+        )]))
     );
 }

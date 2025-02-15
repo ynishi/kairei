@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use tracing::debug;
 
 use crate::{
     expression,
@@ -30,6 +31,7 @@ impl ProviderPlugin for GeneralPromptPlugin {
             expression::Value::String(s) => s,
             _ => return Err(ProviderError::InvalidRequest("Invalid query format".into())),
         };
+        debug!("query: {}", query);
 
         let params = context.request.input.parameters.clone();
         let params_str = params

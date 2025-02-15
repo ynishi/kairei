@@ -22,7 +22,7 @@ pub trait ProviderPlugin: Send + Sync {
     fn capability(&self) -> CapabilityType;
 
     /// プロンプト生成前の処理
-    async fn generate_section<'a>(&self, contxt: &PluginContext<'a>) -> ProviderResult<Section>;
+    async fn generate_section<'a>(&self, context: &PluginContext<'a>) -> ProviderResult<Section>;
 
     /// LLMレスポンス後の処理
     async fn process_response<'a>(

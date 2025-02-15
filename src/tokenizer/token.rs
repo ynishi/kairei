@@ -13,7 +13,6 @@ use super::{
     keyword::{parse_keyword, Keyword},
     literal::{parse_literal, Literal},
     symbol::{parse_delimiter, parse_operator, Delimiter, Operator},
-    types::{parse_types, Type},
     whitespace::{parse_newline, parse_whitespace},
 };
 
@@ -23,8 +22,6 @@ pub enum Token {
     Keyword(Keyword),
     // Identifiers
     Identifier(String),
-    // Types
-    Type(Type),
     // Symbols
     Operator(Operator),
     Delimiter(Delimiter),
@@ -46,6 +43,10 @@ impl Token {
 
     pub fn is_comment(&self) -> bool {
         matches!(self, Token::Comment { .. })
+    }
+
+    pub fn is_newline(&self) -> bool {
+        matches!(self, Token::Newline)
     }
 }
 
@@ -101,7 +102,6 @@ impl Tokenizer {
                 parse_keyword,
                 parse_operator,
                 parse_delimiter,
-                parse_types,
                 parse_identifier,
             ))(remaining);
 
@@ -202,9 +202,6 @@ fn parse_identifier(input: &str) -> ParserResult<Token> {
     // Check if identifier is not a specials
     if let Ok(kw) = Keyword::try_from(id) {
         return Ok((input, Token::Keyword(kw)));
-    }
-    if let Ok(ty) = Type::try_from(id) {
-        return Ok((input, Token::Type(ty)));
     }
 
     Ok((input, Token::Identifier(id.to_string())))
