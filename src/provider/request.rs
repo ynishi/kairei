@@ -20,7 +20,7 @@ pub struct ProviderRequest {
 
 type RuntimeConfig = ProviderConfig;
 
-// devide from Instance.
+// divide from Instance.
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct ProviderContext {
     pub config: ProviderConfig,

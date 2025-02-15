@@ -28,7 +28,7 @@ impl Preprocessor<Vec<TokenSpan>, Vec<Token>> for TokenPreprocessor {
         input
             .into_iter()
             .map(|span| span.token)
-            .filter(|token| !token.is_comment() && !token.is_whitespace())
+            .filter(|token| !token.is_comment() && !token.is_whitespace() && !token.is_newline())
             .collect()
     }
 }

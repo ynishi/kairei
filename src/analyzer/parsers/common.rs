@@ -1,5 +1,6 @@
 use super::super::{core::*, prelude::*};
 use crate::ast;
+use crate::tokenizer::symbol::Operator;
 use crate::tokenizer::{
     keyword::Keyword,
     literal::{Literal, StringPart},
@@ -75,6 +76,14 @@ pub fn parse_open_brace() -> impl Parser<Token, Token> {
 
 pub fn parse_close_brace() -> impl Parser<Token, Token> {
     equal(Token::Delimiter(Delimiter::CloseBrace))
+}
+
+pub fn parse_angle_open() -> impl Parser<Token, Token> {
+    equal(Token::Operator(Operator::Less))
+}
+
+pub fn parse_angle_close() -> impl Parser<Token, Token> {
+    equal(Token::Operator(Operator::Greater))
 }
 
 // リテラルパーサー
