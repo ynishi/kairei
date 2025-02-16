@@ -333,10 +333,6 @@ fn parse_emit_arguments() -> impl Parser<Token, Vec<ast::Argument>> {
     with_context(parse_arguments(), "emit arguments")
 }
 
-fn parse_to_keyword() -> impl Parser<Token, Token> {
-    with_context(equal(Token::Identifier("to".to_string())), "to keyword")
-}
-
 fn parse_if_statement() -> impl Parser<Token, ast::Statement> {
     with_context(
         map(
@@ -613,7 +609,7 @@ mod tests {
             Token::Delimiter(Delimiter::OpenParen),
             Token::Literal(Literal::Integer(42)),
             Token::Delimiter(Delimiter::CloseParen),
-            Token::Identifier("to".to_string()),
+            Token::Keyword(Keyword::To),
             Token::Identifier("target".to_string()),
         ];
         let expected = ast::Statement::Emit {

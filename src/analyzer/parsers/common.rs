@@ -136,6 +136,10 @@ pub fn parse_on_keyword() -> impl Parser<Token, Token> {
     with_context(equal(Token::Keyword(Keyword::On)), "on keyword")
 }
 
+pub fn parse_to_keyword() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::To)), "to keyword")
+}
+
 pub fn parse_ok_ident() -> impl Parser<Token, Token> {
     with_context(equal(Token::Identifier("Ok".to_string())), "Ok")
 }
