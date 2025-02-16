@@ -1,6 +1,9 @@
 .PHONY: build run test clippy fmt
 
 test:
+	cargo test
+
+test_v:
 	RUST_LOG=debug cargo test -p kairei $(CASE) --verbose
 
 test_all:

@@ -1,5 +1,8 @@
 use super::{TypeCheckError, TypeCheckResult, TypeContext};
-use crate::ast::*;
+use crate::{ast::*, config::PluginConfig};
+
+mod plugin_visitor;
+pub use plugin_visitor::PluginTypeVisitor;
 
 /// Visitor trait for type checking AST nodes
 pub trait TypeVisitor {
@@ -385,27 +388,20 @@ impl DefaultTypeVisitor {
         attrs: &ThinkAttributes,
         ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
+        let plugin_visitor = PluginTypeVisitor::new();
+
         // Validate plugin configurations
-        for (plugin_name, config) in &attrs.plugins {
+        for plugin_name in attrs.plugins.keys() {
+            // First check if plugin exists
             if !ctx.plugins.contains_key(plugin_name) {
                 return Err(TypeCheckError::InvalidPluginConfig {
                     message: format!("Unknown plugin: {}", plugin_name),
                 });
             }
 
-            // Validate config values
-            for (key, value) in config {
-                if let Literal::Float(v) = value {
-                    if *v < 0.0 || *v > 1.0 {
-                        return Err(TypeCheckError::InvalidPluginConfig {
-                            message: format!(
-                                "Invalid value for {}: {} (must be between 0 and 1)",
-                                key, v
-                            ),
-                        });
-                    }
-                }
-            }
+            // Convert literals to PluginConfig and validate
+            let config = PluginConfig::Memory(crate::config::MemoryConfig::default());
+            plugin_visitor.validate_plugin_config(&config, ctx)?;
         }
         Ok(())
     }
