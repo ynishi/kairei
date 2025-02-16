@@ -1,8 +1,9 @@
 use std::{collections::HashMap, time::Duration};
 
 use kairei::analyzer::Parser;
-use kairei::config::SecretConfig;
+use kairei::config::{ProviderConfig, ProviderConfigs, ProviderSecretConfig, SecretConfig};
 use kairei::preprocessor::Preprocessor;
+use kairei::provider::provider::ProviderType;
 use kairei::system::SystemResult;
 use kairei::tokenizer::token::Token;
 use kairei::{
@@ -12,10 +13,38 @@ use kairei::{
 use tokio::{self, time::sleep};
 use tracing::debug;
 
+pub fn setup_non_api_config() -> (SystemConfig, SecretConfig) {
+    let default_name = "default";
+    let mut system_config = SystemConfig::default();
+    let provider_configs = ProviderConfigs {
+        primary_provider: Some(default_name.to_string()),
+        providers: {
+            let mut map = HashMap::new();
+            map.insert(
+                default_name.to_string(),
+                ProviderConfig {
+                    name: default_name.to_string(),
+                    provider_type: ProviderType::SimpleExpert,
+                    ..Default::default()
+                },
+            );
+            map
+        },
+    };
+    system_config.provider_configs = provider_configs;
+
+    let mut secret_config = SecretConfig::default();
+    secret_config
+        .providers
+        .insert(default_name.to_string(), ProviderSecretConfig::default());
+    (system_config, secret_config)
+}
+
 #[tokio::test]
 async fn test_system_lifecycle() -> SystemResult<()> {
+    let (system_config, secret_config) = setup_non_api_config();
     // システムの初期化
-    let mut system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
+    let mut system = System::new(&system_config, &secret_config).await;
 
     let root = system
         .parse_dsl(
@@ -140,7 +169,8 @@ async fn test_error_handling() -> SystemResult<()> {
 
 #[tokio::test]
 async fn test_request_response() -> SystemResult<()> {
-    let mut system = System::new(&SystemConfig::default(), &SecretConfig::default()).await;
+    let (system_config, secret_config) = setup_non_api_config();
+    let mut system = System::new(&system_config, &secret_config).await;
     debug!("System created {:?}", SystemConfig::default());
 
     let test_agent_dsl = r#"

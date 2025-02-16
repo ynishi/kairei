@@ -801,7 +801,6 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::ast::*;
 
     fn create_test_config() -> FormatterConfig {
         FormatterConfig {

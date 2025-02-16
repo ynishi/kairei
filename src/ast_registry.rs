@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use dashmap::DashMap;
+use tracing::{debug, warn};
 
 use crate::{
     analyzer::{self, Parser},
@@ -23,13 +24,20 @@ impl AstRegistry {
         let tokens = tokenizer.tokenize(dsl).unwrap();
         let preprocessor = preprocessor::TokenPreprocessor::default();
         let tokens: Vec<Token> = preprocessor.process(tokens);
+        debug!("{:?}", tokens);
         let (pos, root) = analyzer::parsers::world::parse_root()
             .parse(tokens.as_slice(), 0)
-            .map_err(|e| ASTError::ParseError {
+            .map_err(|e: analyzer::ParseError| ASTError::ParseError {
                 message: format!("failed to parse DSL {}", e),
                 target: "root".to_string(),
             })?;
         if pos != tokens.len() {
+            warn!(
+                "Failed to parse DSL: {:?}, {}, {}",
+                tokens,
+                pos,
+                tokens.len()
+            );
             return Err(ASTError::ParseError {
                 message: "failed to parse DSL".to_string(),
                 target: "root".to_string(),

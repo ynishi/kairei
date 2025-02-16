@@ -43,14 +43,20 @@ pub fn parse_parameters() -> impl Parser<Token, Vec<ast::Parameter>> {
 
 pub fn parse_parameter() -> impl Parser<Token, ast::Parameter> {
     with_context(
-        map(
-            tuple3(
-                parse_identifier(),
-                as_unit(parse_colon()),
-                parse_type_info(),
-            ),
-            |(name, _, type_info)| ast::Parameter { name, type_info },
-        ),
+        choice(vec![
+            Box::new(map(
+                tuple3(
+                    parse_identifier(),
+                    as_unit(parse_colon()),
+                    parse_type_info(),
+                ),
+                |(name, _, type_info)| ast::Parameter { name, type_info },
+            )),
+            Box::new(map(parse_identifier(), |name| ast::Parameter {
+                name,
+                type_info: ast::TypeInfo::any(),
+            })),
+        ]),
         "parameter",
     )
 }

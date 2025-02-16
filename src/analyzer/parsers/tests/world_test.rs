@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::analyzer::parsers::handlers::*;
 use crate::analyzer::parsers::world::*;
 use crate::analyzer::Parser;
 use crate::ast;

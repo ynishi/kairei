@@ -459,7 +459,7 @@ pub fn parse_request() -> impl Parser<Token, ast::Expression> {
         tuple5(
             as_unit(parse_request_keyword()),
             parse_identifier(), // リクエストタイプ
-            as_unit(equal(Token::Identifier("to".to_string()))),
+            as_unit(parse_to_keyword()),
             parse_identifier(), // エージェント名
             delimited(
                 as_unit(parse_open_paren()),

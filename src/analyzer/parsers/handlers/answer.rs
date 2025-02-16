@@ -69,12 +69,17 @@ fn parse_request_type() -> impl Parser<Token, ast::RequestType> {
                 ),
                 |action_type| ast::RequestType::Action { action_type },
             )),
-            Box::new(map(parse_identifier(), |name| {
-                ast::RequestType::Custom(name)
-            })),
+            Box::new(map(
+                preceded(as_unit(parse_request()), parse_identifier()),
+                ast::RequestType::Custom,
+            )),
         ]),
         "request type",
     )
+}
+
+fn parse_request() -> impl Parser<Token, Token> {
+    with_context(equal(Token::Keyword(Keyword::Request)), "request keyword")
 }
 
 fn parse_constraints() -> impl Parser<Token, ast::Constraints> {
@@ -140,6 +145,13 @@ fn parse_action_keyword() -> impl Parser<Token, Token> {
     with_context(equal(Token::Keyword(Keyword::Action)), "action keyword")
 }
 
+// Support thin and fat arrow
 fn parse_arrow() -> impl Parser<Token, Token> {
-    with_context(equal(Token::Operator(Operator::Arrow)), "arrow operator")
+    with_context(
+        choice(vec![
+            Box::new(equal(Token::Operator(Operator::Arrow))),
+            Box::new(equal(Token::Operator(Operator::ThinArrow))),
+        ]),
+        "arrow operator",
+    )
 }

@@ -81,11 +81,11 @@ pub fn parse_result_type() -> impl Parser<Token, ast::TypeInfo> {
         map(
             tuple6(
                 expected(parse_identifier(), "Result".to_string()),
-                parse_open_brace(),
+                parse_angle_open(),
                 parse_identifier(),
                 parse_comma(),
                 parse_identifier(),
-                parse_close_brace(),
+                parse_angle_close(),
             ),
             |(_, _, ok, _, err, _)| ast::TypeInfo::Result {
                 ok_type: Box::new(ast::TypeInfo::Simple(ok)),
