@@ -30,8 +30,99 @@ fn it_parse_micro_agent_state() {
         }
     "#;
     let agent_def = parse_agent(input);
-    println!("{:?}", agent_def);
+    debug!("{:?}", agent_def);
     assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.state.is_some());
+}
+
+#[test]
+fn it_parse_micro_agent_lifecycle() {
+    let input = r#"
+        micro TestAgent {
+            lifecycle {
+                onInit {
+                    counter = 0
+                }
+                onDestroy {
+                    emit Shutdown() to manager
+                }
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    debug!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.lifecycle.is_some());
+}
+
+#[test]
+fn it_parse_micro_agent_observe() {
+    let input = r#"
+        micro TestAgent {
+            observe {
+                on Tick {
+                    counter = counter + 1
+                }
+                on StateUpdated {
+                    name = "updated"
+                }
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    debug!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.observe.is_some());
+}
+
+#[test]
+fn it_parse_micro_agent_answer() {
+    let input = r#"
+        micro TestAgent {
+            answer {
+                on request GetCount() -> Result<Int, Error> {
+                    return Ok(counter)
+                }
+
+                on request SetName(newName: String) -> Result<Bool, Error>
+                with { strictness: 0.9, stability: 0.95 }
+                {
+                    name = newName
+                    return Ok(true)
+                }
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    debug!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.answer.is_some());
+}
+
+#[test]
+fn it_parse_micro_agent_react() {
+    let input = r#"
+        micro TestAgent {
+            react {
+                on Message(status: String) {
+                    counter = 0
+                    emit StateUpdated(agent: self, counter: counter) to manager
+                }
+                on Message(CounterUpdated) {
+                    counter = 0
+                    emit StateUpdated(agent: self, counter: counter) to manager
+                }
+                on StatusMessage(status: String) {
+                    counter = 0
+                    emit StateUpdated(agent: self, counter: counter) to manager
+                }
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    debug!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.react.is_some());
 }
 
 #[test]
@@ -43,7 +134,7 @@ fn it_parse_micro_agent() {
                     counter = 0
                 }
                 onDestroy {
-                    emit Shutdown to manager
+                    emit Shutdown() to manager
                 }
             }
             state {
@@ -55,7 +146,7 @@ fn it_parse_micro_agent() {
                 on Tick {
                     counter = counter + 1
                 }
-                on StateUpdated { agent: "other", state: "value" } {
+                on StateUpdated {
                     name = "updated"
                 }
             }
@@ -65,16 +156,16 @@ fn it_parse_micro_agent() {
                 }
 
                 on request SetName(newName: String) -> Result<Bool, Error>
-                with constraints { strictness: 0.9, stability: 0.95 }
+                with { strictness: 0.9, stability: 0.95 }
                 {
                     name = newName
                     return Ok(true)
                 }
             }
             react {
-                on Message { content: "reset" } {
+                on Message(CounterUpdated) {
                     counter = 0
-                    emit StateUpdated { agent: "self", state: "counter" } to manager
+                    emit StateUpdated(agent: self, counter: counter) to manager
                 }
             }
         }
