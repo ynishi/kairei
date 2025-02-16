@@ -76,6 +76,7 @@ const SYSTEM_CONFIG: &str = r#"
 
 // テスト用のモックProvider
 #[derive(Default)]
+#[allow(dead_code)]
 struct MockProvider {
     should_fail: AtomicBool,
 }
