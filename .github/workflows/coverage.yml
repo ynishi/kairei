@@ -40,7 +40,7 @@ jobs:
       - name: Install cargo-tarpaulin (if not cached)
         run: |
           if ! command -v cargo-tarpaulin &> /dev/null; then
-            cargo install cargo-tarpaulin
+            cargo install cargo-tarpaulin --force
           fi
 
       - name: Install cargo-tarpaulin
