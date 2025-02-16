@@ -239,6 +239,13 @@ pub fn parse_keyword(input: &str) -> ParserResult<Token> {
                             not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
                         ),
                     ),
+                    value(
+                        Keyword::To,
+                        terminated(
+                            tag("to"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
                     // TODO: Add more keywords when Keywords enum is updated
                 )),
             )),
@@ -253,6 +260,8 @@ mod tests {
 
     use strum::IntoEnumIterator;
     use tracing::debug;
+
+    use crate::tokenizer::token::Token;
 
     use super::*;
 

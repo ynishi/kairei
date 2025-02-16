@@ -1039,7 +1039,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_system_integration() {
+    async fn test_system() {
         let default_name = "default";
         let mut system_config = SystemConfig::default();
         let provider_configs = ProviderConfigs {
