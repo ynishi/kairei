@@ -27,12 +27,12 @@ pub fn parse_event_handler() -> impl Parser<Token, ast::EventHandler> {
             tuple4(
                 as_unit(parse_on_keyword()),
                 parse_event_type(),
-                parse_parameters(),
+                optional(parse_parameters()),
                 parse_statements(),
             ),
             |(_, event_type, parameters, block)| ast::EventHandler {
                 event_type,
-                parameters,
+                parameters: parameters.unwrap_or_default(),
                 block: ast::HandlerBlock { statements: block },
             },
         ),

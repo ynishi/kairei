@@ -69,6 +69,7 @@ impl Provider for StandardProvider {
             request,
             configs: &request.config.plugin_configs,
         });
+        debug!("context: {:?}", request);
         let sections = self.generate_plugin_sections(&context).await?;
         debug!("sections: {:?}", sections);
         // 2. プロンプトの生成
@@ -149,6 +150,7 @@ impl StandardProvider {
         &self,
         context: &PluginContext<'a>,
     ) -> ProviderResult<Vec<Section>> {
+        debug!("generate_plugin_sections");
         let mut sections = Vec::new();
 
         let mut plugins = self.plugins.clone();
@@ -185,9 +187,12 @@ impl StandardProvider {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::{
         config::ProviderConfig,
-        provider::request::{ProviderContext, ProviderRequest},
+        expression,
+        provider::request::{ProviderContext, ProviderRequest, RequestInput},
     };
 
     use super::*;
@@ -225,6 +230,7 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
     struct MockPlugin {
         name: String,
         capability: CapabilityType,
@@ -256,6 +262,16 @@ mod tests {
         }
     }
 
+    fn create_valid_request() -> ProviderRequest {
+        let input = RequestInput {
+            query: expression::Value::String("test".to_string()),
+            parameters: HashMap::new(),
+        };
+        let mut request = ProviderRequest::default();
+        request.input = input;
+        request
+    }
+
     // LLM -> Generate
     // Plugin -> Search
     // response has output
@@ -275,9 +291,9 @@ mod tests {
         let mut provider = StandardProvider::new(llm, vec![]);
         provider.register_plugin(plugin).unwrap();
 
-        let contxt = ProviderContext::default();
-        let request = ProviderRequest::default();
-        let response = provider.execute(&contxt, &request).await.unwrap();
+        let context = ProviderContext::default();
+        let request = create_valid_request();
+        let response = provider.execute(&context, &request).await.unwrap();
 
         assert_eq!(response.output.len(), 0);
     }
@@ -301,9 +317,9 @@ mod tests {
         let mut provider = StandardProvider::new(llm, vec![]);
         provider.register_plugin(plugin).unwrap();
 
-        let contxt = ProviderContext::default();
-        let request = ProviderRequest::default();
-        let response = provider.execute(&contxt, &request).await.unwrap();
+        let context = ProviderContext::default();
+        let request = create_valid_request();
+        let response = provider.execute(&context, &request).await.unwrap();
 
         assert_eq!(response.output.len(), 0);
     }
@@ -331,9 +347,9 @@ mod tests {
         provider.register_plugin(plugin1).unwrap();
         provider.register_plugin(plugin2).unwrap();
 
-        let contxt = ProviderContext::default();
-        let request = ProviderRequest::default();
-        let response = provider.execute(&contxt, &request).await.unwrap();
+        let context = ProviderContext::default();
+        let request = create_valid_request();
+        let response = provider.execute(&context, &request).await.unwrap();
 
         assert_eq!(response.output.len(), 0);
     }
@@ -354,9 +370,9 @@ mod tests {
         let mut provider = StandardProvider::new(llm, vec![]);
         provider.register_plugin(plugin).unwrap();
 
-        let contxt = ProviderContext::default();
-        let request = ProviderRequest::default();
-        let response = provider.execute(&contxt, &request).await.unwrap();
+        let context = ProviderContext::default();
+        let request = create_valid_request();
+        let response = provider.execute(&context, &request).await.unwrap();
 
         assert_eq!(response.output.len(), 0);
     }
@@ -384,9 +400,9 @@ mod tests {
         provider.register_plugin(plugin1).unwrap();
         provider.register_plugin(plugin2).unwrap();
 
-        let contxt = ProviderContext::default();
-        let request = ProviderRequest::default();
-        let response = provider.execute(&contxt, &request).await.unwrap();
+        let context = ProviderContext::default();
+        let request = create_valid_request();
+        let response = provider.execute(&context, &request).await.unwrap();
 
         assert_eq!(response.output.len(), 0);
     }

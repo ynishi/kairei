@@ -1,3 +1,5 @@
+use std::fmt;
+
 use nom::{
     branch::alt,
     bytes::complete::{take_while, take_while1},
@@ -13,18 +15,15 @@ use super::{
     keyword::{parse_keyword, Keyword},
     literal::{parse_literal, Literal},
     symbol::{parse_delimiter, parse_operator, Delimiter, Operator},
-    types::{parse_types, Type},
     whitespace::{parse_newline, parse_whitespace},
 };
 
-#[derive(Debug, Clone, PartialEq, strum::Display)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // Keywords
     Keyword(Keyword),
     // Identifiers
     Identifier(String),
-    // Types
-    Type(Type),
     // Symbols
     Operator(Operator),
     Delimiter(Delimiter),
@@ -39,6 +38,36 @@ pub enum Token {
     },
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Token::Keyword(kw) => write!(f, "Token::Keyword({})", kw),
+            Token::Identifier(id) => write!(f, "Token::Identifier({})", id),
+            Token::Operator(op) => write!(f, "Token::Operator({})", op),
+            Token::Delimiter(d) => write!(f, "Token::Delimiter({})", d),
+            Token::Literal(lit) => write!(f, "Token::Literal({})", lit),
+            Token::Whitespace(ws) => write!(f, "Token::Whitespace({})", ws),
+            Token::Newline => write!(f, "Newline"),
+            Token::Comment {
+                content,
+                comment_type,
+            } => {
+                let comment_type = match comment_type {
+                    CommentType::Line => "//",
+                    CommentType::Block => "/*",
+                    CommentType::DocumentationLine => "///",
+                    CommentType::DocumentationBlock => "/**",
+                };
+                write!(
+                    f,
+                    "Token::Comment{{type: {}, content: {}}}",
+                    comment_type, content
+                )
+            }
+        }
+    }
+}
+
 impl Token {
     pub fn is_whitespace(&self) -> bool {
         matches!(self, Token::Whitespace(_))
@@ -46,6 +75,10 @@ impl Token {
 
     pub fn is_comment(&self) -> bool {
         matches!(self, Token::Comment { .. })
+    }
+
+    pub fn is_newline(&self) -> bool {
+        matches!(self, Token::Newline)
     }
 }
 
@@ -101,7 +134,6 @@ impl Tokenizer {
                 parse_keyword,
                 parse_operator,
                 parse_delimiter,
-                parse_types,
                 parse_identifier,
             ))(remaining);
 
@@ -202,9 +234,6 @@ fn parse_identifier(input: &str) -> ParserResult<Token> {
     // Check if identifier is not a specials
     if let Ok(kw) = Keyword::try_from(id) {
         return Ok((input, Token::Keyword(kw)));
-    }
-    if let Ok(ty) = Type::try_from(id) {
-        return Ok((input, Token::Type(ty)));
     }
 
     Ok((input, Token::Identifier(id.to_string())))

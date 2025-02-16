@@ -1,6 +1,129 @@
-use kairei::{analyzer::Parser, preprocessor::Preprocessor, tokenizer::token::Token};
+use kairei::{
+    analyzer::Parser, preprocessor::Preprocessor, tokenizer::token::Token, MicroAgentDef,
+};
+use tracing::debug;
 
 extern crate kairei;
+
+fn parse_agent(input: &str) -> MicroAgentDef {
+    let result = kairei::tokenizer::token::Tokenizer::new()
+        .tokenize(input)
+        .unwrap();
+    let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
+    let tokens: Vec<Token> = preprocessor.process(result);
+    debug!("{:?}", tokens);
+    let (_, agent_def) = kairei::analyzer::parsers::agent::parse_agent_def()
+        .parse(tokens.as_slice(), 0)
+        .unwrap();
+    agent_def
+}
+
+#[test]
+fn it_parse_micro_agent_state() {
+    let input = r#"
+        micro TestAgent {
+            state {
+                counter: Int = 0;
+                name: String = "test";
+                active: Bool = true;
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    debug!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.state.is_some());
+}
+
+#[test]
+fn it_parse_micro_agent_lifecycle() {
+    let input = r#"
+        micro TestAgent {
+            lifecycle {
+                onInit {
+                    counter = 0
+                }
+                onDestroy {
+                    emit Shutdown() to manager
+                }
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    debug!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.lifecycle.is_some());
+}
+
+#[test]
+fn it_parse_micro_agent_observe() {
+    let input = r#"
+        micro TestAgent {
+            observe {
+                on Tick {
+                    counter = counter + 1
+                }
+                on StateUpdated {
+                    name = "updated"
+                }
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    debug!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.observe.is_some());
+}
+
+#[test]
+fn it_parse_micro_agent_answer() {
+    let input = r#"
+        micro TestAgent {
+            answer {
+                on request GetCount() -> Result<Int, Error> {
+                    return Ok(counter)
+                }
+
+                on request SetName(newName: String) -> Result<Bool, Error>
+                with { strictness: 0.9, stability: 0.95 }
+                {
+                    name = newName
+                    return Ok(true)
+                }
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    debug!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.answer.is_some());
+}
+
+#[test]
+fn it_parse_micro_agent_react() {
+    let input = r#"
+        micro TestAgent {
+            react {
+                on Message(status: String) {
+                    counter = 0
+                    emit StateUpdated(agent: self, counter: counter) to manager
+                }
+                on Message(CounterUpdated) {
+                    counter = 0
+                    emit StateUpdated(agent: self, counter: counter) to manager
+                }
+                on StatusMessage(status: String) {
+                    counter = 0
+                    emit StateUpdated(agent: self, counter: counter) to manager
+                }
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    debug!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+    assert!(agent_def.react.is_some());
+}
 
 #[test]
 fn it_parse_micro_agent() {
@@ -11,19 +134,19 @@ fn it_parse_micro_agent() {
                     counter = 0
                 }
                 onDestroy {
-                    emit Shutdown to manager
+                    emit Shutdown() to manager
                 }
             }
             state {
-                counter: Int = 0,
-                name: String = "test",
-                active: Bool = true
+                counter: Int = 0;
+                name: String = "test";
+                active: Bool = true;
             }
             observe {
                 on Tick {
                     counter = counter + 1
                 }
-                on StateUpdated { agent: "other", state: "value" } {
+                on StateUpdated {
                     name = "updated"
                 }
             }
@@ -33,16 +156,16 @@ fn it_parse_micro_agent() {
                 }
 
                 on request SetName(newName: String) -> Result<Bool, Error>
-                with constraints { strictness: 0.9, stability: 0.95 }
+                with { strictness: 0.9, stability: 0.95 }
                 {
                     name = newName
                     return Ok(true)
                 }
             }
             react {
-                on Message { content: "reset" } {
+                on Message(CounterUpdated) {
                     counter = 0
-                    emit StateUpdated { agent: "self", state: "counter" } to manager
+                    emit StateUpdated(agent: self, counter: counter) to manager
                 }
             }
         }
@@ -52,6 +175,7 @@ fn it_parse_micro_agent() {
         .unwrap();
     let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
     let tokens: Vec<Token> = preprocessor.process(result);
+    debug!("{:?}", tokens);
     let (_, agent_def) = kairei::analyzer::parsers::agent::parse_agent_def()
         .parse(tokens.as_slice(), 0)
         .unwrap();

@@ -144,12 +144,21 @@ impl System {
     #[tracing::instrument(skip(self, root))]
     pub async fn initialize(&mut self, root: ast::Root) -> SystemResult<()> {
         // call all registration methods
-        self.register_native_features().await?;
-        self.register_providers().await?;
-        self.register_world(&root.world_def).await?;
-        self.register_builtin_agents().await?;
+        self.register_native_features()
+            .await
+            .map_err(|e| SystemError::Initialization(e.to_string()))?;
+        self.register_providers()
+            .await
+            .map_err(|e| SystemError::Initialization(e.to_string()))?;
+        self.register_world(&root.world_def)
+            .await
+            .map_err(|e| SystemError::Initialization(e.to_string()))?;
+        self.register_builtin_agents()
+            .await
+            .map_err(|e| SystemError::Initialization(e.to_string()))?;
         self.register_initial_user_agents(root.micro_agent_defs)
-            .await?;
+            .await
+            .map_err(|e| SystemError::Initialization(e.to_string()))?;
         Ok(())
     }
 
@@ -884,6 +893,8 @@ pub struct AgentStatus {
 
 #[derive(Debug, Error)]
 pub enum SystemError {
+    #[error("Initialization error: {0}")]
+    Initialization(String),
     #[error("Parse error: {0}")]
     Runtime(#[from] RuntimeError),
     #[error("Event error: {0}")]
@@ -929,9 +940,11 @@ mod tests {
     use std::time::Duration;
 
     use crate::{
+        analyzer::{self, Parser},
         ast,
         config::{ProviderConfig, ProviderConfigs, ProviderSecretConfig},
         event_registry::EventType,
+        tokenizer::{self, token::Token},
         AnswerDef, EventHandler, Expression, HandlerBlock, Literal, ReactDef, RequestHandler,
         StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
     };
@@ -1026,31 +1039,47 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_system_integration() {
+    async fn test_system() {
         let default_name = "default";
         let mut system_config = SystemConfig::default();
-        let mut provider_configs = ProviderConfigs::default();
-        provider_configs.primary_provider = Some(default_name.to_string());
-        provider_configs.providers.insert(
-            default_name.to_string(),
-            ProviderConfig {
-                name: default_name.to_string(),
-                provider_type: ProviderType::SimpleExpert,
-                ..Default::default()
+        let provider_configs = ProviderConfigs {
+            primary_provider: Some(default_name.to_string()),
+            providers: {
+                let mut map = HashMap::new();
+                map.insert(
+                    default_name.to_string(),
+                    ProviderConfig {
+                        name: default_name.to_string(),
+                        provider_type: ProviderType::SimpleExpert,
+                        ..Default::default()
+                    },
+                );
+                map
             },
-        );
+        };
         system_config.provider_configs = provider_configs;
 
         let mut secret_config = SecretConfig::default();
         secret_config
             .providers
             .insert(default_name.to_string(), ProviderSecretConfig::default());
-        let system = System::new(&system_config, &secret_config).await;
+        let mut system = System::new(&system_config, &secret_config).await;
 
-        system
-            .register_provider(default_name, ProviderType::SimpleExpert)
-            .await
+        // DSLのパース
+        let tokens: Vec<Token> = tokenizer::token::Tokenizer::new()
+            .tokenize("")
+            .unwrap()
+            .iter()
+            .map(|t| t.token.clone())
+            .collect();
+
+        // Rootのパース
+        let (_, root_ast) = analyzer::parsers::world::parse_root()
+            .parse(tokens.as_slice(), 0)
             .unwrap();
+
+        // システムの初期化
+        system.initialize(root_ast).await.unwrap();
 
         // Ping-Pong AgentのAST作成
         let (ping_ast, pong_ast) = create_ping_pong_asts();
