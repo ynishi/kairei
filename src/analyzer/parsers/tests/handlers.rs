@@ -283,7 +283,7 @@ fn test_parse_request() {
     let input = &[
         Token::Keyword(Keyword::Request),
         Token::Identifier("FindHotels".to_string()),
-        Token::Identifier("to".to_string()),
+        Token::Keyword(Keyword::To),
         Token::Identifier("HotelFinder".to_string()),
         Token::Delimiter(Delimiter::OpenParen),
         Token::Identifier("location".to_string()),
@@ -330,7 +330,7 @@ fn test_parse_request() {
     let input = &[
         Token::Keyword(Keyword::Request),
         Token::Identifier("FindHotels".to_string()),
-        Token::Identifier("to".to_string()),
+        Token::Keyword(Keyword::To),
         Token::Identifier("HotelFinder".to_string()),
         Token::Delimiter(Delimiter::OpenParen),
         Token::Identifier("budget".to_string()),
