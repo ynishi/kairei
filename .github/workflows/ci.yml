@@ -79,11 +79,8 @@ jobs:
           restore-keys: |
             rust-${{ runner.os }}-cargo-
 
-      - name: Install cargo-audit (if not cached)
-        run: |
-          if ! command -v cargo-audit &> /dev/null; then
-            cargo install cargo-audit
-          fi
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --force
 
       - name: Install dependencies
         run: cargo build --release
