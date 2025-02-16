@@ -1,3 +1,5 @@
+use std::fmt;
+
 use nom::{
     branch::alt,
     bytes::complete::{take_while, take_while1},
@@ -16,7 +18,7 @@ use super::{
     whitespace::{parse_newline, parse_whitespace},
 };
 
-#[derive(Debug, Clone, PartialEq, strum::Display)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // Keywords
     Keyword(Keyword),
@@ -34,6 +36,36 @@ pub enum Token {
         content: String,
         comment_type: CommentType,
     },
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Token::Keyword(kw) => write!(f, "Token::Keyword({})", kw),
+            Token::Identifier(id) => write!(f, "Token::Identifier({})", id),
+            Token::Operator(op) => write!(f, "Token::Operator({})", op),
+            Token::Delimiter(d) => write!(f, "Token::Delimiter({})", d),
+            Token::Literal(lit) => write!(f, "Token::Literal({})", lit),
+            Token::Whitespace(ws) => write!(f, "Token::Whitespace({})", ws),
+            Token::Newline => write!(f, "Newline"),
+            Token::Comment {
+                content,
+                comment_type,
+            } => {
+                let comment_type = match comment_type {
+                    CommentType::Line => "//",
+                    CommentType::Block => "/*",
+                    CommentType::DocumentationLine => "///",
+                    CommentType::DocumentationBlock => "/**",
+                };
+                write!(
+                    f,
+                    "Token::Comment{{type: {}, content: {}}}",
+                    comment_type, content
+                )
+            }
+        }
+    }
 }
 
 impl Token {

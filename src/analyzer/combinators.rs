@@ -1,6 +1,7 @@
 use super::core::ParseError;
 use super::core::ParseResult;
 use super::core::Parser;
+use std::fmt;
 use std::marker::PhantomData;
 
 // Expected: 入力値を変換し、その結果が value と一致する場合のみ成功し、value を返す
@@ -56,14 +57,19 @@ impl<I> Equal<I> {
     }
 }
 
-impl<I: Clone + PartialEq> Parser<I, I> for Equal<I> {
+impl<I: Clone + PartialEq + fmt::Display> Parser<I, I> for Equal<I> {
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<I> {
         if input.len() > pos {
             let (next_pos, found) = (pos + 1, input[pos].clone());
             if found == self.value {
                 Ok((next_pos, found))
             } else {
-                Err(ParseError::Fail("expected not matched".to_string()))
+                Err(ParseError::Fail(format!(
+                    "expected not matched: expected: {}, found: {}, at {}",
+                    self.value,
+                    found,
+                    pos + 1
+                )))
             }
         } else {
             Err(ParseError::EOF)

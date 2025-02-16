@@ -1,6 +1,10 @@
 use crate::analyzer::parsers::agent::*;
+use crate::analyzer::parsers::handlers::observe::parse_observe;
+use crate::analyzer::parsers::handlers::react::parse_react;
 use crate::analyzer::Parser;
 use crate::ast;
+use crate::tokenizer::literal::StringPart;
+use crate::tokenizer::symbol::Operator;
 use crate::tokenizer::{keyword::Keyword, literal::Literal, symbol::Delimiter, token::Token};
 use std::collections::HashMap;
 
@@ -161,4 +165,333 @@ fn test_parse_state() {
     };
 
     assert_eq!(parse_state().parse(&input, 0), Ok((input.len(), expected)));
+}
+
+#[test]
+fn test_parse_full_state_block() {
+    let input = vec![
+        Token::Keyword(Keyword::State),
+        Token::Delimiter(Delimiter::OpenBrace),
+        // counter: Int = 0
+        Token::Identifier("counter".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("Int".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::Integer(0)),
+        Token::Delimiter(Delimiter::Semicolon),
+        // name: String = "test"
+        Token::Identifier("name".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::String(vec![StringPart::Literal(
+            "test".to_string(),
+        )])),
+        Token::Delimiter(Delimiter::Semicolon),
+        // active: Bool = true
+        Token::Identifier("active".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("Bool".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::Boolean(true)),
+        Token::Delimiter(Delimiter::Semicolon),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+
+    let expected = ast::StateDef {
+        variables: {
+            let mut vars = HashMap::new();
+            vars.insert(
+                "counter".to_string(),
+                ast::StateVarDef {
+                    name: "counter".to_string(),
+                    type_info: ast::TypeInfo::Simple("Int".to_string()),
+                    initial_value: Some(ast::Expression::Literal(ast::Literal::Integer(0))),
+                },
+            );
+            vars.insert(
+                "name".to_string(),
+                ast::StateVarDef {
+                    name: "name".to_string(),
+                    type_info: ast::TypeInfo::Simple("String".to_string()),
+                    initial_value: Some(ast::Expression::Literal(ast::Literal::String(
+                        "test".to_string(),
+                    ))),
+                },
+            );
+            vars.insert(
+                "active".to_string(),
+                ast::StateVarDef {
+                    name: "active".to_string(),
+                    type_info: ast::TypeInfo::Simple("Bool".to_string()),
+                    initial_value: Some(ast::Expression::Literal(ast::Literal::Boolean(true))),
+                },
+            );
+            vars
+        },
+    };
+
+    assert_eq!(parse_state().parse(&input, 0), Ok((input.len(), expected)));
+}
+
+#[test]
+fn test_parse_lifecycle_block() {
+    let input = vec![
+        Token::Keyword(Keyword::Lifecycle),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::OnInit),
+        Token::Delimiter(Delimiter::OpenParen),  // 修正済み
+        Token::Delimiter(Delimiter::CloseParen), // 修正済み
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Literal(Literal::Null),
+        Token::Delimiter(Delimiter::Semicolon),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Keyword(Keyword::OnDestroy),
+        Token::Delimiter(Delimiter::OpenParen),  // 修正済み
+        Token::Delimiter(Delimiter::CloseParen), // 修正済み
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Literal(Literal::Null),
+        Token::Delimiter(Delimiter::Semicolon),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+
+    let expected = ast::LifecycleDef {
+        on_init: Some(ast::HandlerBlock {
+            statements: vec![ast::Statement::Return(ast::Expression::Literal(
+                ast::Literal::Null,
+            ))],
+        }),
+        on_destroy: Some(ast::HandlerBlock {
+            statements: vec![ast::Statement::Return(ast::Expression::Literal(
+                ast::Literal::Null,
+            ))],
+        }),
+    };
+
+    assert_eq!(
+        parse_lifecycle().parse(&input, 0),
+        Ok((input.len(), expected))
+    );
+}
+
+#[test]
+fn test_parse_observe_block() {
+    let input = vec![
+        Token::Keyword(Keyword::Observe),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::On),
+        Token::Identifier("Tick".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Literal(Literal::Null),          // 修正済み
+        Token::Delimiter(Delimiter::Semicolon), // 修正済み
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+
+    let expected = ast::ObserveDef {
+        handlers: vec![ast::EventHandler {
+            event_type: ast::EventType::Tick,
+            parameters: vec![],
+            block: ast::HandlerBlock {
+                statements: vec![ast::Statement::Return(ast::Expression::Literal(
+                    ast::Literal::Null,
+                ))],
+            },
+        }],
+    };
+
+    assert_eq!(
+        parse_observe().parse(&input, 0),
+        Ok((input.len(), expected))
+    );
+}
+
+#[test]
+fn test_parse_agent() {
+    let input = vec![
+        Token::Keyword(Keyword::Micro),
+        Token::Identifier("TestAgent".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        // Lifecycle block
+        Token::Keyword(Keyword::Lifecycle),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::OnInit),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("counter".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::Integer(0)),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Keyword(Keyword::OnDestroy),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Emit),
+        Token::Identifier("Shutdown".to_string()),
+        Token::Identifier("to".to_string()),
+        Token::Identifier("manager".to_string()),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+        // State block
+        Token::Keyword(Keyword::State),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("counter".to_string()),
+        Token::Delimiter(Delimiter::Semicolon),
+        Token::Identifier("Int".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::Integer(0)),
+        Token::Delimiter(Delimiter::Comma),
+        Token::Identifier("name".to_string()),
+        Token::Delimiter(Delimiter::Semicolon),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::String(vec![StringPart::Literal(
+            "test".to_string(),
+        )])),
+        Token::Delimiter(Delimiter::Comma),
+        Token::Identifier("active".to_string()),
+        Token::Delimiter(Delimiter::Semicolon),
+        Token::Identifier("Bool".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Identifier("true".to_string()),
+        Token::Delimiter(Delimiter::CloseBrace),
+        // Observe block
+        Token::Keyword(Keyword::Observe),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::On),
+        Token::Identifier("Tick".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("counter".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Identifier("counter".to_string()),
+        Token::Operator(Operator::Plus),
+        Token::Literal(Literal::Integer(1)),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Keyword(Keyword::On),
+        Token::Identifier("StateUpdated".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("agent".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::String(vec![StringPart::Literal(
+            "other".to_string(),
+        )])),
+        Token::Delimiter(Delimiter::Comma),
+        Token::Keyword(Keyword::State),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::String(vec![StringPart::Literal(
+            "value".to_string(),
+        )])),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("name".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::String(vec![StringPart::Literal(
+            "updated".to_string(),
+        )])),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+        // Answer block
+        Token::Keyword(Keyword::Answer),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::On),
+        Token::Keyword(Keyword::Request),
+        Token::Identifier("GetCount".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Operator(Operator::ThinArrow),
+        Token::Identifier("Result".to_string()),
+        Token::Operator(Operator::Less),
+        Token::Identifier("Int".to_string()),
+        Token::Delimiter(Delimiter::Comma),
+        Token::Identifier("Error".to_string()),
+        Token::Operator(Operator::Greater),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::Return),
+        Token::Identifier("Ok".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Identifier("counter".to_string()),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Keyword(Keyword::On),
+        Token::Keyword(Keyword::Request),
+        Token::Identifier("SetName".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Identifier("newName".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Identifier("String".to_string()),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Operator(Operator::ThinArrow),
+        Token::Identifier("Result".to_string()),
+        Token::Operator(Operator::Less),
+        Token::Identifier("Bool".to_string()),
+        Token::Delimiter(Delimiter::Comma),
+        Token::Identifier("Error".to_string()),
+        Token::Operator(Operator::Greater),
+        Token::Keyword(Keyword::With),
+        Token::Identifier("constraints".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("strictness".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::Float(0.9)),
+        Token::Delimiter(Delimiter::Comma),
+        Token::Identifier("stability".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::Float(0.95)),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("name".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Identifier("newName".to_string()),
+        Token::Keyword(Keyword::Return),
+        Token::Identifier("Ok".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Identifier("true".to_string()),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+        // React block
+        Token::Keyword(Keyword::React),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Keyword(Keyword::On),
+        Token::Identifier("Message".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("content".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::String(vec![StringPart::Literal(
+            "reset".to_string(),
+        )])),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("counter".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::Integer(0)),
+        Token::Keyword(Keyword::Emit),
+        Token::Identifier("StateUpdated".to_string()),
+        Token::Delimiter(Delimiter::OpenBrace),
+        Token::Identifier("agent".to_string()),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::String(vec![StringPart::Literal(
+            "self".to_string(),
+        )])),
+        Token::Delimiter(Delimiter::Comma),
+        Token::Keyword(Keyword::State),
+        Token::Delimiter(Delimiter::Colon),
+        Token::Literal(Literal::String(vec![StringPart::Literal(
+            "counter".to_string(),
+        )])),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Identifier("to".to_string()),
+        Token::Identifier("manager".to_string()),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+        Token::Delimiter(Delimiter::CloseBrace),
+    ];
+
+    let result = parse_agent_def().parse(&input, 0);
+    println!("{:?}", result);
+
+    assert!(result.is_ok());
 }

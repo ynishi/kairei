@@ -17,7 +17,7 @@ pub enum StringPart {
     NewLine,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, strum::Display)]
 pub enum Literal {
     String(Vec<StringPart>),
     Integer(i64),
