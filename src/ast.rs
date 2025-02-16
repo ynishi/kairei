@@ -314,6 +314,19 @@ pub enum TypeInfo {
     },
 }
 
+impl TypeInfo {
+    pub fn any() -> Self {
+        Self::Simple("Any".to_string())
+    }
+
+    pub fn is_any(&self) -> bool {
+        match self {
+            Self::Simple(name) => name == "Any",
+            _ => false,
+        }
+    }
+}
+
 impl fmt::Display for TypeInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

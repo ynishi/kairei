@@ -1,6 +1,7 @@
 use super::core::ParseError;
 use super::core::ParseResult;
 use super::core::Parser;
+use std::fmt;
 use std::marker::PhantomData;
 
 // Expected: 入力値を変換し、その結果が value と一致する場合のみ成功し、value を返す
@@ -56,14 +57,19 @@ impl<I> Equal<I> {
     }
 }
 
-impl<I: Clone + PartialEq> Parser<I, I> for Equal<I> {
+impl<I: Clone + PartialEq + fmt::Display> Parser<I, I> for Equal<I> {
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<I> {
         if input.len() > pos {
             let (next_pos, found) = (pos + 1, input[pos].clone());
             if found == self.value {
                 Ok((next_pos, found))
             } else {
-                Err(ParseError::Fail("expected not matched".to_string()))
+                Err(ParseError::Fail(format!(
+                    "expected not matched: expected: {}, found: {}, at {}",
+                    self.value,
+                    found,
+                    pos + 1
+                )))
             }
         } else {
             Err(ParseError::EOF)
@@ -384,29 +390,29 @@ where
     P: Parser<I, O>,
     S: Parser<I, ()>,
 {
-    #[allow(clippy::single_match)]
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<Vec<O>> {
         let mut results = Vec::new();
         let mut current_pos = pos;
 
-        // 最初の要素をパース
-        match self.item_parser.parse(input, current_pos) {
-            Ok((new_pos, value)) => {
-                results.push(value);
-                current_pos = new_pos;
+        // 最初の要素をパース（失敗したら空のリストを返す）
+        if let Ok((new_pos, value)) = self.item_parser.parse(input, current_pos) {
+            results.push(value);
+            current_pos = new_pos;
 
-                // 残りの要素を繰り返しパース
-                while let Ok((sep_pos, _)) = self.separator_parser.parse(input, current_pos) {
-                    match self.item_parser.parse(input, sep_pos) {
-                        Ok((new_pos, value)) => {
-                            results.push(value);
-                            current_pos = new_pos;
-                        }
-                        Err(_) => break,
-                    }
+            // 残りの要素を繰り返しパース
+            while let Ok((sep_pos, _)) = self.separator_parser.parse(input, current_pos) {
+                current_pos = sep_pos;
+                // カンマの後の要素をパース（失敗したら終了）
+                if let Ok((new_pos, value)) = self.item_parser.parse(input, current_pos) {
+                    results.push(value);
+                    current_pos = new_pos;
+                } else {
+                    break;
                 }
             }
-            Err(_) => {} // 空のリストは有効
+        } else if let Ok((sep_pos, _)) = self.separator_parser.parse(input, current_pos) {
+            // カンマのみの場合は位置を更新
+            current_pos = sep_pos;
         }
 
         Ok((current_pos, results))
@@ -976,40 +982,31 @@ mod tests {
         let many1_parser = Many1::new(parser.clone());
         assert_eq!(many1_parser.parse(&input, 5), Err(ParseError::EOF));
     }
-
     #[test]
     fn test_separated_list() {
-        let input = vec![1, 0, 1, 0, 1, 2];
-        let item_parser = Satisfy::new(|x: &i32| if *x == 1 { Some(*x) } else { None });
-        let separator_parser = Satisfy::new(|x: &i32| if *x == 0 { Some(()) } else { None });
+        let item_parser = Satisfy::new(|x: &char| if *x != ',' { Some(*x) } else { None });
+        let separator_parser = Satisfy::new(|x: &char| if *x == ',' { Some(()) } else { None });
+        let parser = SeparatedList::new(item_parser, separator_parser);
 
-        // 成功するケース (複数回成功)
-        let separated_list_parser =
-            SeparatedList::new(item_parser.clone(), separator_parser.clone());
-        assert_eq!(
-            separated_list_parser.parse(&input, 0),
-            Ok((5, vec![1, 1, 1]))
-        );
+        // Case 1: 空のリスト "[]" -> OK
+        let input: Vec<char> = vec![];
+        assert_eq!(parser.parse(&input, 0), Ok((0, vec![])));
 
-        // 成功するケース (1回だけ成功)
-        let separated_list_parser =
-            SeparatedList::new(item_parser.clone(), separator_parser.clone());
-        assert_eq!(separated_list_parser.parse(&input, 4), Ok((5, vec![1])));
+        // Case 2: 単一要素 "[a]" -> OK
+        let input: Vec<char> = vec!['a'];
+        assert_eq!(parser.parse(&input, 0), Ok((1, vec!['a'])));
 
-        // 失敗するケース (最初の要素で失敗)
-        let separated_list_parser =
-            SeparatedList::new(item_parser.clone(), separator_parser.clone());
-        assert_eq!(separated_list_parser.parse(&[], 1), Err(ParseError::EOF));
+        // Case 3: 複数要素 "[a,b,c]" -> OK
+        let input: Vec<char> = vec!['a', ',', 'b', ',', 'c'];
+        assert_eq!(parser.parse(&input, 0), Ok((5, vec!['a', 'b', 'c'])));
 
-        // 失敗するケース (セパレータで失敗)
-        let separated_list_parser =
-            SeparatedList::new(item_parser.clone(), separator_parser.clone());
-        assert_eq!(separated_list_parser.parse(&input, 3), Err(ParseError::EOF));
+        // Case 4: 末尾カンマあり "[a,b,]" -> OK
+        let input: Vec<char> = vec!['a', ',', 'b', ','];
+        assert_eq!(parser.parse(&input, 0), Ok((4, vec!['a', 'b'])));
 
-        // 失敗するケース (入力範囲外)
-        let separated_list_parser =
-            SeparatedList::new(item_parser.clone(), separator_parser.clone());
-        assert_eq!(separated_list_parser.parse(&input, 6), Err(ParseError::EOF));
+        // Case 5: カンマのみ "[,]" -> OK (空のリストとして扱う)
+        let input: Vec<char> = vec![','];
+        assert_eq!(parser.parse(&input, 0), Ok((1, vec![])));
     }
 
     #[test]

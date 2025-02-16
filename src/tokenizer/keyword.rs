@@ -1,8 +1,9 @@
 use nom::{
     branch::alt,
-    bytes::complete::tag,
-    combinator::{map, value},
+    bytes::complete::{tag, take_while1},
+    combinator::{map, not, peek, value},
     error::context,
+    sequence::terminated,
 };
 
 use super::token::{ParserResult, Token};
@@ -40,6 +41,7 @@ pub enum Keyword {
     #[strum(serialize = "lifecycle")]
     Lifecycle,
     With,
+    To,
     On,
     #[strum(serialize = "reThrow")]
     ReThrow,
@@ -52,35 +54,198 @@ pub fn parse_keyword(input: &str) -> ParserResult<Token> {
         map(
             alt((
                 alt((
-                    value(Keyword::Micro, tag("micro")),
-                    value(Keyword::World, tag("world")),
-                    value(Keyword::Handlers, tag("handlers")),
-                    value(Keyword::Events, tag("events")),
-                    value(Keyword::Config, tag("config")),
-                    value(Keyword::Policy, tag("policy")),
-                    value(Keyword::State, tag("state")),
-                    value(Keyword::Observe, tag("observe")),
-                    value(Keyword::Answer, tag("answer")),
-                    value(Keyword::Query, tag("query")),
-                    value(Keyword::Action, tag("action")),
-                    value(Keyword::React, tag("react")),
-                    value(Keyword::Request, tag("request")),
-                    value(Keyword::Emit, tag("emit")),
-                    value(Keyword::Think, tag("think")),
-                    value(Keyword::If, tag("if")),
-                    value(Keyword::Else, tag("else")),
-                    value(Keyword::Return, tag("return")),
-                    value(Keyword::Await, tag("await")),
-                    value(Keyword::OnFail, tag("onFail")),
-                    value(Keyword::OnInit, tag("onInit")),
+                    value(
+                        Keyword::Micro,
+                        terminated(
+                            tag("micro"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::World,
+                        terminated(
+                            tag("world"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Handlers,
+                        terminated(
+                            tag("handlers"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Events,
+                        terminated(
+                            tag("events"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Config,
+                        terminated(
+                            tag("config"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Policy,
+                        terminated(
+                            tag("policy"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::State,
+                        terminated(
+                            tag("state"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Observe,
+                        terminated(
+                            tag("observe"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Answer,
+                        terminated(
+                            tag("answer"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Query,
+                        terminated(
+                            tag("query"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Action,
+                        terminated(
+                            tag("action"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::React,
+                        terminated(
+                            tag("react"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Request,
+                        terminated(
+                            tag("request"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Emit,
+                        terminated(
+                            tag("emit"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Think,
+                        terminated(
+                            tag("think"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::If,
+                        terminated(
+                            tag("if"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Else,
+                        terminated(
+                            tag("else"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Return,
+                        terminated(
+                            tag("return"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Await,
+                        terminated(
+                            tag("await"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::OnFail,
+                        terminated(
+                            tag("onFail"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::OnInit,
+                        terminated(
+                            tag("onInit"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
                     // separated for alt max size limit
                 )),
                 alt((
-                    value(Keyword::OnDestroy, tag("onDestroy")),
-                    value(Keyword::Lifecycle, tag("lifecycle")),
-                    value(Keyword::With, tag("with")),
-                    value(Keyword::On, tag("on")),
-                    value(Keyword::ReThrow, tag("reThrow")),
+                    value(
+                        Keyword::OnDestroy,
+                        terminated(
+                            tag("onDestroy"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Lifecycle,
+                        terminated(
+                            tag("lifecycle"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::With,
+                        terminated(
+                            tag("with"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::On,
+                        terminated(
+                            tag("on"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::ReThrow,
+                        terminated(
+                            tag("reThrow"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::To,
+                        terminated(
+                            tag("to"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
                     // TODO: Add more keywords when Keywords enum is updated
                 )),
             )),
@@ -95,6 +260,8 @@ mod tests {
 
     use strum::IntoEnumIterator;
     use tracing::debug;
+
+    use crate::tokenizer::token::Token;
 
     use super::*;
 
@@ -125,6 +292,18 @@ mod tests {
             let k = Keyword::from_str(&keyword_string).unwrap();
             assert_eq!(token, Token::Keyword(k));
             assert_eq!(rest, "");
+        }
+    }
+
+    #[test]
+    fn test_keyword_boundary_failure() {
+        let test_cases = ["microX", "if123", "returnx", "onFailExtra"];
+        for input in test_cases.iter() {
+            assert!(
+                parse_keyword(input).is_err(),
+                "Input {} should not be recognized as a keyword",
+                input
+            );
         }
     }
 }

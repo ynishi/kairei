@@ -1,3 +1,4 @@
+/*
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use futures::future::join_all;
@@ -30,7 +31,6 @@ const PROVIDER_NAME: &str = "openai_travel_expert";
 async fn setup_openai_provider() -> (SystemConfig, SecretConfig) {
     setup_config()
 }
-/*
 async fn setup_system(
     config: SystemConfig,
     secret: SecretConfig,

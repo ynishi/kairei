@@ -17,7 +17,7 @@ pub enum StringPart {
     NewLine,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, strum::Display)]
 pub enum Literal {
     String(Vec<StringPart>),
     Integer(i64),
@@ -100,6 +100,17 @@ fn parse_integer_literal(input: &str) -> ParserResult<Literal> {
 }
 
 #[tracing::instrument(level = "debug", skip(input))]
+fn parse_boolean_literal(input: &str) -> ParserResult<Literal> {
+    context(
+        "boolean literal",
+        alt((
+            map(tag("true"), |_| Literal::Boolean(true)),
+            map(tag("false"), |_| Literal::Boolean(false)),
+        )),
+    )(input)
+}
+
+#[tracing::instrument(level = "debug", skip(input))]
 pub fn parse_literal(input: &str) -> ParserResult<Token> {
     context(
         "literal",
@@ -108,6 +119,7 @@ pub fn parse_literal(input: &str) -> ParserResult<Token> {
                 parse_string_literal,
                 parse_float_literal,
                 parse_integer_literal,
+                parse_boolean_literal,
             )),
             Token::Literal,
         ),
