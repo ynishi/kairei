@@ -146,6 +146,7 @@ impl StandardProvider {
         Ok(())
     }
 
+    #[allow(clippy::needless_lifetimes)]
     async fn generate_plugin_sections<'a>(
         &self,
         context: &PluginContext<'a>,
@@ -169,6 +170,7 @@ impl StandardProvider {
         Ok(sections)
     }
 
+    #[allow(clippy::needless_lifetimes)]
     async fn process_plugins_response<'a>(
         &self,
         context: &PluginContext<'a>,

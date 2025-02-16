@@ -7,7 +7,10 @@ test_v:
 	RUST_LOG=debug cargo test -p kairei $(CASE) --verbose
 
 test_all:
-	RUN_API_TESTS=true RUST_LOG=error cargo test
+	RUN_API_TESTS=true RUST_LOG=error cargo test --all-features
+
+bench:
+	cargo bench
 
 fmt:
 	cargo fmt

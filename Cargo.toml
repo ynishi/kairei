@@ -9,6 +9,7 @@ async-recursion = "1.1.1"
 async-trait = "0.1.83"
 chrono = "0.4.39"
 clap = { version = "4.5.23", features = ["derive"] }
+criterion = "0.5.1"
 dashmap = "6.1.0"
 futures = "0.3.31"
 html2text = "0.13.6"
@@ -36,3 +37,7 @@ uuid = { version = "1.11.0", features = ["v4"] }
 [dev-dependencies]
 pretty_assertions = "1.4.1"
 ctor = "0.2.9"
+
+[[bench]]
+name = "benchmark"
+harness = false
