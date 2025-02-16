@@ -1,11 +1,10 @@
 use crate::analyzer::parsers::agent::*;
 use crate::analyzer::parsers::handlers::observe::parse_observe;
-use crate::analyzer::parsers::handlers::react::parse_react;
 use crate::analyzer::Parser;
-use crate::ast;
 use crate::tokenizer::literal::StringPart;
 use crate::tokenizer::symbol::Operator;
 use crate::tokenizer::{keyword::Keyword, literal::Literal, symbol::Delimiter, token::Token};
+use crate::ast;
 use std::collections::HashMap;
 
 #[test]
@@ -85,16 +84,12 @@ fn test_parse_lifecycle() {
         Token::Delimiter(Delimiter::OpenBrace),
         // init handler
         Token::Keyword(Keyword::OnInit),
-        Token::Delimiter(Delimiter::OpenParen),
-        Token::Delimiter(Delimiter::CloseParen),
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Keyword(Keyword::Return),
         Token::Literal(Literal::Null),
         Token::Delimiter(Delimiter::CloseBrace),
         // destroy handler
         Token::Keyword(Keyword::OnDestroy),
-        Token::Delimiter(Delimiter::OpenParen),
-        Token::Delimiter(Delimiter::CloseParen),
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Keyword(Keyword::Return),
         Token::Literal(Literal::Null),
@@ -240,34 +235,36 @@ fn test_parse_lifecycle_block() {
         Token::Keyword(Keyword::Lifecycle),
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Keyword(Keyword::OnInit),
-        Token::Delimiter(Delimiter::OpenParen),  // 修正済み
-        Token::Delimiter(Delimiter::CloseParen), // 修正済み
         Token::Delimiter(Delimiter::OpenBrace),
-        Token::Keyword(Keyword::Return),
-        Token::Literal(Literal::Null),
-        Token::Delimiter(Delimiter::Semicolon),
+        Token::Identifier("counter".to_string()),
+        Token::Delimiter(Delimiter::Equal),
+        Token::Literal(Literal::Integer(0)),
         Token::Delimiter(Delimiter::CloseBrace),
         Token::Keyword(Keyword::OnDestroy),
-        Token::Delimiter(Delimiter::OpenParen),  // 修正済み
-        Token::Delimiter(Delimiter::CloseParen), // 修正済み
         Token::Delimiter(Delimiter::OpenBrace),
-        Token::Keyword(Keyword::Return),
-        Token::Literal(Literal::Null),
-        Token::Delimiter(Delimiter::Semicolon),
+        Token::Keyword(Keyword::Emit),
+        Token::Identifier("Shutdown".to_string()),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Delimiter(Delimiter::CloseParen),
+        Token::Identifier("to".to_string()),
+        Token::Identifier("manager".to_string()),
         Token::Delimiter(Delimiter::CloseBrace),
         Token::Delimiter(Delimiter::CloseBrace),
     ];
 
     let expected = ast::LifecycleDef {
         on_init: Some(ast::HandlerBlock {
-            statements: vec![ast::Statement::Return(ast::Expression::Literal(
-                ast::Literal::Null,
-            ))],
+            statements: vec![ast::Statement::Assignment {
+                target: vec![ast::Expression::Variable("counter".to_string())],
+                value: ast::Expression::Literal(ast::Literal::Integer(0)),
+            }],
         }),
         on_destroy: Some(ast::HandlerBlock {
-            statements: vec![ast::Statement::Return(ast::Expression::Literal(
-                ast::Literal::Null,
-            ))],
+            statements: vec![ast::Statement::Emit {
+                event_type: ast::EventType::Custom("Shutdown".to_string()),
+                parameters: vec![],
+                target: Some("manager".to_string()),
+            }],
         }),
     };
 
@@ -288,8 +285,8 @@ fn test_parse_observe_block() {
         Token::Delimiter(Delimiter::CloseParen),
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Keyword(Keyword::Return),
-        Token::Literal(Literal::Null),          // 修正済み
-        Token::Delimiter(Delimiter::Semicolon), // 修正済み
+        Token::Literal(Literal::Null),
+        Token::Delimiter(Delimiter::Semicolon),
         Token::Delimiter(Delimiter::CloseBrace),
         Token::Delimiter(Delimiter::CloseBrace),
     ];

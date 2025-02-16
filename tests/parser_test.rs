@@ -1,6 +1,38 @@
-use kairei::{analyzer::Parser, preprocessor::Preprocessor, tokenizer::token::Token};
+use kairei::{
+    analyzer::Parser, preprocessor::Preprocessor, tokenizer::token::Token, MicroAgentDef,
+};
+use tracing::debug;
 
 extern crate kairei;
+
+fn parse_agent(input: &str) -> MicroAgentDef {
+    let result = kairei::tokenizer::token::Tokenizer::new()
+        .tokenize(input)
+        .unwrap();
+    let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
+    let tokens: Vec<Token> = preprocessor.process(result);
+    debug!("{:?}", tokens);
+    let (_, agent_def) = kairei::analyzer::parsers::agent::parse_agent_def()
+        .parse(tokens.as_slice(), 0)
+        .unwrap();
+    agent_def
+}
+
+#[test]
+fn it_parse_micro_agent_state() {
+    let input = r#"
+        micro TestAgent {
+            state {
+                counter: Int = 0;
+                name: String = "test";
+                active: Bool = true;
+            }
+        }
+    "#;
+    let agent_def = parse_agent(input);
+    println!("{:?}", agent_def);
+    assert_eq!(agent_def.name, "TestAgent");
+}
 
 #[test]
 fn it_parse_micro_agent() {
@@ -15,9 +47,9 @@ fn it_parse_micro_agent() {
                 }
             }
             state {
-                counter: Int = 0,
-                name: String = "test",
-                active: Bool = true
+                counter: Int = 0;
+                name: String = "test";
+                active: Bool = true;
             }
             observe {
                 on Tick {
@@ -52,6 +84,7 @@ fn it_parse_micro_agent() {
         .unwrap();
     let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
     let tokens: Vec<Token> = preprocessor.process(result);
+    debug!("{:?}", tokens);
     let (_, agent_def) = kairei::analyzer::parsers::agent::parse_agent_def()
         .parse(tokens.as_slice(), 0)
         .unwrap();

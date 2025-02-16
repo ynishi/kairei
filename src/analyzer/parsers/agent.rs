@@ -1,7 +1,7 @@
 use super::{
     super::{core::*, prelude::*},
     expression::parse_expression,
-    handlers::{answer::*, observe::*, parse_parameters, react::*},
+    handlers::{answer::*, observe::*, react::*},
     statement::*,
     types::parse_type_info,
     world::parse_policy,
@@ -61,20 +61,6 @@ enum AgentDefItem {
     React(ast::ReactDef),
 }
 
-fn parse_init_handler() -> impl Parser<Token, ast::HandlerBlock> {
-    with_context(
-        map(
-            tuple3(
-                as_unit(parse_init_keyword()),
-                parse_parameters(),
-                parse_statements(),
-            ),
-            |(_, _, statements)| ast::HandlerBlock { statements },
-        ),
-        "init handler",
-    )
-}
-
 pub fn parse_lifecycle() -> impl Parser<Token, ast::LifecycleDef> {
     with_context(
         map(
@@ -109,15 +95,21 @@ pub fn parse_lifecycle() -> impl Parser<Token, ast::LifecycleDef> {
     )
 }
 
+fn parse_init_handler() -> impl Parser<Token, ast::HandlerBlock> {
+    with_context(
+        map(
+            preceded(as_unit(parse_init_keyword()), parse_statements()),
+            |statements| ast::HandlerBlock { statements },
+        ),
+        "init handler",
+    )
+}
+
 fn parse_destroy_handler() -> impl Parser<Token, ast::HandlerBlock> {
     with_context(
         map(
-            tuple3(
-                as_unit(parse_destroy_keyword()),
-                parse_parameters(),
-                parse_statements(),
-            ),
-            |(_, _, statements)| ast::HandlerBlock { statements },
+            preceded(as_unit(parse_destroy_keyword()), parse_statements()),
+            |statements| ast::HandlerBlock { statements },
         ),
         "destroy handler",
     )

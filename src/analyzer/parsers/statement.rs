@@ -1,3 +1,5 @@
+use tracing::instrument;
+
 use super::{
     super::{core::*, prelude::*},
     expression::*,
@@ -9,17 +11,18 @@ use crate::{
     Statement,
 };
 
+#[instrument(level = "debug")]
 pub fn parse_statement() -> impl Parser<Token, ast::Statement> {
     with_context(
         map(
             lazy(|| {
                 choice(vec![
                     Box::new(tuple2(
-                        parse_expression_statement(),
+                        parse_assignment_statement(),
                         optional(parse_error_handler()),
                     )),
                     Box::new(tuple2(
-                        parse_assignment_statement(),
+                        parse_expression_statement(),
                         optional(parse_error_handler()),
                     )),
                     Box::new(tuple2(
@@ -232,13 +235,14 @@ fn parse_expression_statement() -> impl Parser<Token, ast::Statement> {
     )
 }
 
+#[instrument(level = "debug")]
 fn parse_assignment_statement() -> impl Parser<Token, ast::Statement> {
     with_context(
         map(
             tuple3(
                 parse_assignment_target(),
                 as_unit(parse_equal()),
-                parse_literal_expression(),
+                parse_expression(),
             ),
             |(target, _, value)| ast::Statement::Assignment { target, value },
         ),
@@ -249,20 +253,26 @@ fn parse_assignment_statement() -> impl Parser<Token, ast::Statement> {
 fn parse_assignment_target() -> impl Parser<Token, Vec<ast::Expression>> {
     with_context(
         choice(vec![
-            Box::new(map(parse_expression(), |expr| vec![expr])),
+            Box::new(map(parse_identifier(), |expr| {
+                vec![ast::Expression::Variable(expr)]
+            })),
             Box::new(map(
                 delimited(
                     as_unit(parse_open_paren()),
                     tuple2(
-                        parse_expression(),
-                        many(preceded(as_unit(parse_comma()), parse_expression())),
+                        parse_identifier(),
+                        many(preceded(as_unit(parse_comma()), parse_identifier())),
                     ),
                     as_unit(parse_close_paren()),
                 ),
                 |(target, targets)| {
                     let mut acc = vec![target];
                     acc.extend(targets.to_vec());
-                    acc
+                    let vs: Vec<ast::Expression> = acc
+                        .iter()
+                        .map(|v| ast::Expression::Variable(v.to_string()))
+                        .collect();
+                    vs
                 },
             )),
         ]),
@@ -270,6 +280,7 @@ fn parse_assignment_target() -> impl Parser<Token, Vec<ast::Expression>> {
     )
 }
 
+#[instrument(level = "debug")]
 fn parse_return_statement() -> impl Parser<Token, ast::Statement> {
     with_context(
         map(
@@ -284,6 +295,7 @@ fn parse_return_keyword() -> impl Parser<Token, Token> {
     with_context(equal(Token::Keyword(Keyword::Return)), "return keyword")
 }
 
+#[instrument(level = "debug")]
 fn parse_emit_statement() -> impl Parser<Token, ast::Statement> {
     with_context(
         map(
