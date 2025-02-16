@@ -68,10 +68,23 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run security audit
-        uses: actions-rs/audit-check@v1
+      - name: Cache cargo-audit
+        uses: actions/cache@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          path: ~/.cargo/bin/cargo-audit
+          key: rust-${{ runner.os }}-cargo-audit
+
+      - name: Ensure Cargo.lock is up-to-date
+        run: cargo update --locked
+
+      - name: Install cargo-audit (if not cached)
+        run: |
+          if ! command -v cargo-audit &> /dev/null; then
+            cargo install cargo-audit
+          fi
+
+      - name: Run cargo-audit
+        run: cargo audit
 
   docs:
     name: Documentation
