@@ -59,25 +59,6 @@ jobs:
       - name: Run tests
         run: cargo test --all-features
 
-  coverage:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-
-      - name: Generate coverage report
-        run: cargo tarpaulin --out Xml
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-
   security:
     name: Security Audit
     runs-on: ubuntu-latest
