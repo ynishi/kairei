@@ -31,17 +31,8 @@ jobs:
           restore-keys: |
             rust-${{ runner.os }}-cargo-
 
-      - name: Cache cargo-tarpaulin binary
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/bin/cargo-tarpaulin
-          key: rust-${{ runner.os }}-cargo-tarpaulin
-
-      - name: Install cargo-tarpaulin (if not cached)
-        run: |
-          if ! command -v cargo-tarpaulin &> /dev/null; then
-            cargo install cargo-tarpaulin --force
-          fi
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --force
 
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
