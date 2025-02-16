@@ -9,6 +9,9 @@ test_v:
 test_all:
 	RUN_API_TESTS=true RUST_LOG=error cargo test --all-features
 
+bench:
+	cargo bench
+
 fmt:
 	cargo fmt
 	cargo clippy -- -D warnings
