@@ -1,5 +1,8 @@
 use super::*;
-use crate::ast::{LifecycleDef, MicroAgentDef, Policy, PolicyId, PolicyScope, Root, StateDef, StateVarDef, TypeInfo};
+use crate::ast::{
+    LifecycleDef, MicroAgentDef, Policy, PolicyId, PolicyScope, Root, StateDef, StateVarDef,
+    TypeInfo,
+};
 use std::collections::HashMap;
 
 #[test]
@@ -24,7 +27,7 @@ fn test_type_checker_error_collection() {
             initial_value: None,
         },
     );
-    
+
     let invalid_agent = MicroAgentDef {
         name: "test_agent".to_string(),
         state: Some(StateDef { variables }),
@@ -74,7 +77,7 @@ fn test_type_checker_with_valid_state() {
             );
         }
     }
-    
+
     // Register built-in types initially
     register_builtin_types(&mut checker);
 
@@ -98,19 +101,25 @@ fn test_type_checker_with_valid_state() {
 
     // Print scope state and agent state before type checking
     println!("Initial scope state:");
-    println!("  Scope contains Int type: {}", checker.context.scope.contains_type("Int"));
+    println!(
+        "  Scope contains Int type: {}",
+        checker.context.scope.contains_type("Int")
+    );
     println!("  Current scope depth: {}", checker.context.scope.depth());
     println!("  Agent state: {:?}", valid_agent.state);
-    
+
     // Add agent to root and check types
     root.micro_agent_defs.push(valid_agent);
-    
+
     // Print scope state after adding agent
     println!("Scope state after adding agent:");
-    println!("  Scope contains Int type: {}", checker.context.scope.contains_type("Int"));
-    
+    println!(
+        "  Scope contains Int type: {}",
+        checker.context.scope.contains_type("Int")
+    );
+
     let result = checker.check_types(&mut root);
-    
+
     // If there are errors, print them for debugging
     if result.is_err() {
         println!("Type check errors: {:?}", checker.collect_errors());
@@ -118,7 +127,7 @@ fn test_type_checker_with_valid_state() {
     } else {
         println!("Type check succeeded");
     }
-    
+
     assert!(result.is_ok());
     assert!(checker.collect_errors().is_empty());
 }
