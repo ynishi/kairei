@@ -93,9 +93,6 @@ fn test_type_checker_with_valid_state() {
         }],
     };
 
-    // Add agent to root and check types
-    root.micro_agent_defs.push(valid_agent);
-    
     // Print scope state and agent state before type checking
     println!("Scope contains Int type: {}", checker.context.scope.contains_type("Int"));
     println!("Current scope depth: {}", checker.context.scope.depth());
