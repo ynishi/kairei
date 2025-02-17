@@ -2,11 +2,13 @@ use crate::ast::TypeInfo;
 use dashmap::DashMap;
 
 /// Manages type scopes for type checking
+#[derive(Clone)]
 pub struct TypeScope {
     scopes: Vec<TypeScopeLayer>,
 }
 
 /// Single layer in the type scope stack
+#[derive(Clone)]
 struct TypeScopeLayer {
     types: DashMap<String, TypeInfo>,
 }
