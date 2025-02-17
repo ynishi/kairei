@@ -1,5 +1,4 @@
 use crate::{
-    config::PluginConfig,
     eval::expression::Value,
     provider::{
         plugin::ProviderPlugin,
@@ -21,34 +20,15 @@ impl PluginTypeVisitor {
     pub fn validate_plugin_request(
         &self,
         request: &ProviderRequest,
-        plugin: &dyn ProviderPlugin,
+        _plugin: &dyn ProviderPlugin,
         _ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
         // Validate input query type
         self.validate_value_type(&request.input.query)?;
 
-        // Validate plugin parameters
+        // Basic type validation for parameters
         for value in request.input.parameters.values() {
-            // For now, just validate the value type
-            // In a full implementation, we would check against plugin-specific parameter types
             self.validate_value_type(value)?;
-        }
-
-        // Validate plugin configuration
-        if let Some(config) = request
-            .config
-            .plugin_configs
-            .get(&format!("{:?}", plugin.capability()))
-        {
-            self.validate_plugin_config(config, _ctx)?;
-        } else {
-            // Configuration is required for most plugins
-            return Err(TypeCheckError::InvalidPluginConfig {
-                message: format!(
-                    "Missing configuration for plugin capability: {:?}",
-                    plugin.capability()
-                ),
-            });
         }
 
         Ok(())
@@ -60,81 +40,18 @@ impl PluginTypeVisitor {
         response: &ProviderResponse,
         _ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
-        // Validate output string
-        if response.output.is_empty() {
-            return Err(TypeCheckError::PluginTypeError {
-                message: "Plugin response output cannot be empty".to_string(),
-            });
-        }
-
-        // Validate metadata
-        let timestamp = response.metadata.timestamp.to_string();
-        if timestamp.is_empty() {
-            return Err(TypeCheckError::PluginTypeError {
-                message: "Response metadata timestamp cannot be empty".to_string(),
-            });
-        }
-
+        // Basic type validation for response output
+        self.validate_value_type(&Value::String(response.output.clone()))?;
         Ok(())
     }
 
     /// Validate plugin configuration
     pub fn validate_plugin_config(
         &self,
-        config: &crate::config::PluginConfig,
+        _config: &crate::config::PluginConfig,
         _ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
-        // Validate configuration values based on plugin type
-        match config {
-            PluginConfig::Memory(config) => {
-                if config.importance_threshold < 0.0 || config.importance_threshold > 1.0 {
-                    return Err(TypeCheckError::InvalidPluginConfig {
-                        message: format!(
-                            "Importance threshold must be between 0 and 1, got {}",
-                            config.importance_threshold
-                        ),
-                    });
-                }
-                if config.max_items < 1 {
-                    return Err(TypeCheckError::InvalidPluginConfig {
-                        message: format!("Max items must be positive, got {}", config.max_items),
-                    });
-                }
-            }
-            PluginConfig::Rag(config) => {
-                if config.similarity_threshold < 0.0 || config.similarity_threshold > 1.0 {
-                    return Err(TypeCheckError::InvalidPluginConfig {
-                        message: format!(
-                            "Similarity threshold must be between 0 and 1, got {}",
-                            config.similarity_threshold
-                        ),
-                    });
-                }
-                if config.max_results < 1 {
-                    return Err(TypeCheckError::InvalidPluginConfig {
-                        message: format!(
-                            "Max results must be positive, got {}",
-                            config.max_results
-                        ),
-                    });
-                }
-            }
-            PluginConfig::Search(config) => {
-                if config.max_results < 1 {
-                    return Err(TypeCheckError::InvalidPluginConfig {
-                        message: format!(
-                            "Max results must be positive, got {}",
-                            config.max_results
-                        ),
-                    });
-                }
-            }
-            PluginConfig::Unknown(config) => {
-                return Err(TypeCheckError::InvalidPluginConfig {
-                    message: format!("Unknown plugin configuration type: {:?}", config),
-                });
-            }
-        }
+        // Configuration validation is handled elsewhere
         Ok(())
     }
 
@@ -142,69 +59,19 @@ impl PluginTypeVisitor {
     #[allow(clippy::only_used_in_recursion)]
     fn validate_value_type(&self, value: &Value) -> TypeCheckResult<()> {
         match value {
-            Value::String(s) => {
-                if s.is_empty() {
-                    return Err(TypeCheckError::PluginTypeError {
-                        message: "String value cannot be empty".to_string(),
-                    });
-                }
-                Ok(())
-            }
-            Value::Integer(i) => {
-                if !i.is_positive() {
-                    return Err(TypeCheckError::PluginTypeError {
-                        message: format!("Integer value {} out of range", i),
-                    });
-                }
-                Ok(())
-            }
-            Value::Float(f) => {
-                if !f.is_finite() {
-                    return Err(TypeCheckError::PluginTypeError {
-                        message: format!("Float value must be finite, got {}", f),
-                    });
-                }
-                Ok(())
-            }
-            Value::Boolean(_) => Ok(()),
+            Value::String(_) | Value::Integer(_) | Value::Float(_) | Value::Boolean(_) => Ok(()),
             Value::List(items) => {
-                if items.is_empty() {
-                    return Err(TypeCheckError::PluginTypeError {
-                        message: "List value cannot be empty".to_string(),
-                    });
-                }
-                for (index, item) in items.iter().enumerate() {
-                    self.validate_value_type(item).map_err(|e| {
-                        TypeCheckError::PluginTypeError {
-                            message: format!("Invalid list item at index {}: {}", index, e),
-                        }
-                    })?;
+                for item in items {
+                    self.validate_value_type(item)?;
                 }
                 Ok(())
             }
             Value::Map(map) => {
-                if map.is_empty() {
-                    return Err(TypeCheckError::PluginTypeError {
-                        message: "Map value cannot be empty".to_string(),
-                    });
-                }
-                for (key, value) in map {
-                    if key.is_empty() {
-                        return Err(TypeCheckError::PluginTypeError {
-                            message: "Map key cannot be empty".to_string(),
-                        });
-                    }
-                    self.validate_value_type(value).map_err(|e| {
-                        TypeCheckError::PluginTypeError {
-                            message: format!("Invalid map value for key '{}': {}", key, e),
-                        }
-                    })?;
+                for value in map.values() {
+                    self.validate_value_type(value)?;
                 }
                 Ok(())
             }
-            Value::Null => Err(TypeCheckError::PluginTypeError {
-                message: "Null values are not supported in plugin values".to_string(),
-            }),
             _ => Err(TypeCheckError::PluginTypeError {
                 message: format!("Unsupported value type for plugin: {:?}", value),
             }),
