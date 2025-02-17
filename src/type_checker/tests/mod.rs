@@ -96,6 +96,12 @@ fn test_type_checker_with_valid_state() {
     // Add agent to root and check types
     root.micro_agent_defs.push(valid_agent);
     let result = checker.check_types(&mut root);
+    
+    // If there are errors, print them for debugging
+    if result.is_err() {
+        println!("Type check errors: {:?}", checker.collect_errors());
+    }
+    
     assert!(result.is_ok());
     assert!(checker.collect_errors().is_empty());
 }
