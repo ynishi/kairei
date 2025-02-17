@@ -542,7 +542,11 @@ impl DefaultTypeVisitor {
     }
 
     #[allow(clippy::only_used_in_recursion)]
-    fn infer_type(&self, expr: &Expression, ctx: &mut TypeContext) -> TypeCheckResult<TypeInfo> {
+    pub fn infer_type(
+        &self,
+        expr: &Expression,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<TypeInfo> {
         match expr {
             Expression::Literal(lit) => Ok(match lit {
                 Literal::Integer(_) => TypeInfo::Simple("Int".to_string()),
