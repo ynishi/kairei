@@ -66,12 +66,14 @@ fn test_type_checker_with_valid_state() {
     let state = StateDef { variables };
 
     // Register built-in types in the root scope
+    checker.context.scope.enter_scope(); // Enter root scope
     for builtin_type in &["Int", "String", "Float", "Boolean", "Duration"] {
         checker.context.scope.insert_type(
             builtin_type.to_string(),
             TypeInfo::Simple(builtin_type.to_string()),
         );
     }
+    // Don't exit scope since we want these types available for validation
 
     // Create and add the valid agent to root
     let valid_agent = MicroAgentDef {
