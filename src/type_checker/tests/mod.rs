@@ -46,14 +46,6 @@ fn test_type_checker_with_valid_state() {
     let mut root = Root::new(None, vec![]);
 
     // Create a valid micro agent with state
-    // Register built-in types
-    for builtin_type in &["String", "Int", "Float", "Boolean", "Duration"] {
-        checker.context.scope.insert_type(
-            builtin_type.to_string(),
-            TypeInfo::Simple(builtin_type.to_string()),
-        );
-    }
-
     // Create a valid state with a built-in type
     let mut variables = HashMap::new();
     variables.insert(
@@ -65,6 +57,12 @@ fn test_type_checker_with_valid_state() {
         },
     );
     let state = StateDef { variables };
+
+    // Register Int type in scope before validation
+    checker.context.scope.insert_type(
+        "Int".to_string(),
+        TypeInfo::Simple("Int".to_string()),
+    );
 
     let valid_agent = MicroAgentDef {
         name: "test_agent".to_string(),
