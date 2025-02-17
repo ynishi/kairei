@@ -8,6 +8,9 @@ mod error;
 mod scope;
 mod visitor;
 
+#[cfg(test)]
+mod tests;
+
 pub use error::{TypeCheckError, TypeCheckResult};
 pub use scope::TypeScope;
 pub use visitor::{DefaultTypeVisitor, PluginTypeVisitor, TypeVisitor};
