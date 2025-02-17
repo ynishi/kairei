@@ -210,7 +210,55 @@ impl TypeVisitor for DefaultTypeVisitor {
 
                 // Validate think attributes if present
                 if let Some(attrs) = with_block {
-                    self.validate_think_attributes(attrs, ctx)?;
+                    // Validate temperature
+                    if let Some(temp) = attrs.temperature {
+                        if temp < 0.0 || temp > 1.0 {
+                            return Err(TypeCheckError::InvalidThinkBlock {
+                                message: format!("Temperature must be between 0 and 1, got {}", temp),
+                            });
+                        }
+                    }
+
+                    // Validate max_tokens
+                    if let Some(tokens) = attrs.max_tokens {
+                        if tokens < 1 {
+                            return Err(TypeCheckError::InvalidThinkBlock {
+                                message: format!("Max tokens must be positive, got {}", tokens),
+                            });
+                        }
+                    }
+
+                    // Validate plugins
+                    for (plugin_name, config) in &attrs.plugins {
+                        // First check if plugin exists
+                        if !ctx.plugins.contains_key(plugin_name) {
+                            return Err(TypeCheckError::InvalidPluginConfig {
+                                message: format!("Unknown plugin: {}", plugin_name),
+                            });
+                        }
+
+                        // Validate plugin configuration values
+                        for (key, value) in config {
+                            match value {
+                                Literal::Integer(i) if *i < 0 => {
+                                    return Err(TypeCheckError::InvalidPluginConfig {
+                                        message: format!("Plugin {} config {} must be non-negative", plugin_name, key),
+                                    });
+                                }
+                                Literal::Float(f) if *f < 0.0 || *f > 1.0 => {
+                                    return Err(TypeCheckError::InvalidPluginConfig {
+                                        message: format!("Plugin {} config {} must be between 0 and 1", plugin_name, key),
+                                    });
+                                }
+                                Literal::String(s) if s.is_empty() => {
+                                    return Err(TypeCheckError::InvalidPluginConfig {
+                                        message: format!("Plugin {} config {} cannot be empty", plugin_name, key),
+                                    });
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -490,28 +538,7 @@ impl DefaultTypeVisitor {
         }
     }
 
-    fn validate_think_attributes(
-        &self,
-        attrs: &ThinkAttributes,
-        ctx: &mut TypeContext,
-    ) -> TypeCheckResult<()> {
-        let plugin_visitor = PluginTypeVisitor::new();
 
-        // Validate plugin configurations
-        for plugin_name in attrs.plugins.keys() {
-            // First check if plugin exists
-            if !ctx.plugins.contains_key(plugin_name) {
-                return Err(TypeCheckError::InvalidPluginConfig {
-                    message: format!("Unknown plugin: {}", plugin_name),
-                });
-            }
-
-            // Convert literals to PluginConfig and validate
-            let config = PluginConfig::Memory(crate::config::MemoryConfig::default());
-            plugin_visitor.validate_plugin_config(&config, ctx)?;
-        }
-        Ok(())
-    }
 
     #[allow(clippy::only_used_in_recursion)]
     fn infer_type(&self, expr: &Expression, ctx: &mut TypeContext) -> TypeCheckResult<TypeInfo> {
