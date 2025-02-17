@@ -32,9 +32,22 @@ impl TypeVisitor for DefaultTypeVisitor {
         agent: &mut MicroAgentDef,
         ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
+        // Create new scope for agent
+        ctx.scope.enter_scope();
+
         // Visit state definition if present
         if let Some(state) = &mut agent.state {
             self.visit_state(state, ctx)?;
+        }
+
+        // Visit lifecycle handlers if present
+        if let Some(lifecycle) = &agent.lifecycle {
+            if let Some(init) = &lifecycle.on_init {
+                self.visit_handler(init, ctx)?;
+            }
+            if let Some(destroy) = &lifecycle.on_destroy {
+                self.visit_handler(destroy, ctx)?;
+            }
         }
 
         // Visit answer handlers if present
@@ -58,10 +71,15 @@ impl TypeVisitor for DefaultTypeVisitor {
             }
         }
 
+        // Exit agent scope
+        ctx.scope.exit_scope();
         Ok(())
     }
 
     fn visit_state(&self, state: &mut StateDef, ctx: &mut TypeContext) -> TypeCheckResult<()> {
+        // Create new scope for state variables
+        ctx.scope.enter_scope();
+
         for (name, var) in &mut state.variables {
             // Infer type if not explicitly specified
             if var.type_info == TypeInfo::Simple("".to_string()) {
@@ -85,18 +103,33 @@ impl TypeVisitor for DefaultTypeVisitor {
 
             // Validate initial value if present
             if let Some(init) = &var.initial_value {
+                // First validate the expression itself
                 self.visit_expression(init, ctx)?;
-                // Check that initial value matches declared type
+
+                // Then check that initial value matches declared type
                 self.check_type_compatibility(&var.type_info, init, ctx)?;
+
+                // Ensure initial value is serializable
+                if !self.is_serializable_type(&var.type_info) {
+                    return Err(TypeCheckError::InvalidStateVariable {
+                        message: format!("State variable '{}' must have a serializable type", name),
+                    });
+                }
             }
 
             // Add type to scope
             ctx.scope.insert_type(name.clone(), var.type_info.clone());
         }
+
+        // Exit state scope
+        ctx.scope.exit_scope();
         Ok(())
     }
 
     fn visit_handler(&self, handler: &HandlerDef, ctx: &mut TypeContext) -> TypeCheckResult<()> {
+        // Create new scope for handler
+        ctx.scope.enter_scope();
+
         // Validate parameter types
         for param in &handler.parameters {
             // Validate type exists
@@ -110,11 +143,26 @@ impl TypeVisitor for DefaultTypeVisitor {
                     });
                 }
             }
+
+            // Ensure parameter type is serializable
+            if !self.is_serializable_type(&param.type_info) {
+                return Err(TypeCheckError::InvalidHandlerSignature {
+                    message: format!(
+                        "Handler parameter '{}' must have a serializable type",
+                        param.name
+                    ),
+                });
+            }
+
+            // Add parameter type to scope
+            ctx.scope.insert_type(param.name.clone(), param.type_info.clone());
         }
 
         // Visit handler block
         self.visit_handler_block(&handler.block, ctx)?;
 
+        // Exit handler scope
+        ctx.scope.exit_scope();
         Ok(())
     }
 
@@ -171,25 +219,78 @@ impl TypeVisitor for DefaultTypeVisitor {
                     match param {
                         Argument::Named { value, .. } | Argument::Positional(value) => {
                             self.visit_expression(value, ctx)?;
+                            // Ensure parameter type is serializable
+                            let param_type = self.infer_type(value, ctx)?;
+                            if !self.is_serializable_type(&param_type) {
+                                return Err(TypeCheckError::InvalidHandlerSignature {
+                                    message: format!(
+                                        "Request parameter type {} must be serializable",
+                                        param_type
+                                    ),
+                                });
+                            }
                         }
                     }
                 }
                 Ok(())
             }
-            Expression::BinaryOp { left, right, .. } => {
+            Expression::BinaryOp { left, right, op } => {
                 self.visit_expression(left, ctx)?;
-                self.visit_expression(right, ctx)
+                self.visit_expression(right, ctx)?;
+                
+                // Check operand types are compatible
+                let left_type = self.infer_type(left, ctx)?;
+                let right_type = self.infer_type(right, ctx)?;
+                
+                match op {
+                    BinaryOperator::Add | BinaryOperator::Subtract | BinaryOperator::Multiply
+                    | BinaryOperator::Divide => {
+                        if !matches!(
+                            (&left_type, &right_type),
+                            (
+                                TypeInfo::Simple(l),
+                                TypeInfo::Simple(r)
+                            ) if (l == "Int" || l == "Float") && (r == "Int" || r == "Float")
+                        ) {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: TypeInfo::Simple("Numeric".to_string()),
+                                found: left_type,
+                                location: Location {
+                                    line: 0,
+                                    column: 0,
+                                    file: String::new(),
+                                },
+                            });
+                        }
+                    }
+                    _ => {} // Other operators can work with any comparable types
+                }
+                Ok(())
             }
             Expression::Ok(expr) | Expression::Err(expr) => self.visit_expression(expr, ctx),
             Expression::Await(exprs) => {
                 for expr in exprs {
                     self.visit_expression(expr, ctx)?;
+                    // Ensure awaited expression returns a Result
+                    let expr_type = self.infer_type(expr, ctx)?;
+                    if !matches!(expr_type, TypeInfo::Result { .. }) {
+                        return Err(TypeCheckError::TypeInferenceError {
+                            message: "Can only await Result types".to_string(),
+                        });
+                    }
                 }
                 Ok(())
             }
-            Expression::FunctionCall { arguments, .. } => {
+            Expression::FunctionCall { name, arguments } => {
+                // Visit all arguments
                 for arg in arguments {
                     self.visit_expression(arg, ctx)?;
+                }
+                
+                // For now, we just ensure the function exists in scope
+                // In a full implementation, we would check against the function signature
+                if !ctx.scope.contains_type(name) {
+                    return Err(TypeCheckError::UndefinedType(name.clone()));
                 }
                 Ok(())
             }
@@ -406,8 +507,7 @@ impl DefaultTypeVisitor {
         Ok(())
     }
 
-    #[allow(clippy::only_used_in_recursion)]
-    fn infer_type(&self, expr: &Expression, _ctx: &mut TypeContext) -> TypeCheckResult<TypeInfo> {
+    fn infer_type(&self, expr: &Expression, ctx: &mut TypeContext) -> TypeCheckResult<TypeInfo> {
         match expr {
             Expression::Literal(lit) => Ok(match lit {
                 Literal::Integer(_) => TypeInfo::Simple("Int".to_string()),
@@ -421,16 +521,94 @@ impl DefaultTypeVisitor {
                             message: "Cannot infer type of empty list".to_string(),
                         });
                     }
-                    let item_type =
-                        self.infer_type(&Expression::Literal(items[0].clone()), _ctx)?;
+                    let item_type = self.infer_type(&Expression::Literal(items[0].clone()), ctx)?;
                     TypeInfo::Array(Box::new(item_type))
                 }
+                Literal::Map(entries) => {
+                    if entries.is_empty() {
+                        return Err(TypeCheckError::TypeInferenceError {
+                            message: "Cannot infer type of empty map".to_string(),
+                        });
+                    }
+                    let (first_key, first_value) = entries.iter().next().unwrap();
+                    let key_type = self.infer_type(&Expression::Literal(first_key.clone()), ctx)?;
+                    let value_type = self.infer_type(&Expression::Literal(first_value.clone()), ctx)?;
+                    TypeInfo::Map(Box::new(key_type), Box::new(value_type))
+                }
+                Literal::Null => TypeInfo::Simple("Null".to_string()),
                 _ => {
                     return Err(TypeCheckError::TypeInferenceError {
                         message: "Cannot infer type from this literal".to_string(),
                     })
                 }
             }),
+            Expression::Variable(name) => {
+                if let Some(type_info) = ctx.scope.get_type(name) {
+                    Ok(type_info.clone())
+                } else {
+                    Err(TypeCheckError::UndefinedType(name.clone()))
+                }
+            }
+            Expression::StateAccess(path) => {
+                if let Some(type_info) = ctx.scope.get_type(&path.0.join(".")) {
+                    Ok(type_info.clone())
+                } else {
+                    Err(TypeCheckError::InvalidStateVariable {
+                        message: path.0.join("."),
+                    })
+                }
+            }
+            Expression::BinaryOp { left, right, op } => {
+                let left_type = self.infer_type(left, ctx)?;
+                let right_type = self.infer_type(right, ctx)?;
+                match op {
+                    BinaryOperator::Add | BinaryOperator::Subtract | BinaryOperator::Multiply
+                    | BinaryOperator::Divide => {
+                        if matches!(
+                            (&left_type, &right_type),
+                            (
+                                TypeInfo::Simple(l),
+                                TypeInfo::Simple(r)
+                            ) if (l == "Int" || l == "Float") && (r == "Int" || r == "Float")
+                        ) {
+                            Ok(if l == "Float" || r == "Float" {
+                                TypeInfo::Simple("Float".to_string())
+                            } else {
+                                TypeInfo::Simple("Int".to_string())
+                            })
+                        } else {
+                            Err(TypeCheckError::TypeInferenceError {
+                                message: "Invalid operand types for arithmetic operation".to_string(),
+                            })
+                        }
+                    }
+                    BinaryOperator::Equals | BinaryOperator::NotEquals | BinaryOperator::LessThan
+                    | BinaryOperator::GreaterThan | BinaryOperator::LessThanOrEqual
+                    | BinaryOperator::GreaterThanOrEqual => Ok(TypeInfo::Simple("Boolean".to_string())),
+                }
+            }
+            Expression::Ok(expr) => {
+                let ok_type = self.infer_type(expr, ctx)?;
+                Ok(TypeInfo::Result {
+                    ok_type: Box::new(ok_type),
+                    err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                })
+            }
+            Expression::Err(expr) => {
+                let err_type = self.infer_type(expr, ctx)?;
+                Ok(TypeInfo::Result {
+                    ok_type: Box::new(TypeInfo::Simple("Void".to_string())),
+                    err_type: Box::new(err_type),
+                })
+            }
+            Expression::FunctionCall { name, arguments } => {
+                // For now, assume function calls return a Result type
+                // In a full implementation, this would look up the function signature
+                Ok(TypeInfo::Result {
+                    ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
+                    err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                })
+            }
             _ => Err(TypeCheckError::TypeInferenceError {
                 message: "Type inference not supported for this expression".to_string(),
             }),
@@ -450,19 +628,41 @@ impl DefaultTypeVisitor {
         Ok(())
     }
 
-    #[allow(clippy::only_used_in_recursion)]
     fn has_display_trait(&self, type_info: &TypeInfo) -> bool {
         match type_info {
             // Basic types that implement Display
             TypeInfo::Simple(name) => matches!(
                 name.as_str(),
-                "String" | "Int" | "Float" | "Boolean" | "Duration"
+                "String" | "Int" | "Float" | "Boolean" | "Duration" | "Null"
             ),
             // Container types if their contents implement Display
             TypeInfo::Option(inner) | TypeInfo::Array(inner) => self.has_display_trait(inner),
             TypeInfo::Result { ok_type, .. } => self.has_display_trait(ok_type),
+            TypeInfo::Map(key_type, value_type) => {
+                self.has_display_trait(key_type) && self.has_display_trait(value_type)
+            }
             // Custom types would need explicit Display implementation
-            _ => false,
+            TypeInfo::Custom { .. } => false,
+        }
+    }
+
+    fn is_serializable_type(&self, type_info: &TypeInfo) -> bool {
+        match type_info {
+            // Basic serializable types
+            TypeInfo::Simple(name) => matches!(
+                name.as_str(),
+                "String" | "Int" | "Float" | "Boolean" | "Duration" | "Null"
+            ),
+            // Container types if their contents are serializable
+            TypeInfo::Option(inner) | TypeInfo::Array(inner) => self.is_serializable_type(inner),
+            TypeInfo::Result { ok_type, err_type } => {
+                self.is_serializable_type(ok_type) && self.is_serializable_type(err_type)
+            }
+            TypeInfo::Map(key_type, value_type) => {
+                self.is_serializable_type(key_type) && self.is_serializable_type(value_type)
+            }
+            // Custom types need to be explicitly marked as serializable
+            TypeInfo::Custom { .. } => false,
         }
     }
 }
