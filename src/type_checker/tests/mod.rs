@@ -75,8 +75,6 @@ fn test_type_checker_with_valid_state() {
         policies: vec![],
     };
 
-    root.micro_agent_defs.push(valid_agent);
-
     // Add agent to root and check types
     root.micro_agent_defs.push(valid_agent);
     let result = checker.check_types(&mut root);
