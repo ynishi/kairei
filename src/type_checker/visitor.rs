@@ -210,62 +210,33 @@ impl TypeVisitor for DefaultTypeVisitor {
 
                 // Validate think attributes if present
                 if let Some(attrs) = with_block {
-                    // Validate temperature
+                    // Validate that temperature is a float
                     if let Some(temp) = attrs.temperature {
-                        if !(0.0..=1.0).contains(&temp) {
-                            return Err(TypeCheckError::InvalidThinkBlock {
-                                message: format!(
-                                    "Temperature must be between 0 and 1, got {}",
-                                    temp
-                                ),
-                            });
-                        }
+                        let temp_type = TypeInfo::Simple("Float".to_string());
+                        self.check_type_compatibility(&temp_type, &Expression::Literal(Literal::Float(temp)), ctx)?;
                     }
 
-                    // Validate max_tokens
+                    // Validate that max_tokens is an integer
                     if let Some(tokens) = attrs.max_tokens {
-                        if tokens < 1 {
-                            return Err(TypeCheckError::InvalidThinkBlock {
-                                message: format!("Max tokens must be positive, got {}", tokens),
-                            });
-                        }
+                        let tokens_type = TypeInfo::Simple("Int".to_string());
+                        self.check_type_compatibility(&tokens_type, &Expression::Literal(Literal::Integer(tokens as i64)), ctx)?;
                     }
 
-                    // Validate plugins
-                    for (plugin_name, config) in &attrs.plugins {
-                        // First check if plugin exists
-                        if !ctx.plugins.contains_key(plugin_name) {
-                            return Err(TypeCheckError::InvalidPluginConfig {
-                                message: format!("Unknown plugin: {}", plugin_name),
-                            });
-                        }
-
-                        // Validate plugin configuration values
-                        for (key, value) in config {
+                    // Validate plugin configurations are well-typed
+                    for (_plugin_name, config) in &attrs.plugins {
+                        for (_key, value) in config {
                             match value {
-                                Literal::Integer(i) if *i < 0 => {
-                                    return Err(TypeCheckError::InvalidPluginConfig {
-                                        message: format!(
-                                            "Plugin {} config {} must be non-negative",
-                                            plugin_name, key
-                                        ),
-                                    });
+                                Literal::Integer(_) => {
+                                    let int_type = TypeInfo::Simple("Int".to_string());
+                                    self.check_type_compatibility(&int_type, &Expression::Literal(value.clone()), ctx)?;
                                 }
-                                Literal::Float(f) if *f < 0.0 || *f > 1.0 => {
-                                    return Err(TypeCheckError::InvalidPluginConfig {
-                                        message: format!(
-                                            "Plugin {} config {} must be between 0 and 1",
-                                            plugin_name, key
-                                        ),
-                                    });
+                                Literal::Float(_) => {
+                                    let float_type = TypeInfo::Simple("Float".to_string());
+                                    self.check_type_compatibility(&float_type, &Expression::Literal(value.clone()), ctx)?;
                                 }
-                                Literal::String(s) if s.is_empty() => {
-                                    return Err(TypeCheckError::InvalidPluginConfig {
-                                        message: format!(
-                                            "Plugin {} config {} cannot be empty",
-                                            plugin_name, key
-                                        ),
-                                    });
+                                Literal::String(_) => {
+                                    let string_type = TypeInfo::Simple("String".to_string());
+                                    self.check_type_compatibility(&string_type, &Expression::Literal(value.clone()), ctx)?;
                                 }
                                 _ => {}
                             }
