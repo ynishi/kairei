@@ -86,6 +86,8 @@ impl TypeContext {
 /// Default implementation of TypeChecker
 pub struct DefaultTypeChecker {
     visitor: DefaultTypeVisitor,
+    #[allow(dead_code)]
+    plugin_visitor: PluginTypeVisitor,
     context: TypeContext,
 }
 
@@ -94,6 +96,7 @@ impl DefaultTypeChecker {
     pub fn new() -> Self {
         Self {
             visitor: DefaultTypeVisitor,
+            plugin_visitor: PluginTypeVisitor,
             context: TypeContext::new(),
         }
     }
@@ -119,7 +122,13 @@ impl TypeChecker for DefaultTypeChecker {
 
         // Visit world definition if present
         if let Some(world) = &ast.world_def {
-            // Add world-specific type checking here if needed
+            // Validate plugin configurations
+            if let Some(_config) = &world.config {
+                // For now, we skip plugin config validation since it's not yet implemented
+                // TODO: Add plugin config validation once ConfigDef supports plugin configs
+            }
+
+            // Visit world handlers
             for handler in &world.handlers.handlers {
                 self.visitor.visit_handler(handler, &mut self.context)?;
             }
