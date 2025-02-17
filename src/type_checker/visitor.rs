@@ -1,5 +1,5 @@
 use super::{error::Location, TypeCheckError, TypeCheckResult, TypeContext};
-use crate::{ast::*, config::PluginConfig};
+use crate::ast::*;
 
 mod plugin_visitor;
 pub use plugin_visitor::PluginTypeVisitor;
@@ -212,9 +212,12 @@ impl TypeVisitor for DefaultTypeVisitor {
                 if let Some(attrs) = with_block {
                     // Validate temperature
                     if let Some(temp) = attrs.temperature {
-                        if temp < 0.0 || temp > 1.0 {
+                        if !(0.0..=1.0).contains(&temp) {
                             return Err(TypeCheckError::InvalidThinkBlock {
-                                message: format!("Temperature must be between 0 and 1, got {}", temp),
+                                message: format!(
+                                    "Temperature must be between 0 and 1, got {}",
+                                    temp
+                                ),
                             });
                         }
                     }
@@ -242,17 +245,26 @@ impl TypeVisitor for DefaultTypeVisitor {
                             match value {
                                 Literal::Integer(i) if *i < 0 => {
                                     return Err(TypeCheckError::InvalidPluginConfig {
-                                        message: format!("Plugin {} config {} must be non-negative", plugin_name, key),
+                                        message: format!(
+                                            "Plugin {} config {} must be non-negative",
+                                            plugin_name, key
+                                        ),
                                     });
                                 }
                                 Literal::Float(f) if *f < 0.0 || *f > 1.0 => {
                                     return Err(TypeCheckError::InvalidPluginConfig {
-                                        message: format!("Plugin {} config {} must be between 0 and 1", plugin_name, key),
+                                        message: format!(
+                                            "Plugin {} config {} must be between 0 and 1",
+                                            plugin_name, key
+                                        ),
                                     });
                                 }
                                 Literal::String(s) if s.is_empty() => {
                                     return Err(TypeCheckError::InvalidPluginConfig {
-                                        message: format!("Plugin {} config {} cannot be empty", plugin_name, key),
+                                        message: format!(
+                                            "Plugin {} config {} cannot be empty",
+                                            plugin_name, key
+                                        ),
                                     });
                                 }
                                 _ => {}
@@ -537,8 +549,6 @@ impl DefaultTypeVisitor {
             }
         }
     }
-
-
 
     #[allow(clippy::only_used_in_recursion)]
     fn infer_type(&self, expr: &Expression, ctx: &mut TypeContext) -> TypeCheckResult<TypeInfo> {
