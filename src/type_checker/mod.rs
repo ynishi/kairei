@@ -15,7 +15,7 @@ pub use error::{TypeCheckError, TypeCheckResult};
 pub use scope::TypeScope;
 pub use visitor::{DefaultTypeVisitor, PluginTypeVisitor, TypeVisitor};
 
-use crate::ast::Root;
+use crate::ast::{Root, TypeInfo};
 use crate::provider::plugin::ProviderPlugin;
 use dashmap::DashMap;
 use std::sync::Arc;
