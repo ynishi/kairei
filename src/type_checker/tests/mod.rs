@@ -100,11 +100,15 @@ fn test_type_checker_with_valid_state() {
     println!("Scope contains Int type: {}", checker.context.scope.contains_type("Int"));
     println!("Current scope depth: {}", checker.context.scope.depth());
     
+    // Print agent state for debugging
+    println!("Agent state: {:?}", valid_agent.state);
+    
     let result = checker.check_types(&mut root);
     
     // If there are errors, print them for debugging
     if result.is_err() {
         println!("Type check errors: {:?}", checker.collect_errors());
+        println!("Result error: {:?}", result);
     } else {
         println!("Type check succeeded");
     }
