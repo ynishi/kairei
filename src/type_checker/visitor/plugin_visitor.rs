@@ -22,33 +22,37 @@ impl PluginTypeVisitor {
         &self,
         request: &ProviderRequest,
         plugin: &dyn ProviderPlugin,
-        _ctx: &mut TypeContext,
+        ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
         // Validate input query type
         self.validate_value_type(&request.input.query)?;
 
         // Validate plugin parameters
-        for value in request.input.parameters.values() {
-            // For now, just validate the value type
-            // In a full implementation, we would check against plugin-specific parameter types
+        for (param_name, value) in &request.input.parameters {
+            // Validate parameter name
+            if param_name.is_empty() {
+                return Err(TypeCheckError::InvalidPluginConfig {
+                    message: "Parameter name cannot be empty".to_string(),
+                });
+            }
+
+            // Validate parameter value
             self.validate_value_type(value)?;
+
+            // All plugins require non-empty string parameters
+            if let Value::String(s) = value {
+                if s.is_empty() {
+                    return Err(TypeCheckError::InvalidPluginConfig {
+                        message: format!("Plugin parameter '{}' cannot be empty", param_name),
+                    });
+                }
+            }
         }
 
-        // Validate plugin configuration
-        if let Some(config) = request
-            .config
-            .plugin_configs
-            .get(&format!("{:?}", plugin.capability()))
-        {
-            self.validate_plugin_config(config, _ctx)?;
-        } else {
-            // Configuration is required for most plugins
-            return Err(TypeCheckError::InvalidPluginConfig {
-                message: format!(
-                    "Missing configuration for plugin capability: {:?}",
-                    plugin.capability()
-                ),
-            });
+        // Validate plugin configuration if present
+        let capability = format!("{:?}", plugin.capability());
+        if let Some(config) = request.config.plugin_configs.get(&capability) {
+            self.validate_plugin_config(config, ctx)?;
         }
 
         Ok(())
@@ -72,6 +76,13 @@ impl PluginTypeVisitor {
         if timestamp.is_empty() {
             return Err(TypeCheckError::PluginTypeError {
                 message: "Response metadata timestamp cannot be empty".to_string(),
+            });
+        }
+
+        // All provider responses must be non-empty strings
+        if response.output.is_empty() {
+            return Err(TypeCheckError::PluginTypeError {
+                message: "Plugin response output cannot be empty".to_string(),
             });
         }
 
