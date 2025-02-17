@@ -32,11 +32,13 @@ fn test_type_checker_error_collection() {
         observe: None,
         react: None,
         lifecycle: Some(LifecycleDef {
-            handlers: vec![],
+            on_init: None,
+            on_destroy: None,
         }),
         policies: vec![Policy {
-            name: "default".to_string(),
-            sections: vec![],
+            text: "default".to_string(),
+            scope: PolicyScope::Agent("test_agent".to_string()),
+            internal_id: PolicyId::new(),
         }],
     };
     root.micro_agent_defs.push(invalid_agent);
@@ -79,11 +81,13 @@ fn test_type_checker_with_valid_state() {
         observe: None,
         react: None,
         lifecycle: Some(LifecycleDef {
-            handlers: vec![],
+            on_init: None,
+            on_destroy: None,
         }),
         policies: vec![Policy {
-            name: "default".to_string(),
-            sections: vec![],
+            text: "default".to_string(),
+            scope: PolicyScope::Agent("test_agent".to_string()),
+            internal_id: PolicyId::new(),
         }],
     };
 
