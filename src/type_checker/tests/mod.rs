@@ -101,7 +101,11 @@ fn test_type_checker_with_valid_state() {
     println!("Current scope depth: {}", checker.context.scope.depth());
     
     // Print agent state for debugging
-    println!("Agent state: {:?}", valid_agent.state);
+    let agent_clone = valid_agent.clone();
+    
+    // Add agent to root and check types
+    root.micro_agent_defs.push(valid_agent);
+    println!("Agent state: {:?}", agent_clone.state);
     
     let result = checker.check_types(&mut root);
     
