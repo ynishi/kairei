@@ -31,8 +31,13 @@ fn test_type_checker_error_collection() {
         answer: None,
         observe: None,
         react: None,
-        lifecycle: None,
-        policies: vec![],
+        lifecycle: Some(LifecycleDef {
+            handlers: vec![],
+        }),
+        policies: vec![Policy {
+            name: "default".to_string(),
+            sections: vec![],
+        }],
     };
     root.micro_agent_defs.push(invalid_agent);
 
@@ -59,14 +64,12 @@ fn test_type_checker_with_valid_state() {
     let state = StateDef { variables };
 
     // Register built-in types in the root scope
-    checker.context.scope.enter_scope();
     for builtin_type in &["Int", "String", "Float", "Boolean", "Duration"] {
         checker.context.scope.insert_type(
             builtin_type.to_string(),
             TypeInfo::Simple(builtin_type.to_string()),
         );
     }
-    checker.context.scope.exit_scope();
 
     // Create and add the valid agent to root
     let valid_agent = MicroAgentDef {
@@ -75,8 +78,13 @@ fn test_type_checker_with_valid_state() {
         answer: None,
         observe: None,
         react: None,
-        lifecycle: None,
-        policies: vec![],
+        lifecycle: Some(LifecycleDef {
+            handlers: vec![],
+        }),
+        policies: vec![Policy {
+            name: "default".to_string(),
+            sections: vec![],
+        }],
     };
 
     // Add agent to root and check types
