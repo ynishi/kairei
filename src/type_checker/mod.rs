@@ -8,11 +8,14 @@ mod error;
 mod scope;
 mod visitor;
 
+#[cfg(test)]
+mod tests;
+
 pub use error::{TypeCheckError, TypeCheckResult};
 pub use scope::TypeScope;
 pub use visitor::{DefaultTypeVisitor, PluginTypeVisitor, TypeVisitor};
 
-use crate::ast::Root;
+use crate::ast::{Root, TypeInfo};
 use crate::provider::plugin::ProviderPlugin;
 use dashmap::DashMap;
 use std::sync::Arc;
@@ -100,6 +103,14 @@ impl TypeChecker for DefaultTypeChecker {
     fn check_types(&mut self, ast: &mut Root) -> TypeCheckResult<()> {
         // Clear any previous state
         self.context.clear();
+
+        // Register built-in types
+        for builtin_type in &["Int", "String", "Float", "Boolean", "Duration"] {
+            self.context.scope.insert_type(
+                builtin_type.to_string(),
+                TypeInfo::Simple(builtin_type.to_string()),
+            );
+        }
 
         // Visit all micro agents
         for agent in &mut ast.micro_agent_defs {
