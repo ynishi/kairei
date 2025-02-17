@@ -213,30 +213,50 @@ impl TypeVisitor for DefaultTypeVisitor {
                     // Validate that temperature is a float
                     if let Some(temp) = attrs.temperature {
                         let temp_type = TypeInfo::Simple("Float".to_string());
-                        self.check_type_compatibility(&temp_type, &Expression::Literal(Literal::Float(temp)), ctx)?;
+                        self.check_type_compatibility(
+                            &temp_type,
+                            &Expression::Literal(Literal::Float(temp)),
+                            ctx,
+                        )?;
                     }
 
                     // Validate that max_tokens is an integer
                     if let Some(tokens) = attrs.max_tokens {
                         let tokens_type = TypeInfo::Simple("Int".to_string());
-                        self.check_type_compatibility(&tokens_type, &Expression::Literal(Literal::Integer(tokens as i64)), ctx)?;
+                        self.check_type_compatibility(
+                            &tokens_type,
+                            &Expression::Literal(Literal::Integer(tokens as i64)),
+                            ctx,
+                        )?;
                     }
 
                     // Validate plugin configurations are well-typed
-                    for (_plugin_name, config) in &attrs.plugins {
-                        for (_key, value) in config {
+                    for config in attrs.plugins.values() {
+                        for value in config.values() {
                             match value {
                                 Literal::Integer(_) => {
                                     let int_type = TypeInfo::Simple("Int".to_string());
-                                    self.check_type_compatibility(&int_type, &Expression::Literal(value.clone()), ctx)?;
+                                    self.check_type_compatibility(
+                                        &int_type,
+                                        &Expression::Literal(value.clone()),
+                                        ctx,
+                                    )?;
                                 }
                                 Literal::Float(_) => {
                                     let float_type = TypeInfo::Simple("Float".to_string());
-                                    self.check_type_compatibility(&float_type, &Expression::Literal(value.clone()), ctx)?;
+                                    self.check_type_compatibility(
+                                        &float_type,
+                                        &Expression::Literal(value.clone()),
+                                        ctx,
+                                    )?;
                                 }
                                 Literal::String(_) => {
                                     let string_type = TypeInfo::Simple("String".to_string());
-                                    self.check_type_compatibility(&string_type, &Expression::Literal(value.clone()), ctx)?;
+                                    self.check_type_compatibility(
+                                        &string_type,
+                                        &Expression::Literal(value.clone()),
+                                        ctx,
+                                    )?;
                                 }
                                 _ => {}
                             }
