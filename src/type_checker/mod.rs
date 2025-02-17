@@ -104,6 +104,14 @@ impl TypeChecker for DefaultTypeChecker {
         // Clear any previous state
         self.context.clear();
 
+        // Register built-in types
+        for builtin_type in &["Int", "String", "Float", "Boolean", "Duration"] {
+            self.context.scope.insert_type(
+                builtin_type.to_string(),
+                TypeInfo::Simple(builtin_type.to_string()),
+            );
+        }
+
         // Visit all micro agents
         for agent in &mut ast.micro_agent_defs {
             self.visitor.visit_micro_agent(agent, &mut self.context)?;
