@@ -96,13 +96,10 @@ fn test_type_checker_with_valid_state() {
     // Add agent to root and check types
     root.micro_agent_defs.push(valid_agent);
     
-    // Print scope state before type checking
+    // Print scope state and agent state before type checking
     println!("Scope contains Int type: {}", checker.context.scope.contains_type("Int"));
     println!("Current scope depth: {}", checker.context.scope.depth());
-    
-    // Print agent state for debugging
-    let agent_state = valid_agent.state.clone();
-    println!("Agent state: {:?}", agent_state);
+    println!("Agent state: {:?}", valid_agent.state);
     
     // Add agent to root and check types
     root.micro_agent_defs.push(valid_agent);
