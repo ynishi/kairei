@@ -64,6 +64,7 @@ fn test_type_checker_with_valid_state() {
         TypeInfo::Simple("Int".to_string()),
     );
 
+    // Create and add the valid agent to root
     let valid_agent = MicroAgentDef {
         name: "test_agent".to_string(),
         state: Some(state),
@@ -76,6 +77,8 @@ fn test_type_checker_with_valid_state() {
 
     root.micro_agent_defs.push(valid_agent);
 
+    // Add agent to root and check types
+    root.micro_agent_defs.push(valid_agent);
     let result = checker.check_types(&mut root);
     assert!(result.is_ok());
     assert!(checker.collect_errors().is_empty());
