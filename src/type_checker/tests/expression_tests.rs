@@ -45,7 +45,10 @@ fn test_variable_expressions() {
     let visitor = DefaultTypeVisitor;
 
     // Add variable to scope
-    ctx.scope.insert_type("test_var".to_string(), TypeInfo::Simple("String".to_string()));
+    ctx.scope.insert_type(
+        "test_var".to_string(),
+        TypeInfo::Simple("String".to_string()),
+    );
 
     // Test variable access
     let var_expr = Expression::Variable("test_var".to_string());
@@ -68,11 +71,12 @@ fn test_state_access_expressions() {
     // Add state variable to scope
     ctx.scope.insert_type(
         "state.counter".to_string(),
-        TypeInfo::Simple("Int".to_string())
+        TypeInfo::Simple("Int".to_string()),
     );
 
     // Test state access
-    let state_expr = Expression::StateAccess(StatePath(vec!["state".to_string(), "counter".to_string()]));
+    let state_expr =
+        Expression::StateAccess(StatePath(vec!["state".to_string(), "counter".to_string()]));
     assert!(visitor.visit_expression(&state_expr, &mut ctx).is_ok());
     assert_eq!(
         visitor.infer_type(&state_expr, &mut ctx).unwrap(),
@@ -80,7 +84,8 @@ fn test_state_access_expressions() {
     );
 
     // Test invalid state access
-    let invalid_expr = Expression::StateAccess(StatePath(vec!["state".to_string(), "invalid".to_string()]));
+    let invalid_expr =
+        Expression::StateAccess(StatePath(vec!["state".to_string(), "invalid".to_string()]));
     assert!(visitor.visit_expression(&invalid_expr, &mut ctx).is_err());
 }
 
@@ -95,16 +100,23 @@ fn test_think_block_expressions() {
             ("temperature".to_string(), Literal::Float(0.7)),
             ("max_tokens".to_string(), Literal::Integer(100)),
         ],
-        prompt: Box::new(Expression::Literal(Literal::String("test prompt".to_string()))),
+        prompt: Box::new(Expression::Literal(Literal::String(
+            "test prompt".to_string(),
+        ))),
     };
     assert!(visitor.visit_expression(&think_expr, &mut ctx).is_ok());
 
     // Test think block with invalid attribute type
     let invalid_think_expr = Expression::Think {
-        attributes: vec![
-            ("temperature".to_string(), Literal::String("invalid".to_string())),
-        ],
-        prompt: Box::new(Expression::Literal(Literal::String("test prompt".to_string()))),
+        attributes: vec![(
+            "temperature".to_string(),
+            Literal::String("invalid".to_string()),
+        )],
+        prompt: Box::new(Expression::Literal(Literal::String(
+            "test prompt".to_string(),
+        ))),
     };
-    assert!(visitor.visit_expression(&invalid_think_expr, &mut ctx).is_err());
+    assert!(visitor
+        .visit_expression(&invalid_think_expr, &mut ctx)
+        .is_err());
 }

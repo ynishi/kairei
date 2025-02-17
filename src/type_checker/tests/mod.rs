@@ -1,13 +1,13 @@
 use super::*;
 use crate::ast::{
-    LifecycleDef, MicroAgentDef, Policy, PolicyId, PolicyScope, Root, StateDef, StateVarDef,
-    TypeInfo, StatePath,
+    LifecycleDef, MicroAgentDef, Policy, PolicyId, PolicyScope, Root, StateDef, StatePath,
+    StateVarDef, TypeInfo,
 };
 use std::collections::HashMap;
 
 mod error_tests;
-mod scope_tests;
 mod expression_tests;
+mod scope_tests;
 
 #[test]
 fn test_type_checker_initialization() {
