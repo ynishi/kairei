@@ -94,27 +94,27 @@ fn test_think_block_expressions() {
     let mut ctx = TypeContext::new();
     let visitor = DefaultTypeVisitor;
 
-    // Test think block with valid attributes
+    // Test think block with valid args
     let think_expr = Expression::Think {
-        attributes: vec![
+        args: vec![
             ("temperature".to_string(), Literal::Float(0.7)),
             ("max_tokens".to_string(), Literal::Integer(100)),
         ],
-        prompt: Box::new(Expression::Literal(Literal::String(
+        with_block: Some(Box::new(Expression::Literal(Literal::String(
             "test prompt".to_string(),
-        ))),
+        )))),
     };
     assert!(visitor.visit_expression(&think_expr, &mut ctx).is_ok());
 
-    // Test think block with invalid attribute type
+    // Test think block with invalid arg type
     let invalid_think_expr = Expression::Think {
-        attributes: vec![(
+        args: vec![(
             "temperature".to_string(),
             Literal::String("invalid".to_string()),
         )],
-        prompt: Box::new(Expression::Literal(Literal::String(
+        with_block: Some(Box::new(Expression::Literal(Literal::String(
             "test prompt".to_string(),
-        ))),
+        )))),
     };
     assert!(visitor
         .visit_expression(&invalid_think_expr, &mut ctx)
