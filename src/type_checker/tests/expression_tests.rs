@@ -97,10 +97,10 @@ fn test_think_block_expressions() {
     // Test think block with valid args
     let think_expr = Expression::Think {
         args: vec![
-            ("temperature".to_string(), Literal::Float(0.7)),
-            ("max_tokens".to_string(), Literal::Integer(100)),
+            Argument::new("temperature".to_string(), Literal::Float(0.7)),
+            Argument::new("max_tokens".to_string(), Literal::Integer(100)),
         ],
-        with_block: Some(Box::new(Expression::Literal(Literal::String(
+        with_block: Some(ThinkAttributes::new(Expression::Literal(Literal::String(
             "test prompt".to_string(),
         )))),
     };
@@ -108,11 +108,11 @@ fn test_think_block_expressions() {
 
     // Test think block with invalid arg type
     let invalid_think_expr = Expression::Think {
-        args: vec![(
+        args: vec![Argument::new(
             "temperature".to_string(),
             Literal::String("invalid".to_string()),
         )],
-        with_block: Some(Box::new(Expression::Literal(Literal::String(
+        with_block: Some(ThinkAttributes::new(Expression::Literal(Literal::String(
             "test prompt".to_string(),
         )))),
     };
