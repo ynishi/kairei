@@ -22,13 +22,13 @@ impl PluginTypeVisitor {
         &self,
         request: &ProviderRequest,
         plugin: &dyn ProviderPlugin,
-        ctx: &mut TypeContext,
+        _ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
         // Validate input query type
         self.validate_value_type(&request.input.query)?;
 
         // Validate plugin parameters
-        for (_param_name, value) in &request.input.parameters {
+        for value in request.input.parameters.values() {
             // For now, just validate the value type
             // In a full implementation, we would check against plugin-specific parameter types
             self.validate_value_type(value)?;
@@ -40,7 +40,7 @@ impl PluginTypeVisitor {
             .plugin_configs
             .get(&format!("{:?}", plugin.capability()))
         {
-            self.validate_plugin_config(config, ctx)?;
+            self.validate_plugin_config(config, _ctx)?;
         } else {
             // Configuration is required for most plugins
             return Err(TypeCheckError::InvalidPluginConfig {
@@ -58,7 +58,7 @@ impl PluginTypeVisitor {
     pub fn validate_plugin_response(
         &self,
         response: &ProviderResponse,
-        ctx: &mut TypeContext,
+        _ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
         // Validate output string
         if response.output.is_empty() {
@@ -82,7 +82,7 @@ impl PluginTypeVisitor {
     pub fn validate_plugin_config(
         &self,
         config: &crate::config::PluginConfig,
-        ctx: &mut TypeContext,
+        _ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
         // Validate configuration values based on plugin type
         match config {
@@ -97,10 +97,7 @@ impl PluginTypeVisitor {
                 }
                 if config.max_items < 1 {
                     return Err(TypeCheckError::InvalidPluginConfig {
-                        message: format!(
-                            "Max items must be positive, got {}",
-                            config.max_items
-                        ),
+                        message: format!("Max items must be positive, got {}", config.max_items),
                     });
                 }
             }
@@ -142,6 +139,7 @@ impl PluginTypeVisitor {
     }
 
     /// Validate a value's type
+    #[allow(clippy::only_used_in_recursion)]
     fn validate_value_type(&self, value: &Value) -> TypeCheckResult<()> {
         match value {
             Value::String(s) => {
@@ -153,7 +151,7 @@ impl PluginTypeVisitor {
                 Ok(())
             }
             Value::Integer(i) => {
-                if *i < i64::MIN || *i > i64::MAX {
+                if !i.is_positive() {
                     return Err(TypeCheckError::PluginTypeError {
                         message: format!("Integer value {} out of range", i),
                     });
@@ -176,8 +174,10 @@ impl PluginTypeVisitor {
                     });
                 }
                 for (index, item) in items.iter().enumerate() {
-                    self.validate_value_type(item).map_err(|e| TypeCheckError::PluginTypeError {
-                        message: format!("Invalid list item at index {}: {}", index, e),
+                    self.validate_value_type(item).map_err(|e| {
+                        TypeCheckError::PluginTypeError {
+                            message: format!("Invalid list item at index {}: {}", index, e),
+                        }
                     })?;
                 }
                 Ok(())
@@ -194,8 +194,10 @@ impl PluginTypeVisitor {
                             message: "Map key cannot be empty".to_string(),
                         });
                     }
-                    self.validate_value_type(value).map_err(|e| TypeCheckError::PluginTypeError {
-                        message: format!("Invalid map value for key '{}': {}", key, e),
+                    self.validate_value_type(value).map_err(|e| {
+                        TypeCheckError::PluginTypeError {
+                            message: format!("Invalid map value for key '{}': {}", key, e),
+                        }
                     })?;
                 }
                 Ok(())

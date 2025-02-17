@@ -155,7 +155,8 @@ impl TypeVisitor for DefaultTypeVisitor {
             }
 
             // Add parameter type to scope
-            ctx.scope.insert_type(param.name.clone(), param.type_info.clone());
+            ctx.scope
+                .insert_type(param.name.clone(), param.type_info.clone());
         }
 
         // Visit handler block
@@ -237,13 +238,15 @@ impl TypeVisitor for DefaultTypeVisitor {
             Expression::BinaryOp { left, right, op } => {
                 self.visit_expression(left, ctx)?;
                 self.visit_expression(right, ctx)?;
-                
+
                 // Check operand types are compatible
                 let left_type = self.infer_type(left, ctx)?;
                 let right_type = self.infer_type(right, ctx)?;
-                
+
                 match op {
-                    BinaryOperator::Add | BinaryOperator::Subtract | BinaryOperator::Multiply
+                    BinaryOperator::Add
+                    | BinaryOperator::Subtract
+                    | BinaryOperator::Multiply
                     | BinaryOperator::Divide => {
                         if !matches!(
                             (&left_type, &right_type),
@@ -281,12 +284,15 @@ impl TypeVisitor for DefaultTypeVisitor {
                 }
                 Ok(())
             }
-            Expression::FunctionCall { function, arguments } => {
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => {
                 // Visit all arguments
                 for arg in arguments {
                     self.visit_expression(arg, ctx)?;
                 }
-                
+
                 // For now, we just ensure the function exists in scope
                 // In a full implementation, we would check against the function signature
                 if !ctx.scope.contains_type(function) {
@@ -507,6 +513,7 @@ impl DefaultTypeVisitor {
         Ok(())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn infer_type(&self, expr: &Expression, ctx: &mut TypeContext) -> TypeCheckResult<TypeInfo> {
         match expr {
             Expression::Literal(lit) => Ok(match lit {
@@ -531,8 +538,12 @@ impl DefaultTypeVisitor {
                         });
                     }
                     let (first_key, first_value) = entries.iter().next().unwrap();
-                    let key_type = self.infer_type(&Expression::Literal(Literal::String(first_key.clone())), ctx)?;
-                    let value_type = self.infer_type(&Expression::Literal(first_value.clone()), ctx)?;
+                    let key_type = self.infer_type(
+                        &Expression::Literal(Literal::String(first_key.clone())),
+                        ctx,
+                    )?;
+                    let value_type =
+                        self.infer_type(&Expression::Literal(first_value.clone()), ctx)?;
                     TypeInfo::Map(Box::new(key_type), Box::new(value_type))
                 }
                 Literal::Null => TypeInfo::Simple("Null".to_string()),
@@ -562,26 +573,30 @@ impl DefaultTypeVisitor {
                 let left_type = self.infer_type(left, ctx)?;
                 let right_type = self.infer_type(right, ctx)?;
                 match op {
-                    BinaryOperator::Add | BinaryOperator::Subtract | BinaryOperator::Multiply
-                    | BinaryOperator::Divide => {
-                        match (&left_type, &right_type) {
-                            (TypeInfo::Simple(l), TypeInfo::Simple(r))
-                                if (l == "Int" || l == "Float") && (r == "Int" || r == "Float") =>
-                            {
-                                Ok(if l == "Float" || r == "Float" {
-                                    TypeInfo::Simple("Float".to_string())
-                                } else {
-                                    TypeInfo::Simple("Int".to_string())
-                                })
-                            }
-                            _ => Err(TypeCheckError::TypeInferenceError {
-                                message: "Invalid operand types for arithmetic operation".to_string(),
-                            }),
+                    BinaryOperator::Add
+                    | BinaryOperator::Subtract
+                    | BinaryOperator::Multiply
+                    | BinaryOperator::Divide => match (&left_type, &right_type) {
+                        (TypeInfo::Simple(l), TypeInfo::Simple(r))
+                            if (l == "Int" || l == "Float") && (r == "Int" || r == "Float") =>
+                        {
+                            Ok(if l == "Float" || r == "Float" {
+                                TypeInfo::Simple("Float".to_string())
+                            } else {
+                                TypeInfo::Simple("Int".to_string())
+                            })
                         }
-                    }
-                    BinaryOperator::Equal | BinaryOperator::NotEqual | BinaryOperator::LessThan
-                    | BinaryOperator::GreaterThan | BinaryOperator::LessThanEqual
-                    | BinaryOperator::GreaterThanEqual | BinaryOperator::And
+                        _ => Err(TypeCheckError::TypeInferenceError {
+                            message: "Invalid operand types for arithmetic operation".to_string(),
+                        }),
+                    },
+                    BinaryOperator::Equal
+                    | BinaryOperator::NotEqual
+                    | BinaryOperator::LessThan
+                    | BinaryOperator::GreaterThan
+                    | BinaryOperator::LessThanEqual
+                    | BinaryOperator::GreaterThanEqual
+                    | BinaryOperator::And
                     | BinaryOperator::Or => Ok(TypeInfo::Simple("Boolean".to_string())),
                 }
             }
@@ -599,7 +614,7 @@ impl DefaultTypeVisitor {
                     err_type: Box::new(err_type),
                 })
             }
-            Expression::FunctionCall { function, arguments } => {
+            Expression::FunctionCall { .. } => {
                 // For now, assume function calls return a Result type
                 // In a full implementation, this would look up the function signature
                 Ok(TypeInfo::Result {
@@ -626,6 +641,7 @@ impl DefaultTypeVisitor {
         Ok(())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn has_display_trait(&self, type_info: &TypeInfo) -> bool {
         match type_info {
             // Basic types that implement Display
@@ -644,6 +660,7 @@ impl DefaultTypeVisitor {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn is_serializable_type(&self, type_info: &TypeInfo) -> bool {
         match type_info {
             // Basic serializable types
