@@ -4,7 +4,7 @@ use std::thread;
 
 #[test]
 fn test_type_scope_basic_operations() {
-    let mut scope = TypeScope::new();
+    let scope = TypeScope::new();
 
     // Test initial state
     assert_eq!(scope.depth(), 1);
@@ -21,7 +21,7 @@ fn test_type_scope_basic_operations() {
 
 #[test]
 fn test_type_scope_nesting() {
-    let mut scope = TypeScope::new();
+    let scope = TypeScope::new();
 
     // Add type in outer scope
     scope.insert_type("outer".to_string(), TypeInfo::Simple("Int".to_string()));
@@ -46,7 +46,7 @@ fn test_type_scope_nesting() {
 
 #[test]
 fn test_type_scope_clear() {
-    let mut scope = TypeScope::new();
+    let scope = TypeScope::new();
 
     scope.insert_type("test".to_string(), TypeInfo::Simple("Int".to_string()));
     assert!(scope.contains_type("test"));
@@ -58,7 +58,7 @@ fn test_type_scope_clear() {
 
 #[test]
 fn test_type_scope_complex_types() {
-    let mut scope = TypeScope::new();
+    let scope = TypeScope::new();
 
     // Test array type
     let array_type = TypeInfo::Array(Box::new(TypeInfo::Simple("Int".to_string())));
@@ -102,7 +102,7 @@ fn test_type_scope_concurrent_access() {
 
 #[test]
 fn test_type_scope_deep_nesting() {
-    let mut scope = TypeScope::new();
+    let scope = TypeScope::new();
 
     // Create multiple nested scopes
     for i in 0..5 {
