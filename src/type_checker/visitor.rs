@@ -1,4 +1,4 @@
-use super::{TypeCheckError, TypeCheckResult, TypeContext};
+use super::{error::Location, TypeCheckError, TypeCheckResult, TypeContext};
 use crate::{ast::*, config::PluginConfig};
 
 mod plugin_visitor;
@@ -43,10 +43,10 @@ impl TypeVisitor for DefaultTypeVisitor {
         // Visit lifecycle handlers if present
         if let Some(lifecycle) = &agent.lifecycle {
             if let Some(init) = &lifecycle.on_init {
-                self.visit_handler(init, ctx)?;
+                self.visit_handler_block(init, ctx)?;
             }
             if let Some(destroy) = &lifecycle.on_destroy {
-                self.visit_handler(destroy, ctx)?;
+                self.visit_handler_block(destroy, ctx)?;
             }
         }
 
@@ -281,7 +281,7 @@ impl TypeVisitor for DefaultTypeVisitor {
                 }
                 Ok(())
             }
-            Expression::FunctionCall { name, arguments } => {
+            Expression::FunctionCall { function, arguments } => {
                 // Visit all arguments
                 for arg in arguments {
                     self.visit_expression(arg, ctx)?;
@@ -289,8 +289,8 @@ impl TypeVisitor for DefaultTypeVisitor {
                 
                 // For now, we just ensure the function exists in scope
                 // In a full implementation, we would check against the function signature
-                if !ctx.scope.contains_type(name) {
-                    return Err(TypeCheckError::UndefinedType(name.clone()));
+                if !ctx.scope.contains_type(function) {
+                    return Err(TypeCheckError::UndefinedType(function.clone()));
                 }
                 Ok(())
             }
@@ -531,7 +531,7 @@ impl DefaultTypeVisitor {
                         });
                     }
                     let (first_key, first_value) = entries.iter().next().unwrap();
-                    let key_type = self.infer_type(&Expression::Literal(first_key.clone()), ctx)?;
+                    let key_type = self.infer_type(&Expression::Literal(Literal::String(first_key.clone())), ctx)?;
                     let value_type = self.infer_type(&Expression::Literal(first_value.clone()), ctx)?;
                     TypeInfo::Map(Box::new(key_type), Box::new(value_type))
                 }
@@ -564,27 +564,25 @@ impl DefaultTypeVisitor {
                 match op {
                     BinaryOperator::Add | BinaryOperator::Subtract | BinaryOperator::Multiply
                     | BinaryOperator::Divide => {
-                        if matches!(
-                            (&left_type, &right_type),
-                            (
-                                TypeInfo::Simple(l),
-                                TypeInfo::Simple(r)
-                            ) if (l == "Int" || l == "Float") && (r == "Int" || r == "Float")
-                        ) {
-                            Ok(if l == "Float" || r == "Float" {
-                                TypeInfo::Simple("Float".to_string())
-                            } else {
-                                TypeInfo::Simple("Int".to_string())
-                            })
-                        } else {
-                            Err(TypeCheckError::TypeInferenceError {
+                        match (&left_type, &right_type) {
+                            (TypeInfo::Simple(l), TypeInfo::Simple(r))
+                                if (l == "Int" || l == "Float") && (r == "Int" || r == "Float") =>
+                            {
+                                Ok(if l == "Float" || r == "Float" {
+                                    TypeInfo::Simple("Float".to_string())
+                                } else {
+                                    TypeInfo::Simple("Int".to_string())
+                                })
+                            }
+                            _ => Err(TypeCheckError::TypeInferenceError {
                                 message: "Invalid operand types for arithmetic operation".to_string(),
-                            })
+                            }),
                         }
                     }
-                    BinaryOperator::Equals | BinaryOperator::NotEquals | BinaryOperator::LessThan
-                    | BinaryOperator::GreaterThan | BinaryOperator::LessThanOrEqual
-                    | BinaryOperator::GreaterThanOrEqual => Ok(TypeInfo::Simple("Boolean".to_string())),
+                    BinaryOperator::Equal | BinaryOperator::NotEqual | BinaryOperator::LessThan
+                    | BinaryOperator::GreaterThan | BinaryOperator::LessThanEqual
+                    | BinaryOperator::GreaterThanEqual | BinaryOperator::And
+                    | BinaryOperator::Or => Ok(TypeInfo::Simple("Boolean".to_string())),
                 }
             }
             Expression::Ok(expr) => {
@@ -601,7 +599,7 @@ impl DefaultTypeVisitor {
                     err_type: Box::new(err_type),
                 })
             }
-            Expression::FunctionCall { name, arguments } => {
+            Expression::FunctionCall { function, arguments } => {
                 // For now, assume function calls return a Result type
                 // In a full implementation, this would look up the function signature
                 Ok(TypeInfo::Result {
