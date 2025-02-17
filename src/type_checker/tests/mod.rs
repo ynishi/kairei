@@ -65,15 +65,18 @@ fn test_type_checker_with_valid_state() {
     );
     let state = StateDef { variables };
 
-    // Register built-in types in the root scope
-    checker.context.scope.enter_scope(); // Enter root scope
-    for builtin_type in &["Int", "String", "Float", "Boolean", "Duration"] {
-        checker.context.scope.insert_type(
-            builtin_type.to_string(),
-            TypeInfo::Simple(builtin_type.to_string()),
-        );
+    // Create a helper function to register built-in types
+    fn register_builtin_types(checker: &mut DefaultTypeChecker) {
+        for builtin_type in &["Int", "String", "Float", "Boolean", "Duration"] {
+            checker.context.scope.insert_type(
+                builtin_type.to_string(),
+                TypeInfo::Simple(builtin_type.to_string()),
+            );
+        }
     }
-    // Don't exit scope since we want these types available for validation
+    
+    // Register built-in types initially
+    register_builtin_types(&mut checker);
 
     // Create and add the valid agent to root
     let valid_agent = MicroAgentDef {
@@ -94,12 +97,17 @@ fn test_type_checker_with_valid_state() {
     };
 
     // Print scope state and agent state before type checking
-    println!("Scope contains Int type: {}", checker.context.scope.contains_type("Int"));
-    println!("Current scope depth: {}", checker.context.scope.depth());
-    println!("Agent state: {:?}", valid_agent.state);
+    println!("Initial scope state:");
+    println!("  Scope contains Int type: {}", checker.context.scope.contains_type("Int"));
+    println!("  Current scope depth: {}", checker.context.scope.depth());
+    println!("  Agent state: {:?}", valid_agent.state);
     
     // Add agent to root and check types
     root.micro_agent_defs.push(valid_agent);
+    
+    // Print scope state after adding agent
+    println!("Scope state after adding agent:");
+    println!("  Scope contains Int type: {}", checker.context.scope.contains_type("Int"));
     
     let result = checker.check_types(&mut root);
     
