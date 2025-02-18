@@ -9,6 +9,7 @@ fn test_handler_with_parameters() {
     
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
+        event_name: "test_event".to_string(),
         parameters: vec![Parameter {
             name: "param1".to_string(),
             type_info: TypeInfo::Simple("String".to_string()),
@@ -24,6 +25,7 @@ fn test_handler_with_invalid_parameter_type() {
     let visitor = DefaultTypeVisitor;
     
     let handler = HandlerDef {
+        event_name: "test_event".to_string(),
         parameters: vec![Parameter {
             name: "param1".to_string(),
             type_info: TypeInfo::Simple("NonExistentType".to_string()),
@@ -59,6 +61,7 @@ fn test_handler_with_parameter_scope() {
     
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
+        event_name: "test_event".to_string(),
         parameters: vec![Parameter {
             name: "param1".to_string(),
             type_info: TypeInfo::Simple("String".to_string()),
@@ -80,6 +83,7 @@ fn test_handler_with_result_parameter() {
     
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
+        event_name: "test_event".to_string(),
         parameters: vec![Parameter {
             name: "param1".to_string(),
             type_info: TypeInfo::Result {
