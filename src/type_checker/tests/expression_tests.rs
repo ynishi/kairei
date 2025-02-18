@@ -133,10 +133,13 @@ fn test_request_expressions() {
 
     let request_expr = Expression::Request {
         agent: "test_agent".to_string(),
-        request_type: "test_request".to_string(),
-        options: vec![ast::Argument::Positional(Expression::Literal(
+        request_type: ast::RequestType::Query {
+            query_type: "test_query".to_string(),
+        },
+        parameters: vec![ast::Argument::Positional(Expression::Literal(
             Literal::String("test".to_string()),
         ))],
+        options: None,
     };
     assert!(visitor.visit_expression(&request_expr, &mut ctx).is_ok());
 }
