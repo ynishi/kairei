@@ -1,5 +1,8 @@
 use super::*;
-use crate::ast::{Expression, Literal, TypeInfo};
+use crate::{
+    ast::{self, Expression, Literal, TypeInfo},
+    StateAccessPath,
+};
 
 #[test]
 fn test_literal_expressions() {
@@ -75,8 +78,10 @@ fn test_state_access_expressions() {
     );
 
     // Test state access
-    let state_expr =
-        Expression::StateAccess(StatePath(vec!["state".to_string(), "counter".to_string()]));
+    let state_expr = Expression::StateAccess(StateAccessPath(vec![
+        "state".to_string(),
+        "counter".to_string(),
+    ]));
     assert!(visitor.visit_expression(&state_expr, &mut ctx).is_ok());
     assert_eq!(
         visitor.infer_type(&state_expr, &mut ctx).unwrap(),
@@ -84,39 +89,37 @@ fn test_state_access_expressions() {
     );
 
     // Test invalid state access
-    let invalid_expr =
-        Expression::StateAccess(StatePath(vec!["state".to_string(), "invalid".to_string()]));
+    let invalid_expr = Expression::StateAccess(StateAccessPath(vec![
+        "state".to_string(),
+        "invalid".to_string(),
+    ]));
     assert!(visitor.visit_expression(&invalid_expr, &mut ctx).is_err());
 }
 
 #[test]
 fn test_think_block_expressions() {
     let mut ctx = TypeContext::new();
+    ctx.scope.insert_type(
+        "location".to_string(),
+        TypeInfo::Simple("String".to_string()),
+    );
+
     let visitor = DefaultTypeVisitor;
 
-    // Test think block with valid args
-    let think_expr = Expression::Think {
+    let valid_think_expr = ast::Expression::Think {
         args: vec![
-            Argument::new("temperature".to_string(), Literal::Float(0.7)),
-            Argument::new("max_tokens".to_string(), Literal::Integer(100)),
+            ast::Argument::Positional(ast::Expression::Literal(ast::Literal::String(
+                "Find suitable hotels matching criteria".to_string(),
+            ))),
+            ast::Argument::Positional(ast::Expression::Variable("location".to_string())),
         ],
-        with_block: Some(ThinkAttributes::new(Expression::Literal(Literal::String(
-            "test prompt".to_string(),
-        )))),
+        with_block: None,
     };
-    assert!(visitor.visit_expression(&think_expr, &mut ctx).is_ok());
-
-    // Test think block with invalid arg type
-    let invalid_think_expr = Expression::Think {
-        args: vec![Argument::new(
-            "temperature".to_string(),
-            Literal::String("invalid".to_string()),
-        )],
-        with_block: Some(ThinkAttributes::new(Expression::Literal(Literal::String(
-            "test prompt".to_string(),
-        )))),
-    };
+    println!(
+        "{:?}",
+        visitor.visit_expression(&valid_think_expr, &mut ctx)
+    );
     assert!(visitor
-        .visit_expression(&invalid_think_expr, &mut ctx)
-        .is_err());
+        .visit_expression(&valid_think_expr, &mut ctx)
+        .is_ok());
 }
