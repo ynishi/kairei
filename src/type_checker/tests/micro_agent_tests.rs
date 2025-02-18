@@ -1,7 +1,5 @@
 use super::*;
-use crate::ast::{
-    HandlerBlock, LifecycleDef, MicroAgentDef, StateDef, StateVarDef, TypeInfo,
-};
+use crate::ast::{HandlerBlock, LifecycleDef, MicroAgentDef, StateDef, StateVarDef, TypeInfo};
 use std::collections::HashMap;
 
 #[test]
