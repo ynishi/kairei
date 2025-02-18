@@ -25,11 +25,13 @@ fn test_micro_agent_basic() {
 fn test_micro_agent_with_state() {
     let mut ctx = TypeContext::new();
     // Register built-in types
-    ctx.scope.insert_type("Int".to_string(), TypeInfo::Simple("Int".to_string()));
-    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
-    
+    ctx.scope
+        .insert_type("Int".to_string(), TypeInfo::Simple("Int".to_string()));
+    ctx.scope
+        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+
     let visitor = DefaultTypeVisitor;
-    
+
     let mut variables = HashMap::new();
     variables.insert(
         "counter".to_string(),
@@ -39,7 +41,7 @@ fn test_micro_agent_with_state() {
             initial_value: None,
         },
     );
-    
+
     let mut agent = MicroAgentDef {
         name: "test_agent".to_string(),
         state: Some(StateDef { variables }),
@@ -49,7 +51,7 @@ fn test_micro_agent_with_state() {
         lifecycle: None,
         policies: vec![],
     };
-    
+
     assert!(visitor.visit_micro_agent(&mut agent, &mut ctx).is_ok());
 }
 
@@ -57,10 +59,10 @@ fn test_micro_agent_with_state() {
 fn test_micro_agent_with_lifecycle() {
     let mut ctx = TypeContext::new();
     let visitor = DefaultTypeVisitor;
-    
+
     let init_handler = HandlerBlock { statements: vec![] };
     let destroy_handler = HandlerBlock { statements: vec![] };
-    
+
     let mut agent = MicroAgentDef {
         name: "test_agent".to_string(),
         state: None,
@@ -73,7 +75,7 @@ fn test_micro_agent_with_lifecycle() {
         }),
         policies: vec![],
     };
-    
+
     assert!(visitor.visit_micro_agent(&mut agent, &mut ctx).is_ok());
 }
 
@@ -81,7 +83,7 @@ fn test_micro_agent_with_lifecycle() {
 fn test_micro_agent_with_invalid_state() {
     let mut ctx = TypeContext::new();
     let visitor = DefaultTypeVisitor;
-    
+
     let mut variables = HashMap::new();
     variables.insert(
         "invalid".to_string(),
@@ -91,7 +93,7 @@ fn test_micro_agent_with_invalid_state() {
             initial_value: None,
         },
     );
-    
+
     let mut agent = MicroAgentDef {
         name: "test_agent".to_string(),
         state: Some(StateDef { variables }),
@@ -101,6 +103,6 @@ fn test_micro_agent_with_invalid_state() {
         lifecycle: None,
         policies: vec![],
     };
-    
+
     assert!(visitor.visit_micro_agent(&mut agent, &mut ctx).is_err());
 }

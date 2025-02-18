@@ -6,7 +6,7 @@ fn test_handler_with_parameters() {
     let mut ctx = TypeContext::new();
     ctx.scope
         .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
-    
+
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
         event_name: "test_event".to_string(),
@@ -23,7 +23,7 @@ fn test_handler_with_parameters() {
 fn test_handler_with_invalid_parameter_type() {
     let mut ctx = TypeContext::new();
     let visitor = DefaultTypeVisitor;
-    
+
     let handler = HandlerDef {
         event_name: "test_event".to_string(),
         parameters: vec![Parameter {
@@ -40,14 +40,14 @@ fn test_handler_with_statements() {
     let mut ctx = TypeContext::new();
     ctx.scope
         .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
-    
+
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
         parameters: vec![],
         block: HandlerBlock {
-            statements: vec![
-                Statement::Expression(Expression::Literal(Literal::String("test".to_string()))),
-            ],
+            statements: vec![Statement::Expression(Expression::Literal(Literal::String(
+                "test".to_string(),
+            )))],
         },
     };
     assert!(visitor.visit_handler(&handler, &mut ctx).is_ok());
@@ -58,7 +58,7 @@ fn test_handler_with_parameter_scope() {
     let mut ctx = TypeContext::new();
     ctx.scope
         .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
-    
+
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
         event_name: "test_event".to_string(),
@@ -67,9 +67,9 @@ fn test_handler_with_parameter_scope() {
             type_info: TypeInfo::Simple("String".to_string()),
         }],
         block: HandlerBlock {
-            statements: vec![
-                Statement::Expression(Expression::Variable("param1".to_string())),
-            ],
+            statements: vec![Statement::Expression(Expression::Variable(
+                "param1".to_string(),
+            ))],
         },
     };
     assert!(visitor.visit_handler(&handler, &mut ctx).is_ok());
@@ -80,7 +80,7 @@ fn test_handler_with_result_parameter() {
     let mut ctx = TypeContext::new();
     ctx.scope
         .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
-    
+
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
         event_name: "test_event".to_string(),
