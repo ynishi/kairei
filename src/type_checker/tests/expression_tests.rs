@@ -132,8 +132,9 @@ fn test_request_expressions() {
     let visitor = DefaultTypeVisitor;
 
     let request_expr = Expression::Request {
-        target: "test".to_string(),
-        parameters: vec![ast::Argument::Positional(Expression::Literal(
+        agent: "test_agent".to_string(),
+        request_type: "test_request".to_string(),
+        options: vec![ast::Argument::Positional(Expression::Literal(
             Literal::String("test".to_string()),
         ))],
     };
