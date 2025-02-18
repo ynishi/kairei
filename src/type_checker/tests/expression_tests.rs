@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    ast::{self, Expression, Literal, TypeInfo},
+    ast::{self, BinaryOperator, Expression, Literal, TypeInfo},
     StateAccessPath,
 };
 
