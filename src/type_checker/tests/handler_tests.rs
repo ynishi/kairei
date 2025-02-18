@@ -4,7 +4,8 @@ use crate::ast::{Expression, HandlerBlock, HandlerDef, Literal, Parameter, State
 #[test]
 fn test_handler_with_parameters() {
     let mut ctx = TypeContext::new();
-    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    ctx.scope
+        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
     
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
@@ -35,7 +36,8 @@ fn test_handler_with_invalid_parameter_type() {
 #[test]
 fn test_handler_with_statements() {
     let mut ctx = TypeContext::new();
-    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    ctx.scope
+        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
     
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
@@ -52,7 +54,8 @@ fn test_handler_with_statements() {
 #[test]
 fn test_handler_with_parameter_scope() {
     let mut ctx = TypeContext::new();
-    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    ctx.scope
+        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
     
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
@@ -72,7 +75,8 @@ fn test_handler_with_parameter_scope() {
 #[test]
 fn test_handler_with_result_parameter() {
     let mut ctx = TypeContext::new();
-    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    ctx.scope
+        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
     
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {

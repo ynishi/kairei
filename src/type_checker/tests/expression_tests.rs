@@ -127,7 +127,8 @@ fn test_think_block_expressions() {
 #[test]
 fn test_request_expressions() {
     let mut ctx = TypeContext::new();
-    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    ctx.scope
+        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
     let visitor = DefaultTypeVisitor;
 
     let request_expr = Expression::Request {
@@ -174,7 +175,8 @@ fn test_binary_operations() {
 #[test]
 fn test_result_expressions() {
     let mut ctx = TypeContext::new();
-    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    ctx.scope
+        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
     let visitor = DefaultTypeVisitor;
 
     // Test Ok expression
@@ -201,7 +203,8 @@ fn test_result_expressions() {
 #[test]
 fn test_await_expressions() {
     let mut ctx = TypeContext::new();
-    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    ctx.scope
+        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
     let visitor = DefaultTypeVisitor;
 
     let result_expr = Expression::Ok(Box::new(Expression::Literal(Literal::String(
