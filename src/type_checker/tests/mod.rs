@@ -5,6 +5,10 @@ use crate::ast::{
 };
 use std::collections::HashMap;
 
+mod error_tests;
+mod expression_tests;
+mod scope_tests;
+
 #[test]
 fn test_type_checker_initialization() {
     let checker = DefaultTypeChecker::new();

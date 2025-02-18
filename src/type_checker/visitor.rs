@@ -1,5 +1,5 @@
 use super::{error::Location, TypeCheckError, TypeCheckResult, TypeContext};
-use crate::{ast::*, config::PluginConfig};
+use crate::ast::*;
 
 mod plugin_visitor;
 pub use plugin_visitor::PluginTypeVisitor;
@@ -210,7 +210,58 @@ impl TypeVisitor for DefaultTypeVisitor {
 
                 // Validate think attributes if present
                 if let Some(attrs) = with_block {
-                    self.validate_think_attributes(attrs, ctx)?;
+                    // Validate that temperature is a float
+                    if let Some(temp) = attrs.temperature {
+                        let temp_type = TypeInfo::Simple("Float".to_string());
+                        self.check_type_compatibility(
+                            &temp_type,
+                            &Expression::Literal(Literal::Float(temp)),
+                            ctx,
+                        )?;
+                    }
+
+                    // Validate that max_tokens is an integer
+                    if let Some(tokens) = attrs.max_tokens {
+                        let tokens_type = TypeInfo::Simple("Int".to_string());
+                        self.check_type_compatibility(
+                            &tokens_type,
+                            &Expression::Literal(Literal::Integer(tokens as i64)),
+                            ctx,
+                        )?;
+                    }
+
+                    // Validate plugin configurations are well-typed
+                    for config in attrs.plugins.values() {
+                        for value in config.values() {
+                            match value {
+                                Literal::Integer(_) => {
+                                    let int_type = TypeInfo::Simple("Int".to_string());
+                                    self.check_type_compatibility(
+                                        &int_type,
+                                        &Expression::Literal(value.clone()),
+                                        ctx,
+                                    )?;
+                                }
+                                Literal::Float(_) => {
+                                    let float_type = TypeInfo::Simple("Float".to_string());
+                                    self.check_type_compatibility(
+                                        &float_type,
+                                        &Expression::Literal(value.clone()),
+                                        ctx,
+                                    )?;
+                                }
+                                Literal::String(_) => {
+                                    let string_type = TypeInfo::Simple("String".to_string());
+                                    self.check_type_compatibility(
+                                        &string_type,
+                                        &Expression::Literal(value.clone()),
+                                        ctx,
+                                    )?;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -490,31 +541,12 @@ impl DefaultTypeVisitor {
         }
     }
 
-    fn validate_think_attributes(
-        &self,
-        attrs: &ThinkAttributes,
-        ctx: &mut TypeContext,
-    ) -> TypeCheckResult<()> {
-        let plugin_visitor = PluginTypeVisitor::new();
-
-        // Validate plugin configurations
-        for plugin_name in attrs.plugins.keys() {
-            // First check if plugin exists
-            if !ctx.plugins.contains_key(plugin_name) {
-                return Err(TypeCheckError::InvalidPluginConfig {
-                    message: format!("Unknown plugin: {}", plugin_name),
-                });
-            }
-
-            // Convert literals to PluginConfig and validate
-            let config = PluginConfig::Memory(crate::config::MemoryConfig::default());
-            plugin_visitor.validate_plugin_config(&config, ctx)?;
-        }
-        Ok(())
-    }
-
     #[allow(clippy::only_used_in_recursion)]
-    fn infer_type(&self, expr: &Expression, ctx: &mut TypeContext) -> TypeCheckResult<TypeInfo> {
+    pub fn infer_type(
+        &self,
+        expr: &Expression,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<TypeInfo> {
         match expr {
             Expression::Literal(lit) => Ok(match lit {
                 Literal::Integer(_) => TypeInfo::Simple("Int".to_string()),
