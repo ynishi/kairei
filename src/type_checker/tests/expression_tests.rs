@@ -133,9 +133,9 @@ fn test_request_expressions() {
 
     let request_expr = Expression::Request {
         target: "test".to_string(),
-        parameters: vec![
-            ast::Argument::Positional(Expression::Literal(Literal::String("test".to_string()))),
-        ],
+        parameters: vec![ast::Argument::Positional(Expression::Literal(
+            Literal::String("test".to_string()),
+        ))],
     };
     assert!(visitor.visit_expression(&request_expr, &mut ctx).is_ok());
 }
@@ -143,8 +143,10 @@ fn test_request_expressions() {
 #[test]
 fn test_binary_operations() {
     let mut ctx = TypeContext::new();
-    ctx.scope.insert_type("Int".to_string(), TypeInfo::Simple("Int".to_string()));
-    ctx.scope.insert_type("Float".to_string(), TypeInfo::Simple("Float".to_string()));
+    ctx.scope
+        .insert_type("Int".to_string(), TypeInfo::Simple("Int".to_string()));
+    ctx.scope
+        .insert_type("Float".to_string(), TypeInfo::Simple("Float".to_string()));
     let visitor = DefaultTypeVisitor;
 
     // Test arithmetic operations
@@ -217,7 +219,10 @@ fn test_await_expressions() {
 #[test]
 fn test_function_calls() {
     let mut ctx = TypeContext::new();
-    ctx.scope.insert_type("test_fn".to_string(), TypeInfo::Simple("Function".to_string()));
+    ctx.scope.insert_type(
+        "test_fn".to_string(),
+        TypeInfo::Simple("Function".to_string()),
+    );
     let visitor = DefaultTypeVisitor;
 
     let call_expr = Expression::FunctionCall {
