@@ -1,8 +1,14 @@
+use std::collections::HashMap;
+
 use crate::ast::TypeInfo;
-use dashmap::DashMap;
 
 /// Manages type scopes for type checking
 #[derive(Clone)]
+/// TypeScope is designed to store type information for type checking.
+/// Although it currently uses DashMap to allow for potential concurrent access,
+/// the overall type resolution process is inherently sequential and deterministic.
+/// This design decision favors simplicity and predictability over parallelism.
+/// In cases where no actual concurrent mutation is required, a standard HashMap might suffice.
 pub struct TypeScope {
     scopes: Vec<TypeScopeLayer>,
 }
@@ -10,7 +16,7 @@ pub struct TypeScope {
 /// Single layer in the type scope stack
 #[derive(Clone)]
 struct TypeScopeLayer {
-    types: DashMap<String, TypeInfo>,
+    types: HashMap<String, TypeInfo>,
 }
 
 impl Default for TypeScopeLayer {
@@ -22,7 +28,7 @@ impl Default for TypeScopeLayer {
 impl TypeScopeLayer {
     fn new() -> Self {
         Self {
-            types: DashMap::new(),
+            types: HashMap::new(),
         }
     }
 }
@@ -64,8 +70,8 @@ impl TypeScope {
     }
 
     /// Insert a type into the current scope
-    pub fn insert_type(&self, name: String, ty: TypeInfo) {
-        if let Some(scope) = self.scopes.last() {
+    pub fn insert_type(&mut self, name: String, ty: TypeInfo) {
+        if let Some(scope) = self.scopes.last_mut() {
             scope.types.insert(name, ty);
         }
     }

@@ -1,6 +1,5 @@
 use super::*;
 use crate::ast::TypeInfo;
-use std::thread;
 
 #[test]
 fn test_type_scope_basic_operations() {
@@ -80,24 +79,6 @@ fn test_type_scope_complex_types() {
         scope.get_type("result"),
         Some(TypeInfo::Result { .. })
     ));
-}
-
-#[test]
-fn test_type_scope_concurrent_access() {
-    let mut scope = TypeScope::new();
-    let scope_clone = scope.clone();
-
-    // Insert type in main thread
-    scope.insert_type("main".to_string(), TypeInfo::Simple("Int".to_string()));
-
-    // Access type in another thread
-    let handle = thread::spawn(move || {
-        assert!(scope_clone.contains_type("main"));
-        scope_clone.insert_type("thread".to_string(), TypeInfo::Simple("String".to_string()));
-    });
-
-    handle.join().unwrap();
-    assert!(scope.contains_type("thread"));
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use super::*;
 use crate::ast::{
-    LifecycleDef, MicroAgentDef, Policy, PolicyId, PolicyScope, Root, StateDef, StatePath,
-    StateVarDef, TypeInfo,
+    LifecycleDef, MicroAgentDef, Policy, PolicyId, PolicyScope, Root, StateDef, StateVarDef,
+    TypeInfo,
 };
 use std::collections::HashMap;
 

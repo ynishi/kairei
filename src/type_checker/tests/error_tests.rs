@@ -1,6 +1,5 @@
 use super::*;
-use crate::ast::TypeInfo;
-use std::fmt::Display;
+use crate::{ast::TypeInfo, type_checker::error::Location};
 
 #[test]
 fn test_type_check_error_display() {
