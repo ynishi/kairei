@@ -123,3 +123,107 @@ fn test_think_block_expressions() {
         .visit_expression(&valid_think_expr, &mut ctx)
         .is_ok());
 }
+
+#[test]
+fn test_request_expressions() {
+    let mut ctx = TypeContext::new();
+    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    let visitor = DefaultTypeVisitor;
+
+    let request_expr = Expression::Request {
+        target: "test".to_string(),
+        parameters: vec![
+            ast::Argument::Positional(Expression::Literal(Literal::String("test".to_string()))),
+        ],
+    };
+    assert!(visitor.visit_expression(&request_expr, &mut ctx).is_ok());
+}
+
+#[test]
+fn test_binary_operations() {
+    let mut ctx = TypeContext::new();
+    ctx.scope.insert_type("Int".to_string(), TypeInfo::Simple("Int".to_string()));
+    ctx.scope.insert_type("Float".to_string(), TypeInfo::Simple("Float".to_string()));
+    let visitor = DefaultTypeVisitor;
+
+    // Test arithmetic operations
+    let add_expr = Expression::BinaryOp {
+        left: Box::new(Expression::Literal(Literal::Integer(1))),
+        right: Box::new(Expression::Literal(Literal::Integer(2))),
+        op: BinaryOperator::Add,
+    };
+    assert!(visitor.visit_expression(&add_expr, &mut ctx).is_ok());
+    assert_eq!(
+        visitor.infer_type(&add_expr, &mut ctx).unwrap(),
+        TypeInfo::Simple("Int".to_string())
+    );
+
+    // Test comparison operations
+    let compare_expr = Expression::BinaryOp {
+        left: Box::new(Expression::Literal(Literal::Integer(1))),
+        right: Box::new(Expression::Literal(Literal::Integer(2))),
+        op: BinaryOperator::LessThan,
+    };
+    assert!(visitor.visit_expression(&compare_expr, &mut ctx).is_ok());
+    assert_eq!(
+        visitor.infer_type(&compare_expr, &mut ctx).unwrap(),
+        TypeInfo::Simple("Boolean".to_string())
+    );
+}
+
+#[test]
+fn test_result_expressions() {
+    let mut ctx = TypeContext::new();
+    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    let visitor = DefaultTypeVisitor;
+
+    // Test Ok expression
+    let ok_expr = Expression::Ok(Box::new(Expression::Literal(Literal::String(
+        "success".to_string(),
+    ))));
+    assert!(visitor.visit_expression(&ok_expr, &mut ctx).is_ok());
+    assert!(matches!(
+        visitor.infer_type(&ok_expr, &mut ctx).unwrap(),
+        TypeInfo::Result { .. }
+    ));
+
+    // Test Err expression
+    let err_expr = Expression::Err(Box::new(Expression::Literal(Literal::String(
+        "error".to_string(),
+    ))));
+    assert!(visitor.visit_expression(&err_expr, &mut ctx).is_ok());
+    assert!(matches!(
+        visitor.infer_type(&err_expr, &mut ctx).unwrap(),
+        TypeInfo::Result { .. }
+    ));
+}
+
+#[test]
+fn test_await_expressions() {
+    let mut ctx = TypeContext::new();
+    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    let visitor = DefaultTypeVisitor;
+
+    let result_expr = Expression::Ok(Box::new(Expression::Literal(Literal::String(
+        "test".to_string(),
+    ))));
+    let await_expr = Expression::Await(vec![result_expr]);
+    assert!(visitor.visit_expression(&await_expr, &mut ctx).is_ok());
+}
+
+#[test]
+fn test_function_calls() {
+    let mut ctx = TypeContext::new();
+    ctx.scope.insert_type("test_fn".to_string(), TypeInfo::Simple("Function".to_string()));
+    let visitor = DefaultTypeVisitor;
+
+    let call_expr = Expression::FunctionCall {
+        function: "test_fn".to_string(),
+        arguments: vec![Expression::Literal(Literal::String("arg".to_string()))],
+    };
+    assert!(visitor.visit_expression(&call_expr, &mut ctx).is_ok());
+    assert!(matches!(
+        visitor.infer_type(&call_expr, &mut ctx).unwrap(),
+        TypeInfo::Result { .. }
+    ));
+}
