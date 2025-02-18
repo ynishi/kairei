@@ -43,6 +43,7 @@ fn test_handler_with_statements() {
 
     let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
+        event_name: "test_event".to_string(),
         parameters: vec![],
         block: HandlerBlock {
             statements: vec![Statement::Expression(Expression::Literal(Literal::String(
