@@ -1,12 +1,13 @@
 use super::*;
 use crate::{
-    config::ProviderConfig,
+    config::{PluginConfig, ProviderConfig},
     eval::expression::Value,
     provider::{
         capability,
-        llm::{LLMResponse, ResponseMetadata},
+        llm::LLMResponse,
         plugin::{self, ProviderPlugin},
-        request::{ProviderRequest, ProviderResponse, RequestInput, ExecutionState},
+        provider::Section,
+        request::{ProviderRequest, ProviderResponse, RequestInput, ExecutionState, ResponseMetadata},
         types::ProviderResult,
     },
     type_checker::visitor::PluginTypeVisitor,
@@ -24,14 +25,10 @@ impl ProviderPlugin for MockPlugin {
     fn priority(&self) -> i32 {
         0
     }
-    async fn generate_section(&self, _context: &plugin::PluginContext<'_>) -> ProviderResult<plugin::Section> {
+    async fn generate_section<'a>(&'a self, _context: &'a plugin::PluginContext<'a>) -> ProviderResult<Section> {
         unimplemented!()
     }
-    async fn process_response(
-        &self,
-        _context: &plugin::PluginContext<'_>,
-        _response: &LLMResponse,
-    ) -> ProviderResult<()> {
+    async fn process_response<'a>(&'a self, _context: &'a plugin::PluginContext<'a>, _response: &'a LLMResponse) -> ProviderResult<()> {
         unimplemented!()
     }
 }
@@ -87,7 +84,7 @@ fn test_plugin_config_validation() {
     let mut ctx = TypeContext::new();
     let visitor = PluginTypeVisitor::new();
 
-    let config = ProviderConfig {
+    let config = PluginConfig {
         name: "test".to_string(),
         settings: HashMap::new(),
     };
