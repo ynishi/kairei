@@ -79,27 +79,61 @@ fn test_plugin_config_validation() {
 fn test_value_type_validation() {
     let visitor = PluginTypeVisitor::new();
 
-    // Test valid types
-    assert!(visitor
-        .validate_value_type(&Value::String("test".to_string()))
-        .is_ok());
-    assert!(visitor.validate_value_type(&Value::Integer(42)).is_ok());
-    assert!(visitor.validate_value_type(&Value::Float(3.14)).is_ok());
-    assert!(visitor.validate_value_type(&Value::Boolean(true)).is_ok());
+    let mut ctx = TypeContext::new();
 
-    // Test valid nested types
-    assert!(visitor
-        .validate_value_type(&Value::List(vec![
+    // Test valid types through request validation
+    let valid_types = vec![
+        Value::String("test".to_string()),
+        Value::Integer(42),
+        Value::Float(3.14),
+        Value::Boolean(true),
+    ];
+
+    for value in valid_types {
+        let request = ProviderRequest {
+            input: RequestInput {
+                query: value,
+                parameters: HashMap::new(),
+            },
+        };
+        assert!(visitor
+            .validate_plugin_request(&request, &MockPlugin {}, &mut ctx)
+            .is_ok());
+    }
+
+    // Test valid nested types through request validation
+    let mut nested_params = HashMap::new();
+    nested_params.insert(
+        "list".to_string(),
+        Value::List(vec![
             Value::String("test".to_string()),
             Value::Integer(42),
-        ]))
+        ]),
+    );
+    nested_params.insert("map".to_string(), {
+        let mut map = HashMap::new();
+        map.insert("key".to_string(), Value::String("value".to_string()));
+        Value::Map(map)
+    });
+
+    let nested_request = ProviderRequest {
+        input: RequestInput {
+            query: Value::String("test".to_string()),
+            parameters: nested_params,
+        },
+    };
+    assert!(visitor
+        .validate_plugin_request(&nested_request, &MockPlugin {}, &mut ctx)
         .is_ok());
 
-    let mut map = HashMap::new();
-    map.insert("key".to_string(), Value::String("value".to_string()));
-    assert!(visitor.validate_value_type(&Value::Map(map)).is_ok());
-
-    // Test invalid type (using Null which should be unsupported)
-    let null_value = Value::Null;
-    assert!(visitor.validate_value_type(&null_value).is_err());
+    // Test invalid type through request validation
+    let invalid_request = ProviderRequest {
+        input: RequestInput {
+            query: Value::Null,
+            parameters: HashMap::new(),
+        },
+    };
+    assert!(visitor
+        .validate_plugin_request(&invalid_request, &MockPlugin {}, &mut ctx)
+        .is_err());
 }
