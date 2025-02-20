@@ -99,7 +99,7 @@ fn test_value_type_validation() {
     map.insert("key".to_string(), Value::String("value".to_string()));
     assert!(visitor.validate_value_type(&Value::Map(map)).is_ok());
 
-    // Test invalid type (using None which should be unsupported)
-    let none_value = Value::None;
-    assert!(visitor.validate_value_type(&none_value).is_err());
+    // Test invalid type (using Null which should be unsupported)
+    let null_value = Value::Null;
+    assert!(visitor.validate_value_type(&null_value).is_err());
 }
