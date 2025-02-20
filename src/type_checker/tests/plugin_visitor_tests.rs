@@ -1,24 +1,38 @@
 use super::*;
 use crate::{
+    config::ProviderConfig,
     eval::expression::Value,
     provider::{
-        plugin::ProviderPlugin,
-        request::{ProviderRequest, ProviderResponse, RequestInput},
+        capability,
+        llm::{LLMResponse, ResponseMetadata},
+        plugin::{self, ProviderPlugin},
+        request::{ProviderRequest, ProviderResponse, RequestInput, ExecutionState},
+        types::ProviderResult,
     },
-    type_checker::visitor::plugin_visitor::PluginTypeVisitor,
+    type_checker::visitor::PluginTypeVisitor,
 };
 use std::collections::HashMap;
+use async_trait::async_trait;
 
 // Mock implementation for testing
 struct MockPlugin;
+#[async_trait]
 impl ProviderPlugin for MockPlugin {
-    fn execute(&self, _request: &ProviderRequest) -> Result<ProviderResponse, String> {
-        Ok(ProviderResponse {
-            output: "test".to_string(),
-        })
+    fn capability(&self) -> capability::CapabilityType {
+        capability::CapabilityType::Generate
     }
-    fn capability(&self) -> crate::provider::plugin::CapabilityType {
-        crate::provider::plugin::CapabilityType::General
+    fn priority(&self) -> i32 {
+        0
+    }
+    async fn generate_section(&self, _context: &plugin::PluginContext<'_>) -> ProviderResult<plugin::Section> {
+        unimplemented!()
+    }
+    async fn process_response(
+        &self,
+        _context: &plugin::PluginContext<'_>,
+        _response: &LLMResponse,
+    ) -> ProviderResult<()> {
+        unimplemented!()
     }
 }
 
@@ -33,6 +47,8 @@ fn test_plugin_request_validation() {
             query: Value::String("test query".to_string()),
             parameters: HashMap::new(),
         },
+        config: ProviderConfig::default(),
+        state: ExecutionState::default(),
     };
     assert!(visitor
         .validate_plugin_request(&valid_request, &MockPlugin {}, &mut ctx)
@@ -44,6 +60,8 @@ fn test_plugin_request_validation() {
             query: Value::List(vec![]), // Unsupported type
             parameters: HashMap::new(),
         },
+        config: ProviderConfig::default(),
+        state: ExecutionState::default(),
     };
     assert!(visitor
         .validate_plugin_request(&invalid_request, &MockPlugin {}, &mut ctx)
@@ -57,6 +75,7 @@ fn test_plugin_response_validation() {
 
     let response = ProviderResponse {
         output: "test output".to_string(),
+        metadata: ResponseMetadata::default(),
     };
     assert!(visitor
         .validate_plugin_response(&response, &mut ctx)
@@ -68,7 +87,7 @@ fn test_plugin_config_validation() {
     let mut ctx = TypeContext::new();
     let visitor = PluginTypeVisitor::new();
 
-    let config = crate::config::PluginConfig {
+    let config = ProviderConfig {
         name: "test".to_string(),
         settings: HashMap::new(),
     };
@@ -94,6 +113,8 @@ fn test_value_type_validation() {
                 query: value,
                 parameters: HashMap::new(),
             },
+            config: ProviderConfig::default(),
+            state: ExecutionState::default(),
         };
         assert!(visitor
             .validate_plugin_request(&request, &MockPlugin {}, &mut ctx)
@@ -117,6 +138,8 @@ fn test_value_type_validation() {
             query: Value::String("test".to_string()),
             parameters: nested_params,
         },
+        config: ProviderConfig::default(),
+        state: ExecutionState::default(),
     };
     assert!(visitor
         .validate_plugin_request(&nested_request, &MockPlugin {}, &mut ctx)
@@ -128,6 +151,8 @@ fn test_value_type_validation() {
             query: Value::Null,
             parameters: HashMap::new(),
         },
+        config: ProviderConfig::default(),
+        state: ExecutionState::default(),
     };
     assert!(visitor
         .validate_plugin_request(&invalid_request, &MockPlugin {}, &mut ctx)
