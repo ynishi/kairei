@@ -25,10 +25,10 @@ impl ProviderPlugin for MockPlugin {
     fn priority(&self) -> i32 {
         0
     }
-    async fn generate_section<'a>(&'a self, _context: &'a plugin::PluginContext<'a>) -> ProviderResult<Section> {
+    async fn generate_section<'a>(&self, _context: &PluginContext<'a>) -> ProviderResult<Section> {
         unimplemented!()
     }
-    async fn process_response<'a>(&'a self, _context: &'a plugin::PluginContext<'a>, _response: &'a LLMResponse) -> ProviderResult<()> {
+    async fn process_response<'a>(&self, _context: &PluginContext<'a>, _response: &LLMResponse) -> ProviderResult<()> {
         unimplemented!()
     }
 }
@@ -84,7 +84,7 @@ fn test_plugin_config_validation() {
     let mut ctx = TypeContext::new();
     let visitor = PluginTypeVisitor::new();
 
-    let config = PluginConfig {
+    let config = PluginConfig::Basic {
         name: "test".to_string(),
         settings: HashMap::new(),
     };
