@@ -77,9 +77,8 @@ fn test_plugin_config_validation() {
 
 #[test]
 fn test_value_type_validation() {
-    let visitor = PluginTypeVisitor::new();
-
     let mut ctx = TypeContext::new();
+    let visitor = PluginTypeVisitor::new();
 
     // Test valid types through request validation
     let valid_types = vec![
