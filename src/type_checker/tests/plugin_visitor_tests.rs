@@ -13,10 +13,12 @@ use std::collections::HashMap;
 struct MockPlugin;
 impl ProviderPlugin for MockPlugin {
     fn execute(&self, _request: &ProviderRequest) -> Result<ProviderResponse, String> {
-        unimplemented!()
+        Ok(ProviderResponse {
+            output: "test".to_string(),
+        })
     }
     fn capability(&self) -> crate::provider::plugin::CapabilityType {
-        unimplemented!()
+        crate::provider::plugin::CapabilityType::General
     }
 }
 
@@ -97,7 +99,7 @@ fn test_value_type_validation() {
     map.insert("key".to_string(), Value::String("value".to_string()));
     assert!(visitor.validate_value_type(&Value::Map(map)).is_ok());
 
-    // Test invalid type
-    let custom_value = Value::Custom("invalid".to_string());
-    assert!(visitor.validate_value_type(&custom_value).is_err());
+    // Test invalid type (using None which should be unsupported)
+    let none_value = Value::None;
+    assert!(visitor.validate_value_type(&none_value).is_err());
 }
