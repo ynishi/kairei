@@ -9,6 +9,7 @@ mod error_tests;
 mod expression_tests;
 mod handler_tests;
 mod micro_agent_tests;
+mod plugin_visitor_tests;
 mod scope_tests;
 
 #[test]
