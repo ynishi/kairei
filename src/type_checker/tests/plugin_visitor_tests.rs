@@ -104,10 +104,7 @@ fn test_value_type_validation() {
     let mut nested_params = HashMap::new();
     nested_params.insert(
         "list".to_string(),
-        Value::List(vec![
-            Value::String("test".to_string()),
-            Value::Integer(42),
-        ]),
+        Value::List(vec![Value::String("test".to_string()), Value::Integer(42)]),
     );
     nested_params.insert("map".to_string(), {
         let mut map = HashMap::new();
