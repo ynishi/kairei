@@ -75,7 +75,7 @@ fn test_complex_ast_type_checking() -> TypeCheckResult<()> {
                                     error_binding: None,
                                     error_handler_statements: vec![Statement::Return(
                                         Expression::Err(Box::new(Expression::Literal(
-                                            Literal::String("Error occurred".to_string()),
+                                            Literal::String("Operation failed".to_string()),
                                         ))),
                                     )],
                                     control: None,

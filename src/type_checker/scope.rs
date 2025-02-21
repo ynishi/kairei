@@ -76,6 +76,13 @@ impl TypeScope {
         }
     }
 
+    /// Remove a type from the current scope
+    pub fn remove_type(&mut self, name: &str) {
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.types.remove(name);
+        }
+    }
+
     /// Clear all scopes and reset to initial state
     pub fn clear(&mut self) {
         self.scopes.clear();
