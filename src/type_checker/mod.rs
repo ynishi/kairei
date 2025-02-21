@@ -7,11 +7,11 @@ pub mod visitor;
 #[cfg(test)]
 pub mod tests;
 
+pub use crate::type_checker::visitor::common::TypeVisitor;
 pub use checker::TypeChecker;
 pub use error::{TypeCheckError, TypeCheckResult};
 pub use plugin_interface::TypeCheckerPlugin;
 pub use scope::TypeScope;
-pub use visitor::TypeVisitor;
 
 use crate::ast;
 

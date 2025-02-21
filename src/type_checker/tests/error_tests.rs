@@ -71,8 +71,10 @@ fn test_invalid_function_argument_type() -> TypeCheckResult<()> {
     };
 
     let result = visitor.visit_expression(&expr, &mut ctx);
-    // Note: This will pass for now since we haven't implemented argument type checking yet
-    assert!(result.is_ok());
+    assert!(matches!(
+        result,
+        Err(TypeCheckError::InvalidArgumentType { .. })
+    ));
 
     Ok(())
 }

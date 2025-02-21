@@ -1,105 +1,33 @@
-use crate::{
-    ast::{
-        BinaryOperator, Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, StateDef,
-        Statement, TypeInfo,
-    },
-    type_checker::{visitor::common::TypeVisitor, TypeCheckError, TypeCheckResult, TypeContext},
-    Argument,
+use crate::ast::{
+    Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, StateDef, Statement, TypeInfo,
+};
+use crate::type_checker::{
+    visitor::common::TypeVisitor, TypeCheckError, TypeCheckResult, TypeContext,
+};
+use crate::Argument;
+
+use super::{
+    expression::{DefaultExpressionChecker, ExpressionTypeChecker},
+    function::{DefaultFunctionChecker, FunctionTypeChecker},
 };
 
 /// Default implementation of type checking logic
-pub struct DefaultVisitor;
+pub struct DefaultVisitor {
+    expression_checker: DefaultExpressionChecker,
+    function_checker: DefaultFunctionChecker,
+}
 
 impl DefaultVisitor {
     pub fn new() -> Self {
-        Self
+        Self {
+            expression_checker: DefaultExpressionChecker::new(),
+            function_checker: DefaultFunctionChecker::new(),
+        }
     }
 
     fn infer_type(&self, expr: &Expression, ctx: &TypeContext) -> TypeCheckResult<TypeInfo> {
         match expr {
-            Expression::Literal(lit) => Ok(match lit {
-                crate::ast::Literal::Integer(_) => TypeInfo::Simple("Int".to_string()),
-                crate::ast::Literal::Float(_) => TypeInfo::Simple("Float".to_string()),
-                crate::ast::Literal::String(_) => TypeInfo::Simple("String".to_string()),
-                crate::ast::Literal::Boolean(_) => TypeInfo::Simple("Boolean".to_string()),
-                crate::ast::Literal::Duration(_) => TypeInfo::Simple("Duration".to_string()),
-                crate::ast::Literal::List(items) => {
-                    if items.is_empty() {
-                        return Err(TypeCheckError::TypeInferenceError {
-                            message: "Cannot infer type of empty list".to_string(),
-                        });
-                    }
-                    // Infer type from first item
-                    let first_type =
-                        self.infer_type(&Expression::Literal(items[0].clone()), ctx)?;
-
-                    // Check that all items have the same type
-                    for item in items.iter().skip(1) {
-                        let item_type = self.infer_type(&Expression::Literal(item.clone()), ctx)?;
-                        if item_type != first_type {
-                            return Err(TypeCheckError::TypeInferenceError {
-                                message: format!(
-                                    "List contains mixed types: found both {} and {}",
-                                    first_type, item_type
-                                ),
-                            });
-                        }
-                    }
-
-                    TypeInfo::Array(Box::new(first_type))
-                }
-                crate::ast::Literal::Map(entries) => {
-                    if entries.is_empty() {
-                        return Err(TypeCheckError::TypeInferenceError {
-                            message: "Cannot infer type of empty map".to_string(),
-                        });
-                    }
-
-                    // Get first entry to infer key and value types
-                    let (first_key, first_value) = entries.iter().next().unwrap();
-                    let key_type = self.infer_type(
-                        &Expression::Literal(crate::ast::Literal::String(first_key.clone())),
-                        ctx,
-                    )?;
-                    let value_type =
-                        self.infer_type(&Expression::Literal(first_value.clone()), ctx)?;
-
-                    // Check that all entries have consistent types
-                    for (key, value) in entries.iter().skip(1) {
-                        let k_type = self.infer_type(
-                            &Expression::Literal(crate::ast::Literal::String(key.clone())),
-                            ctx,
-                        )?;
-                        let v_type = self.infer_type(&Expression::Literal(value.clone()), ctx)?;
-
-                        if k_type != key_type {
-                            return Err(TypeCheckError::TypeInferenceError {
-                                message: format!(
-                                    "Map contains mixed key types: found both {} and {}",
-                                    key_type, k_type
-                                ),
-                            });
-                        }
-                        if v_type != value_type {
-                            return Err(TypeCheckError::TypeInferenceError {
-                                message: format!(
-                                    "Map contains mixed value types: found both {} and {}",
-                                    value_type, v_type
-                                ),
-                            });
-                        }
-                    }
-
-                    TypeInfo::Map(Box::new(key_type), Box::new(value_type))
-                }
-                crate::ast::Literal::Null => TypeInfo::Simple("Null".to_string()),
-                _ => {
-                    return Err(TypeCheckError::TypeInferenceError {
-                        message: "Unsupported literal type".to_string(),
-                    })
-                }
-            }),
-            // ... rest of the match arms remain unchanged ...
+            Expression::Literal(lit) => self.expression_checker.infer_literal_type(lit, ctx),
             Expression::Variable(name) => {
                 if let Some(type_info) = ctx.scope.get_type(name) {
                     Ok(type_info.clone())
@@ -110,76 +38,15 @@ impl DefaultVisitor {
             Expression::BinaryOp { op, left, right } => {
                 let left_type = self.infer_type(left, ctx)?;
                 let right_type = self.infer_type(right, ctx)?;
-                match op {
-                    BinaryOperator::Add
-                    | BinaryOperator::Subtract
-                    | BinaryOperator::Multiply
-                    | BinaryOperator::Divide => {
-                        if !self.is_numeric(&left_type) || !self.is_numeric(&right_type) {
-                            return Err(TypeCheckError::InvalidOperatorType {
-                                operator: op.to_string(),
-                                left_type,
-                                right_type,
-                                location: Default::default(),
-                            });
-                        }
-                        // If either operand is Float, result is Float
-                        if self.is_float(&left_type) || self.is_float(&right_type) {
-                            Ok(TypeInfo::Simple("Float".to_string()))
-                        } else {
-                            Ok(TypeInfo::Simple("Int".to_string()))
-                        }
-                    }
-                    BinaryOperator::Equal
-                    | BinaryOperator::NotEqual
-                    | BinaryOperator::LessThan
-                    | BinaryOperator::GreaterThan
-                    | BinaryOperator::LessThanEqual
-                    | BinaryOperator::GreaterThanEqual => {
-                        Ok(TypeInfo::Simple("Boolean".to_string()))
-                    }
-                    BinaryOperator::And | BinaryOperator::Or => {
-                        if !self.is_boolean(&left_type) || !self.is_boolean(&right_type) {
-                            return Err(TypeCheckError::InvalidOperatorType {
-                                operator: op.to_string(),
-                                left_type,
-                                right_type,
-                                location: Default::default(),
-                            });
-                        }
-                        Ok(TypeInfo::Simple("Boolean".to_string()))
-                    }
-                }
+                self.expression_checker
+                    .infer_binary_op_type(&left_type, &right_type, op)
             }
             Expression::FunctionCall {
                 function,
                 arguments,
-            } => {
-                // Get function type from scope
-                let func_type = ctx
-                    .scope
-                    .get_type(function)
-                    .ok_or_else(|| TypeCheckError::UndefinedFunction(function.clone()))?;
-
-                // Check argument types
-                for (i, arg) in arguments.iter().enumerate() {
-                    let arg_type = self.infer_type(arg, ctx)?;
-                    // For now, we don't have function parameter types, so we skip type checking
-                    // In a full implementation, we would check against the function's parameter types
-                    if false {
-                        return Err(TypeCheckError::InvalidArgumentType {
-                            function: function.clone(),
-                            argument: format!("arg{}", i),
-                            expected: TypeInfo::Simple("Any".to_string()),
-                            found: arg_type,
-                            location: Default::default(),
-                        });
-                    }
-                }
-
-                // For now, assume function calls return Result<Any, Error>
-                Ok(func_type.clone())
-            }
+            } => self
+                .function_checker
+                .check_function_call(function, arguments, ctx),
             Expression::Think { args, .. } => {
                 // Check argument types
                 for arg in args {
@@ -243,27 +110,6 @@ impl DefaultVisitor {
                 Ok(TypeInfo::Simple("Any".to_string()))
             }
         }
-    }
-
-    fn is_numeric(&self, type_info: &TypeInfo) -> bool {
-        matches!(
-            type_info,
-            TypeInfo::Simple(name) if name == "Int" || name == "Float"
-        )
-    }
-
-    fn is_float(&self, type_info: &TypeInfo) -> bool {
-        matches!(
-            type_info,
-            TypeInfo::Simple(name) if name == "Float"
-        )
-    }
-
-    fn is_boolean(&self, type_info: &TypeInfo) -> bool {
-        matches!(
-            type_info,
-            TypeInfo::Simple(name) if name == "Boolean"
-        )
     }
 }
 
@@ -397,15 +243,14 @@ impl TypeVisitor for DefaultVisitor {
                 Ok(())
             }
             Statement::Return(expr) => {
-                let expr_type = self.infer_type(expr, ctx)?;
-                // For now, we don't have function return types, so we skip type checking
-                // In a full implementation, we would check against the function's return type
-                if false {
-                    return Err(TypeCheckError::InvalidReturnType {
-                        expected: TypeInfo::Simple("Any".to_string()),
-                        found: expr_type,
-                        location: Default::default(),
-                    });
+                // Get current function's return type from context
+                if let Some(expected_type) = ctx.scope.get_type("return_type") {
+                    self.function_checker.check_return_type(
+                        "current_function",
+                        expr,
+                        &expected_type,
+                        ctx,
+                    )?;
                 }
                 Ok(())
             }
@@ -432,7 +277,7 @@ impl TypeVisitor for DefaultVisitor {
             } => {
                 // Check condition is boolean
                 let cond_type = self.infer_type(condition, ctx)?;
-                if !self.is_boolean(&cond_type) {
+                if !self.expression_checker.is_boolean(&cond_type) {
                     return Err(TypeCheckError::TypeMismatch {
                         expected: TypeInfo::Simple("Boolean".to_string()),
                         found: cond_type,
@@ -470,94 +315,6 @@ impl TypeVisitor for DefaultVisitor {
     ) -> TypeCheckResult<()> {
         // Infer type to perform type checking
         self.infer_type(expr, ctx)?;
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::Literal;
-
-    use super::*;
-    use std::collections::HashMap;
-
-    #[test]
-    fn test_map_type_inference() -> TypeCheckResult<()> {
-        let visitor = DefaultVisitor::new();
-        let ctx = TypeContext::new();
-
-        // Test empty map
-        let empty_map: HashMap<String, Literal> = HashMap::new();
-        let expr = Expression::Literal(Literal::Map(empty_map));
-        let result = visitor.infer_type(&expr, &ctx);
-        assert!(matches!(
-            result,
-            Err(TypeCheckError::TypeInferenceError { .. })
-        ));
-
-        // Test map with consistent types
-        let mut map = HashMap::new();
-        map.insert("key1".to_string(), Literal::Integer(1));
-        map.insert("key2".to_string(), Literal::Integer(2));
-        let expr = Expression::Literal(Literal::Map(map));
-        let result = visitor.infer_type(&expr, &ctx)?;
-        assert!(matches!(
-            result,
-            TypeInfo::Map(key_type, value_type)
-            if matches!(*key_type, TypeInfo::Simple(ref s) if s == "String")
-            && matches!(*value_type, TypeInfo::Simple(ref s) if s == "Int")
-        ));
-
-        // Test map with mixed value types
-        let mut map = HashMap::new();
-        map.insert("key1".to_string(), Literal::Integer(1));
-        map.insert("key2".to_string(), Literal::String("value".to_string()));
-        let expr = Expression::Literal(Literal::Map(map));
-        let result = visitor.infer_type(&expr, &ctx);
-        assert!(matches!(
-            result,
-            Err(TypeCheckError::TypeInferenceError { .. })
-        ));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_list_type_inference() -> TypeCheckResult<()> {
-        let visitor = DefaultVisitor::new();
-        let ctx = TypeContext::new();
-
-        // Test empty list
-        let expr = Expression::Literal(Literal::List(vec![]));
-        let result = visitor.infer_type(&expr, &ctx);
-        assert!(matches!(
-            result,
-            Err(TypeCheckError::TypeInferenceError { .. })
-        ));
-
-        // Test list with consistent types
-        let expr = Expression::Literal(Literal::List(vec![
-            Literal::Integer(1),
-            Literal::Integer(2),
-            Literal::Integer(3),
-        ]));
-        let result = visitor.infer_type(&expr, &ctx)?;
-        assert!(matches!(
-            result,
-            TypeInfo::Array(inner) if matches!(*inner, TypeInfo::Simple(ref s) if s == "Int")
-        ));
-
-        // Test list with mixed types
-        let expr = Expression::Literal(Literal::List(vec![
-            Literal::Integer(1),
-            Literal::String("value".to_string()),
-        ]));
-        let result = visitor.infer_type(&expr, &ctx);
-        assert!(matches!(
-            result,
-            Err(TypeCheckError::TypeInferenceError { .. })
-        ));
-
         Ok(())
     }
 }
