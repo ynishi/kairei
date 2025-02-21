@@ -14,6 +14,7 @@ pub(crate) trait FunctionTypeChecker {
         ctx: &TypeContext,
     ) -> TypeCheckResult<TypeInfo>;
 
+    #[allow(dead_code)]
     fn check_return_type(
         &self,
         function: &str,
