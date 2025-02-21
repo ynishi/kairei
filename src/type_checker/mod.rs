@@ -1,42 +1,25 @@
-//! Type checker module for KAIREI DSL
-//!
-//! This module implements type checking for the KAIREI DSL, validating type
-//! correctness across all language constructs including state definitions,
-//! request handlers, think blocks, and plugin interactions.
-
+pub mod checker;
 mod error;
-mod scope;
-mod visitor;
+pub mod plugin_interface;
+pub mod scope;
+pub mod visitor;
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
 
+pub use crate::type_checker::visitor::common::TypeVisitor;
+pub use checker::TypeChecker;
 pub use error::{TypeCheckError, TypeCheckResult};
+pub use plugin_interface::TypeCheckerPlugin;
 pub use scope::TypeScope;
-pub use visitor::{DefaultTypeVisitor, PluginTypeVisitor, TypeVisitor};
 
-use crate::ast::{Root, TypeInfo};
-use crate::provider::plugin::ProviderPlugin;
-use dashmap::DashMap;
-use std::sync::Arc;
+use crate::ast;
 
-/// Core type checker trait defining the main interface for type validation
-pub trait TypeChecker {
-    /// Perform type checking on an entire AST
-    fn check_types(&mut self, ast: &mut Root) -> TypeCheckResult<()>;
-
-    /// Get any collected type errors
-    fn collect_errors(&self) -> Vec<TypeCheckError>;
-}
-
-/// Context for type checking operations
+/// Type checking context
+#[derive(Clone)]
 pub struct TypeContext {
-    /// Collected errors during type checking
+    pub scope: TypeScope,
     errors: Vec<TypeCheckError>,
-    /// Current type scope
-    scope: TypeScope,
-    /// Plugin type information
-    plugins: Arc<DashMap<String, Box<dyn ProviderPlugin>>>,
 }
 
 impl Default for TypeContext {
@@ -46,12 +29,11 @@ impl Default for TypeContext {
 }
 
 impl TypeContext {
-    /// Create a new type checking context
+    /// Create a new type context with an initial global scope
     pub fn new() -> Self {
         Self {
-            errors: Vec::new(),
             scope: TypeScope::new(),
-            plugins: Arc::new(DashMap::new()),
+            errors: Vec::new(),
         }
     }
 
@@ -65,85 +47,19 @@ impl TypeContext {
         !self.errors.is_empty()
     }
 
-    /// Take the collected errors
+    /// Take all errors, leaving the error list empty
     pub fn take_errors(&mut self) -> Vec<TypeCheckError> {
         std::mem::take(&mut self.errors)
     }
 
-    /// Clear the context state
+    /// Clear all errors
     pub fn clear(&mut self) {
         self.errors.clear();
-        self.scope.clear();
-        self.plugins.clear();
-    }
-
-    /// Register a plugin for type checking
-    pub fn register_plugin(&self, name: String, plugin: Box<dyn ProviderPlugin>) {
-        self.plugins.insert(name, plugin);
     }
 }
 
-/// Default implementation of TypeChecker
-pub struct DefaultTypeChecker {
-    visitor: DefaultTypeVisitor,
-    #[allow(dead_code)]
-    plugin_visitor: PluginTypeVisitor,
-    context: TypeContext,
-}
-
-impl DefaultTypeChecker {
-    /// Create a new type checker instance
-    pub fn new() -> Self {
-        Self {
-            visitor: DefaultTypeVisitor,
-            plugin_visitor: PluginTypeVisitor,
-            context: TypeContext::new(),
-        }
-    }
-}
-
-impl TypeChecker for DefaultTypeChecker {
-    fn check_types(&mut self, ast: &mut Root) -> TypeCheckResult<()> {
-        // Clear any previous state
-        self.context.clear();
-
-        // Register built-in types
-        for builtin_type in &["Int", "String", "Float", "Boolean", "Duration"] {
-            self.context.scope.insert_type(
-                builtin_type.to_string(),
-                TypeInfo::Simple(builtin_type.to_string()),
-            );
-        }
-
-        // Visit all micro agents
-        for agent in &mut ast.micro_agent_defs {
-            self.visitor.visit_micro_agent(agent, &mut self.context)?;
-        }
-
-        // Visit world definition if present
-        if let Some(world) = &ast.world_def {
-            // Validate plugin configurations
-            if let Some(_config) = &world.config {
-                // For now, we skip plugin config validation since it's not yet implemented
-                // TODO: Add plugin config validation once ConfigDef supports plugin configs
-            }
-
-            // Visit world handlers
-            for handler in &world.handlers.handlers {
-                self.visitor.visit_handler(handler, &mut self.context)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn collect_errors(&self) -> Vec<TypeCheckError> {
-        self.context.errors.clone()
-    }
-}
-
-impl Default for DefaultTypeChecker {
-    fn default() -> Self {
-        Self::new()
-    }
+/// Run type checker on AST
+pub fn run_type_checker(root: &mut ast::Root) -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
+    checker.check_types(root)
 }
