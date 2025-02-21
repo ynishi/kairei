@@ -1,6 +1,6 @@
 use crate::{
     ast,
-    type_checker::{TypeCheckResult, TypeChecker, TypeContext},
+    type_checker::{TypeChecker, TypeContext},
 };
 
 mod error_tests;

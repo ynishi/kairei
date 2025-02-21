@@ -49,6 +49,15 @@ fn test_function_call_expressions() -> TypeCheckResult<()> {
     let mut checker = TypeChecker::new();
     let mut ctx = TypeContext::new();
 
+    // Register function type in the context
+    ctx.scope.insert_type(
+        "test_func".to_string(),
+        TypeInfo::Result {
+            ok_type: Box::new(TypeInfo::Simple("Int".to_string())),
+            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+        },
+    );
+
     let expr = Expression::FunctionCall {
         function: "test_func".to_string(),
         arguments: vec![Expression::Literal(Literal::Integer(42))],
