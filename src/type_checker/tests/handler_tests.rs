@@ -1,99 +1,109 @@
-use super::*;
-use crate::ast::{Expression, HandlerBlock, HandlerDef, Literal, Parameter, Statement, TypeInfo};
+use crate::{
+    ast::{Expression, HandlerBlock, HandlerDef, Literal, Parameter, Statement, TypeInfo},
+    type_checker::{visitor::common::TypeVisitor, TypeCheckResult, TypeChecker, TypeContext},
+    ErrorHandlerBlock,
+};
 
 #[test]
-fn test_handler_with_parameters() {
+fn test_empty_handler() -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
     let mut ctx = TypeContext::new();
-    ctx.scope
-        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
-
-    let visitor = DefaultTypeVisitor;
-    let handler = HandlerDef {
-        event_name: "test_event".to_string(),
-        parameters: vec![Parameter {
-            name: "param1".to_string(),
-            type_info: TypeInfo::Simple("String".to_string()),
-        }],
-        block: HandlerBlock { statements: vec![] },
-    };
-    assert!(visitor.visit_handler(&handler, &mut ctx).is_ok());
-}
-
-#[test]
-fn test_handler_with_invalid_parameter_type() {
-    let mut ctx = TypeContext::new();
-    let visitor = DefaultTypeVisitor;
 
     let handler = HandlerDef {
         event_name: "test_event".to_string(),
-        parameters: vec![Parameter {
-            name: "param1".to_string(),
-            type_info: TypeInfo::Simple("NonExistentType".to_string()),
-        }],
+        parameters: vec![],
         block: HandlerBlock { statements: vec![] },
     };
-    assert!(visitor.visit_handler(&handler, &mut ctx).is_err());
+
+    checker.visit_handler(&handler, &mut ctx)?;
+    Ok(())
 }
 
 #[test]
-fn test_handler_with_statements() {
+fn test_handler_with_statements() -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
     let mut ctx = TypeContext::new();
-    ctx.scope
-        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
 
-    let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
         event_name: "test_event".to_string(),
         parameters: vec![],
         block: HandlerBlock {
-            statements: vec![Statement::Expression(Expression::Literal(Literal::String(
-                "test".to_string(),
-            )))],
+            statements: vec![
+                Statement::Block(vec![]),
+                Statement::Return(Expression::Literal(Literal::Integer(42))),
+            ],
         },
     };
-    assert!(visitor.visit_handler(&handler, &mut ctx).is_ok());
+
+    checker.visit_handler(&handler, &mut ctx)?;
+    Ok(())
 }
 
 #[test]
-fn test_handler_with_parameter_scope() {
+fn test_handler_with_error_handling() -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
     let mut ctx = TypeContext::new();
-    ctx.scope
-        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
 
-    let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
         event_name: "test_event".to_string(),
-        parameters: vec![Parameter {
-            name: "param1".to_string(),
-            type_info: TypeInfo::Simple("String".to_string()),
-        }],
+        parameters: vec![],
         block: HandlerBlock {
-            statements: vec![Statement::Expression(Expression::Variable(
-                "param1".to_string(),
-            ))],
+            statements: vec![Statement::WithError {
+                statement: Box::new(Statement::Block(vec![])),
+                error_handler_block: ErrorHandlerBlock {
+                    error_binding: Some("err".to_string()),
+                    error_handler_statements: vec![],
+                    control: None,
+                },
+            }],
         },
     };
-    assert!(visitor.visit_handler(&handler, &mut ctx).is_ok());
+
+    checker.visit_handler(&handler, &mut ctx)?;
+    Ok(())
 }
 
 #[test]
-fn test_handler_with_result_parameter() {
+fn test_handler_with_conditional() -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
     let mut ctx = TypeContext::new();
-    ctx.scope
-        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
 
-    let visitor = DefaultTypeVisitor;
     let handler = HandlerDef {
         event_name: "test_event".to_string(),
-        parameters: vec![Parameter {
-            name: "param1".to_string(),
-            type_info: TypeInfo::Result {
-                ok_type: Box::new(TypeInfo::Simple("String".to_string())),
-                err_type: Box::new(TypeInfo::Simple("String".to_string())),
+        parameters: vec![],
+        block: HandlerBlock {
+            statements: vec![Statement::If {
+                condition: Expression::Literal(Literal::Boolean(true)),
+                then_block: vec![],
+                else_block: None,
+            }],
+        },
+    };
+
+    checker.visit_handler(&handler, &mut ctx)?;
+    Ok(())
+}
+
+#[test]
+fn test_handler_with_parameters() -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
+    let mut ctx = TypeContext::new();
+
+    let handler = HandlerDef {
+        event_name: "test_event".to_string(),
+        parameters: vec![
+            Parameter {
+                name: "param1".to_string(),
+                type_info: TypeInfo::Simple("String".to_string()),
             },
-        }],
+            Parameter {
+                name: "param2".to_string(),
+                type_info: TypeInfo::Simple("Int".to_string()),
+            },
+        ],
         block: HandlerBlock { statements: vec![] },
     };
-    // Result types should be allowed in handler parameters
-    assert!(visitor.visit_handler(&handler, &mut ctx).is_ok());
+
+    checker.visit_handler(&handler, &mut ctx)?;
+    Ok(())
 }

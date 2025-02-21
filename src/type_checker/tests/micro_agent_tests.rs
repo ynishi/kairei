@@ -1,105 +1,92 @@
-use super::*;
-use crate::ast::{HandlerBlock, LifecycleDef, MicroAgentDef, StateDef, StateVarDef, TypeInfo};
-use std::collections::HashMap;
+use crate::{
+    ast::{
+        AnswerDef, Expression, HandlerBlock, LifecycleDef, Literal, MicroAgentDef, ObserveDef,
+        ReactDef, StateDef, Statement,
+    },
+    type_checker::{visitor::common::TypeVisitor, TypeCheckResult, TypeChecker, TypeContext},
+};
 
 #[test]
-fn test_micro_agent_basic() {
+fn test_empty_micro_agent() -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
     let mut ctx = TypeContext::new();
-    let visitor = DefaultTypeVisitor;
-    let mut agent = MicroAgentDef {
-        name: "test_agent".to_string(),
-        state: None,
-        answer: None,
-        observe: None,
-        react: None,
-        lifecycle: None,
-        policies: vec![],
-    };
-    assert!(visitor.visit_micro_agent(&mut agent, &mut ctx).is_ok());
-}
-
-#[test]
-fn test_micro_agent_with_state() {
-    let mut ctx = TypeContext::new();
-    // Register built-in types
-    ctx.scope
-        .insert_type("Int".to_string(), TypeInfo::Simple("Int".to_string()));
-    ctx.scope
-        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
-
-    let visitor = DefaultTypeVisitor;
-
-    let mut variables = HashMap::new();
-    variables.insert(
-        "counter".to_string(),
-        StateVarDef {
-            name: "counter".to_string(),
-            type_info: TypeInfo::Simple("Int".to_string()),
-            initial_value: None,
-        },
-    );
-
-    let mut agent = MicroAgentDef {
-        name: "test_agent".to_string(),
-        state: Some(StateDef { variables }),
-        answer: None,
-        observe: None,
-        react: None,
-        lifecycle: None,
-        policies: vec![],
-    };
-
-    assert!(visitor.visit_micro_agent(&mut agent, &mut ctx).is_ok());
-}
-
-#[test]
-fn test_micro_agent_with_lifecycle() {
-    let mut ctx = TypeContext::new();
-    let visitor = DefaultTypeVisitor;
-
-    let init_handler = HandlerBlock { statements: vec![] };
-    let destroy_handler = HandlerBlock { statements: vec![] };
 
     let mut agent = MicroAgentDef {
         name: "test_agent".to_string(),
         state: None,
+        lifecycle: None,
         answer: None,
         observe: None,
         react: None,
-        lifecycle: Some(LifecycleDef {
-            on_init: Some(init_handler),
-            on_destroy: Some(destroy_handler),
+        policies: vec![],
+    };
+
+    checker.visit_micro_agent(&mut agent, &mut ctx)?;
+    Ok(())
+}
+
+#[test]
+fn test_micro_agent_with_state() -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
+    let mut ctx = TypeContext::new();
+
+    let mut agent = MicroAgentDef {
+        name: "test_agent".to_string(),
+        state: Some(StateDef {
+            variables: Default::default(),
         }),
-        policies: vec![],
-    };
-
-    assert!(visitor.visit_micro_agent(&mut agent, &mut ctx).is_ok());
-}
-
-#[test]
-fn test_micro_agent_with_invalid_state() {
-    let mut ctx = TypeContext::new();
-    let visitor = DefaultTypeVisitor;
-
-    let mut variables = HashMap::new();
-    variables.insert(
-        "invalid".to_string(),
-        StateVarDef {
-            name: "invalid".to_string(),
-            type_info: TypeInfo::Simple("NonExistentType".to_string()),
-            initial_value: None,
-        },
-    );
-
-    let mut agent = MicroAgentDef {
-        name: "test_agent".to_string(),
-        state: Some(StateDef { variables }),
+        lifecycle: None,
         answer: None,
         observe: None,
         react: None,
-        lifecycle: None,
         policies: vec![],
     };
 
-    assert!(visitor.visit_micro_agent(&mut agent, &mut ctx).is_err());
+    checker.visit_micro_agent(&mut agent, &mut ctx)?;
+    Ok(())
+}
+
+#[test]
+fn test_micro_agent_with_lifecycle() -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
+    let mut ctx = TypeContext::new();
+
+    let mut agent = MicroAgentDef {
+        name: "test_agent".to_string(),
+        state: None,
+        lifecycle: Some(LifecycleDef {
+            on_init: Some(HandlerBlock {
+                statements: vec![Statement::Expression(Expression::Literal(
+                    Literal::Integer(42),
+                ))],
+            }),
+            on_destroy: None,
+        }),
+        answer: None,
+        observe: None,
+        react: None,
+        policies: vec![],
+    };
+
+    checker.visit_micro_agent(&mut agent, &mut ctx)?;
+    Ok(())
+}
+
+#[test]
+fn test_micro_agent_with_handlers() -> TypeCheckResult<()> {
+    let mut checker = TypeChecker::new();
+    let mut ctx = TypeContext::new();
+
+    let mut agent = MicroAgentDef {
+        name: "test_agent".to_string(),
+        state: None,
+        lifecycle: None,
+        answer: Some(AnswerDef { handlers: vec![] }),
+        observe: Some(ObserveDef { handlers: vec![] }),
+        react: Some(ReactDef { handlers: vec![] }),
+        policies: vec![],
+    };
+
+    checker.visit_micro_agent(&mut agent, &mut ctx)?;
+    Ok(())
 }

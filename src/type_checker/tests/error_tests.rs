@@ -1,5 +1,8 @@
 use super::*;
-use crate::{ast::TypeInfo, type_checker::error::Location};
+use crate::{
+    ast::TypeInfo,
+    type_checker::{error::Location, TypeCheckError},
+};
 
 #[test]
 fn test_type_check_error_display() {
