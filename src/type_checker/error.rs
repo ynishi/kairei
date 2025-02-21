@@ -62,8 +62,45 @@ pub enum TypeCheckError {
         operator: String,
         left_type: TypeInfo,
         right_type: TypeInfo,
-        location: Location,
+        meta: MetaError,
     },
+}
+
+#[derive(Error, Debug, Clone)]
+pub struct MetaError {
+    pub location: Location,
+    pub help: Option<String>,
+    pub suggestion: Option<String>,
+}
+
+impl std::fmt::Display for MetaError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MetaError at {}: help: {:?}, suggestion: {:?}",
+            self.location, self.help, self.suggestion
+        )
+    }
+}
+
+impl MetaError {
+    pub fn new(location: Location, help: &str, suggestion: &str) -> Self {
+        Self {
+            location,
+            help: Some(help.to_string()),
+            suggestion: Some(suggestion.to_string()),
+        }
+    }
+
+    pub fn with_help(mut self, help: String) -> Self {
+        self.help = Some(help);
+        self
+    }
+
+    pub fn with_suggestion(mut self, suggestion: String) -> Self {
+        self.suggestion = Some(suggestion);
+        self
+    }
 }
 
 /// Location information for error reporting
