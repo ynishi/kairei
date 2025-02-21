@@ -46,6 +46,11 @@ impl TypeChecker {
         }
     }
 
+    /// Insert a type into the current scope
+    pub fn insert_type(&mut self, name: String, type_info: TypeInfo) {
+        self.context.scope.insert_type(name, type_info);
+    }
+
     /// Check if a type exists in the current scope
     pub fn contains_type(&self, name: &str) -> bool {
         self.context.scope.contains_type(name)
