@@ -79,7 +79,8 @@ fn test_custom_type_field_access() -> TypeCheckResult<()> {
     };
 
     // Register the type definition
-    ctx.scope.insert_type("Person".to_string(), person_type.clone());
+    ctx.scope
+        .insert_type("Person".to_string(), person_type.clone());
 
     // Create a variable of the custom type
     ctx.scope.insert_type("person".to_string(), person_type);
@@ -138,10 +139,7 @@ fn test_custom_type_default_values() -> TypeCheckResult<()> {
         for (_, field_info) in fields {
             if let Some(default_value) = &field_info.default_value {
                 let _default_type = visitor.visit_expression(default_value, &mut ctx)?;
-                assert!(matches!(
-                    field_info.type_info,
-                    Some(TypeInfo::Simple(..))
-                ));
+                assert!(matches!(field_info.type_info, Some(TypeInfo::Simple(..))));
             }
         }
     }
@@ -169,7 +167,8 @@ fn test_custom_type_type_inference() -> TypeCheckResult<()> {
     };
 
     // Register the type
-    ctx.scope.insert_type("InferredType".to_string(), custom_type);
+    ctx.scope
+        .insert_type("InferredType".to_string(), custom_type);
 
     // Verify the inferred type
     if let Some(TypeInfo::Custom { fields, .. }) = ctx.scope.get_type("InferredType") {

@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, StateDef, Statement, TypeInfo, FieldInfo},
+    ast::{
+        Expression, FieldInfo, HandlerBlock, HandlerDef, MicroAgentDef, Root, StateDef, Statement,
+        TypeInfo,
+    },
     type_checker::{visitor::common::TypeVisitor, TypeCheckError, TypeCheckResult, TypeContext},
     Argument,
 };
@@ -25,6 +28,72 @@ impl DefaultVisitor {
         }
     }
 
+    fn check_return_type(
+        &self,
+        expr: &Expression,
+        expected_type: &TypeInfo,
+        ctx: &TypeContext,
+    ) -> TypeCheckResult<()> {
+        let expr_type = self.infer_type(expr, ctx)?;
+
+        // Handle Result type specifically for EventHandlers
+        match expected_type {
+            TypeInfo::Result { ok_type, err_type } => match expr {
+                Expression::Ok(inner_expr) => {
+                    let inner_type = self.infer_type(inner_expr, ctx)?;
+                    if inner_type != **ok_type {
+                        return Err(TypeCheckError::TypeMismatch {
+                            expected: (**ok_type).clone(),
+                            found: inner_type,
+                            location: Default::default(),
+                        });
+                    }
+                }
+                Expression::Err(inner_expr) => {
+                    let inner_type = self.infer_type(inner_expr, ctx)?;
+                    if inner_type != **err_type {
+                        return Err(TypeCheckError::TypeMismatch {
+                            expected: (**err_type).clone(),
+                            found: inner_type,
+                            location: Default::default(),
+                        });
+                    }
+                }
+                _ => {
+                    if expr_type != *expected_type {
+                        return Err(TypeCheckError::TypeMismatch {
+                            expected: expected_type.clone(),
+                            found: expr_type,
+                            location: Default::default(),
+                        });
+                    }
+                }
+            },
+            _ => {
+                if expr_type != *expected_type {
+                    return Err(TypeCheckError::TypeMismatch {
+                        expected: expected_type.clone(),
+                        found: expr_type,
+                        location: Default::default(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn check_condition(&self, condition: &Expression, ctx: &TypeContext) -> TypeCheckResult<()> {
+        let cond_type = self.infer_type(condition, ctx)?;
+        if !self.expression_checker.is_boolean(&cond_type) {
+            return Err(TypeCheckError::TypeMismatch {
+                expected: TypeInfo::Simple("Boolean".to_string()),
+                found: cond_type,
+                location: Default::default(),
+            });
+        }
+        Ok(())
+    }
+
     fn infer_type(&self, expr: &Expression, ctx: &TypeContext) -> TypeCheckResult<TypeInfo> {
         match expr {
             Expression::Literal(lit) => self.expression_checker.infer_literal_type(lit, ctx),
@@ -38,11 +107,15 @@ impl DefaultVisitor {
             Expression::BinaryOp { op, left, right } => {
                 let left_type = self.infer_type(left, ctx)?;
                 let right_type = self.infer_type(right, ctx)?;
-                self.expression_checker.infer_binary_op_type(&left_type, &right_type, op)
+                self.expression_checker
+                    .infer_binary_op_type(&left_type, &right_type, op)
             }
-            Expression::FunctionCall { function, arguments } => {
-                self.function_checker.check_function_call(function, arguments, ctx)
-            }
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => self
+                .function_checker
+                .check_function_call(function, arguments, ctx),
             Expression::Think { args, .. } => {
                 // Check argument types
                 for arg in args {
@@ -90,41 +163,39 @@ impl DefaultVisitor {
             Expression::StateAccess(path) => {
                 let full_path = path.0.join(".");
                 if let Some(type_info) = ctx.scope.get_type(&path.0[0]) {
-                    match &type_info {
-                        TypeInfo::Custom { fields, .. } => {
-                            if path.0.len() > 1 {
-                                // Field access
-                                let field_name = &path.0[1];
-                                if let Some(field_info) = fields.get(field_name) {
-                                    if let Some(field_type) = &field_info.type_info {
-                                        Ok(field_type.clone())
-                                    } else {
-                                        // Infer type from default value if available
-                                        if let Some(default_value) = &field_info.default_value {
-                                            self.infer_type(default_value, ctx)
-                                        } else {
-                                            Err(TypeCheckError::TypeInferenceError {
-                                                message: format!("Cannot infer type for field {}", field_name),
-                                            })
-                                        }
-                                    }
+                    if let TypeInfo::Custom { fields, .. } = type_info.clone() {
+                        if path.0.len() > 1 {
+                            // Field access
+                            let field_name = &path.0[1];
+                            if let Some(field_info) = fields.get(field_name) {
+                                if let Some(field_type) = &field_info.type_info {
+                                    Ok(field_type.clone())
                                 } else {
-                                    Err(TypeCheckError::UndefinedVariable(format!(
-                                        "Field {} not found in type",
-                                        field_name
-                                    )))
+                                    // Infer type from default value if available
+                                    if let Some(default_value) = &field_info.default_value {
+                                        self.infer_type(default_value, ctx)
+                                    } else {
+                                        Err(TypeCheckError::TypeInferenceError {
+                                            message: format!(
+                                                "Cannot infer type for field {}",
+                                                field_name
+                                            ),
+                                        })
+                                    }
                                 }
                             } else {
-                                Ok(type_info.clone())
+                                Err(TypeCheckError::UndefinedVariable(format!(
+                                    "Field {} not found in type",
+                                    field_name
+                                )))
                             }
+                        } else {
+                            Ok(type_info.clone())
                         }
-                        _ => {
-                            if let Some(type_info) = ctx.scope.get_type(&full_path) {
-                                Ok(type_info.clone())
-                            } else {
-                                Err(TypeCheckError::UndefinedVariable(full_path))
-                            }
-                        }
+                    } else if let Some(type_info) = ctx.scope.get_type(&full_path) {
+                        Ok(type_info.clone())
+                    } else {
+                        Err(TypeCheckError::UndefinedVariable(full_path.clone()))
                     }
                 } else {
                     Err(TypeCheckError::UndefinedVariable(full_path))
@@ -149,9 +220,9 @@ impl DefaultVisitor {
         fields: &HashMap<String, FieldInfo>,
         ctx: &TypeContext,
     ) -> TypeCheckResult<()> {
-        for (_, field_info) in fields {
+        for field_info in fields {
             // Check field type if specified
-            if let Some(field_type) = &field_info.type_info {
+            if let Some(field_type) = &field_info.1.type_info {
                 match field_type {
                     TypeInfo::Simple(type_name) => {
                         if !ctx.scope.contains_type(type_name) {
@@ -170,9 +241,9 @@ impl DefaultVisitor {
             }
 
             // Check default value type if provided
-            if let Some(default_value) = &field_info.default_value {
+            if let Some(default_value) = &field_info.1.default_value {
                 let default_type = self.infer_type(default_value, ctx)?;
-                if let Some(field_type) = &field_info.type_info {
+                if let Some(field_type) = &field_info.1.type_info {
                     if default_type != *field_type {
                         return Err(TypeCheckError::TypeMismatch {
                             expected: field_type.clone(),
@@ -326,17 +397,10 @@ impl TypeVisitor for DefaultVisitor {
                 Ok(())
             }
             Statement::Return(expr) => {
-                let expr_type = self.infer_type(expr, ctx)?;
                 // Get current function's return type from context
                 if let Some(expected_type) = ctx.scope.get_type("return_type") {
-                    // Compare inferred type with expected type
-                    if expr_type != expected_type {
-                        return Err(TypeCheckError::TypeMismatch {
-                            expected: expected_type.clone(),
-                            found: expr_type,
-                            location: Default::default(),
-                        });
-                    }
+                    let expected_type = expected_type.clone();
+                    self.check_return_type(expr, &expected_type, ctx)?;
                 }
                 Ok(())
             }
@@ -362,14 +426,7 @@ impl TypeVisitor for DefaultVisitor {
                 else_block,
             } => {
                 // Check condition is boolean
-                let cond_type = self.infer_type(condition, ctx)?;
-                if !self.expression_checker.is_boolean(&cond_type) {
-                    return Err(TypeCheckError::TypeMismatch {
-                        expected: TypeInfo::Simple("Boolean".to_string()),
-                        found: cond_type,
-                        location: Default::default(),
-                    });
-                }
+                self.check_condition(condition, ctx)?;
                 // Check blocks
                 for stmt in then_block {
                     self.visit_statement(stmt, ctx)?;
