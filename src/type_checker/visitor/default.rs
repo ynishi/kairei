@@ -269,6 +269,18 @@ impl TypeVisitor for DefaultVisitor {
         // Visit world definition if present
         if let Some(world_def) = &mut root.world_def {
             for handler in &world_def.handlers.handlers {
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: existing_type.clone(),
+                                found: param.type_info.clone(),
+                                location: Default::default(),
+                            });
+                        }
+                    }
+                }
                 self.visit_handler(handler, ctx)?;
             }
         }
@@ -304,6 +316,18 @@ impl TypeVisitor for DefaultVisitor {
         // Visit answer handlers if present
         if let Some(answer) = &agent.answer {
             for handler in &answer.handlers {
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: existing_type.clone(),
+                                found: param.type_info.clone(),
+                                location: Default::default(),
+                            });
+                        }
+                    }
+                }
                 self.visit_handler_block(&handler.block, ctx)?;
             }
         }
@@ -311,6 +335,18 @@ impl TypeVisitor for DefaultVisitor {
         // Visit observe handlers if present
         if let Some(observe) = &agent.observe {
             for handler in &observe.handlers {
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: existing_type.clone(),
+                                found: param.type_info.clone(),
+                                location: Default::default(),
+                            });
+                        }
+                    }
+                }
                 self.visit_handler_block(&handler.block, ctx)?;
             }
         }
@@ -318,6 +354,18 @@ impl TypeVisitor for DefaultVisitor {
         // Visit react handlers if present
         if let Some(react) = &agent.react {
             for handler in &react.handlers {
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: existing_type.clone(),
+                                found: param.type_info.clone(),
+                                location: Default::default(),
+                            });
+                        }
+                    }
+                }
                 self.visit_handler_block(&handler.block, ctx)?;
             }
         }
