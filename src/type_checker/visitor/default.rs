@@ -29,10 +29,69 @@ impl DefaultVisitor {
                             message: "Cannot infer type of empty list".to_string(),
                         });
                     }
-                    let item_type = self.infer_type(&Expression::Literal(items[0].clone()), ctx)?;
-                    TypeInfo::Array(Box::new(item_type))
+                    // Infer type from first item
+                    let first_type =
+                        self.infer_type(&Expression::Literal(items[0].clone()), ctx)?;
+
+                    // Check that all items have the same type
+                    for item in items.iter().skip(1) {
+                        let item_type = self.infer_type(&Expression::Literal(item.clone()), ctx)?;
+                        if item_type != first_type {
+                            return Err(TypeCheckError::TypeInferenceError {
+                                message: format!(
+                                    "List contains mixed types: found both {} and {}",
+                                    first_type, item_type
+                                ),
+                            });
+                        }
+                    }
+
+                    TypeInfo::Array(Box::new(first_type))
                 }
-                crate::ast::Literal::Map(_) => TypeInfo::Simple("Map".to_string()),
+                crate::ast::Literal::Map(entries) => {
+                    if entries.is_empty() {
+                        return Err(TypeCheckError::TypeInferenceError {
+                            message: "Cannot infer type of empty map".to_string(),
+                        });
+                    }
+
+                    // Get first entry to infer key and value types
+                    let (first_key, first_value) = entries.iter().next().unwrap();
+                    let key_type = self.infer_type(
+                        &Expression::Literal(crate::ast::Literal::String(first_key.clone())),
+                        ctx,
+                    )?;
+                    let value_type =
+                        self.infer_type(&Expression::Literal(first_value.clone()), ctx)?;
+
+                    // Check that all entries have consistent types
+                    for (key, value) in entries.iter().skip(1) {
+                        let k_type = self.infer_type(
+                            &Expression::Literal(crate::ast::Literal::String(key.clone())),
+                            ctx,
+                        )?;
+                        let v_type = self.infer_type(&Expression::Literal(value.clone()), ctx)?;
+
+                        if k_type != key_type {
+                            return Err(TypeCheckError::TypeInferenceError {
+                                message: format!(
+                                    "Map contains mixed key types: found both {} and {}",
+                                    key_type, k_type
+                                ),
+                            });
+                        }
+                        if v_type != value_type {
+                            return Err(TypeCheckError::TypeInferenceError {
+                                message: format!(
+                                    "Map contains mixed value types: found both {} and {}",
+                                    value_type, v_type
+                                ),
+                            });
+                        }
+                    }
+
+                    TypeInfo::Map(Box::new(key_type), Box::new(value_type))
+                }
                 crate::ast::Literal::Null => TypeInfo::Simple("Null".to_string()),
                 _ => {
                     return Err(TypeCheckError::TypeInferenceError {
@@ -40,6 +99,7 @@ impl DefaultVisitor {
                     })
                 }
             }),
+            // ... rest of the match arms remain unchanged ...
             Expression::Variable(name) => {
                 if let Some(type_info) = ctx.scope.get_type(name) {
                     Ok(type_info.clone())
@@ -410,6 +470,94 @@ impl TypeVisitor for DefaultVisitor {
     ) -> TypeCheckResult<()> {
         // Infer type to perform type checking
         self.infer_type(expr, ctx)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Literal;
+
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_map_type_inference() -> TypeCheckResult<()> {
+        let visitor = DefaultVisitor::new();
+        let ctx = TypeContext::new();
+
+        // Test empty map
+        let empty_map: HashMap<String, Literal> = HashMap::new();
+        let expr = Expression::Literal(Literal::Map(empty_map));
+        let result = visitor.infer_type(&expr, &ctx);
+        assert!(matches!(
+            result,
+            Err(TypeCheckError::TypeInferenceError { .. })
+        ));
+
+        // Test map with consistent types
+        let mut map = HashMap::new();
+        map.insert("key1".to_string(), Literal::Integer(1));
+        map.insert("key2".to_string(), Literal::Integer(2));
+        let expr = Expression::Literal(Literal::Map(map));
+        let result = visitor.infer_type(&expr, &ctx)?;
+        assert!(matches!(
+            result,
+            TypeInfo::Map(key_type, value_type)
+            if matches!(*key_type, TypeInfo::Simple(ref s) if s == "String")
+            && matches!(*value_type, TypeInfo::Simple(ref s) if s == "Int")
+        ));
+
+        // Test map with mixed value types
+        let mut map = HashMap::new();
+        map.insert("key1".to_string(), Literal::Integer(1));
+        map.insert("key2".to_string(), Literal::String("value".to_string()));
+        let expr = Expression::Literal(Literal::Map(map));
+        let result = visitor.infer_type(&expr, &ctx);
+        assert!(matches!(
+            result,
+            Err(TypeCheckError::TypeInferenceError { .. })
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_list_type_inference() -> TypeCheckResult<()> {
+        let visitor = DefaultVisitor::new();
+        let ctx = TypeContext::new();
+
+        // Test empty list
+        let expr = Expression::Literal(Literal::List(vec![]));
+        let result = visitor.infer_type(&expr, &ctx);
+        assert!(matches!(
+            result,
+            Err(TypeCheckError::TypeInferenceError { .. })
+        ));
+
+        // Test list with consistent types
+        let expr = Expression::Literal(Literal::List(vec![
+            Literal::Integer(1),
+            Literal::Integer(2),
+            Literal::Integer(3),
+        ]));
+        let result = visitor.infer_type(&expr, &ctx)?;
+        assert!(matches!(
+            result,
+            TypeInfo::Array(inner) if matches!(*inner, TypeInfo::Simple(ref s) if s == "Int")
+        ));
+
+        // Test list with mixed types
+        let expr = Expression::Literal(Literal::List(vec![
+            Literal::Integer(1),
+            Literal::String("value".to_string()),
+        ]));
+        let result = visitor.infer_type(&expr, &ctx);
+        assert!(matches!(
+            result,
+            Err(TypeCheckError::TypeInferenceError { .. })
+        ));
+
         Ok(())
     }
 }
