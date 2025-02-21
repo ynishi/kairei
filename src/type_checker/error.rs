@@ -34,10 +34,40 @@ pub enum TypeCheckError {
 
     #[error("Type inference error: {message}")]
     TypeInferenceError { message: String },
+
+    #[error("Undefined variable: {0}")]
+    UndefinedVariable(String),
+
+    #[error("Undefined function: {0}")]
+    UndefinedFunction(String),
+
+    #[error("Invalid return type: expected {expected}, found {found}")]
+    InvalidReturnType {
+        expected: TypeInfo,
+        found: TypeInfo,
+        location: Location,
+    },
+
+    #[error("Invalid argument type for function {function}: argument {argument} expected {expected}, found {found}")]
+    InvalidArgumentType {
+        function: String,
+        argument: String,
+        expected: TypeInfo,
+        found: TypeInfo,
+        location: Location,
+    },
+
+    #[error("Invalid operator type: operator {operator} cannot be applied to {left_type} and {right_type}")]
+    InvalidOperatorType {
+        operator: String,
+        left_type: TypeInfo,
+        right_type: TypeInfo,
+        location: Location,
+    },
 }
 
 /// Location information for error reporting
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Location {
     pub line: usize,
     pub column: usize,
