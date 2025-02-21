@@ -34,14 +34,20 @@ impl DefaultVisitor {
         expected_type: &TypeInfo,
         ctx: &TypeContext,
     ) -> TypeCheckResult<()> {
-        let expr_type = self.infer_type(expr, ctx)?;
-
-        // Handle Result type specifically for EventHandlers
         match expected_type {
             TypeInfo::Result { ok_type, err_type } => match expr {
                 Expression::Ok(inner_expr) => {
                     let inner_type = self.infer_type(inner_expr, ctx)?;
-                    if inner_type != **ok_type {
+                    // Any型は任意の型を受け入れる
+                    if let TypeInfo::Simple(type_name) = &**ok_type {
+                        if type_name != "Any" && inner_type != **ok_type {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: (**ok_type).clone(),
+                                found: inner_type,
+                                location: Default::default(),
+                            });
+                        }
+                    } else if inner_type != **ok_type {
                         return Err(TypeCheckError::TypeMismatch {
                             expected: (**ok_type).clone(),
                             found: inner_type,
@@ -51,25 +57,29 @@ impl DefaultVisitor {
                 }
                 Expression::Err(inner_expr) => {
                     let inner_type = self.infer_type(inner_expr, ctx)?;
-                    if inner_type != **err_type {
-                        return Err(TypeCheckError::TypeMismatch {
-                            expected: (**err_type).clone(),
-                            found: inner_type,
-                            location: Default::default(),
-                        });
+                    // エラーの場合、String型をError型として扱う
+                    if let TypeInfo::Simple(type_name) = &inner_type {
+                        if type_name == "String" {
+                            return Ok(());
+                        }
                     }
+                    return Err(TypeCheckError::TypeMismatch {
+                        expected: (**err_type).clone(),
+                        found: inner_type,
+                        location: Default::default(),
+                    });
                 }
                 _ => {
-                    if expr_type != *expected_type {
-                        return Err(TypeCheckError::TypeMismatch {
-                            expected: expected_type.clone(),
-                            found: expr_type,
-                            location: Default::default(),
-                        });
-                    }
+                    let expr_type = self.infer_type(expr, ctx)?;
+                    return Err(TypeCheckError::TypeMismatch {
+                        expected: expected_type.clone(),
+                        found: expr_type,
+                        location: Default::default(),
+                    });
                 }
             },
             _ => {
+                let expr_type = self.infer_type(expr, ctx)?;
                 if expr_type != *expected_type {
                     return Err(TypeCheckError::TypeMismatch {
                         expected: expected_type.clone(),
@@ -269,6 +279,29 @@ impl TypeVisitor for DefaultVisitor {
         // Visit world definition if present
         if let Some(world_def) = &mut root.world_def {
             for handler in &world_def.handlers.handlers {
+                // 既存の型定義がない場合のみデフォルト値を設定
+                if ctx.scope.get_type("return_type").is_none() {
+                    ctx.scope.insert_type(
+                        "return_type".to_string(),
+                        TypeInfo::Result {
+                            ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
+                            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                        },
+                    );
+                }
+
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: existing_type.clone(),
+                                found: param.type_info.clone(),
+                                location: Default::default(),
+                            });
+                        }
+                    }
+                }
                 self.visit_handler(handler, ctx)?;
             }
         }
@@ -304,6 +337,24 @@ impl TypeVisitor for DefaultVisitor {
         // Visit answer handlers if present
         if let Some(answer) = &agent.answer {
             for handler in &answer.handlers {
+                // Register handler return type in scope
+                ctx.scope.insert_type(
+                    "handler_return_type".to_string(),
+                    handler.return_type.clone(),
+                );
+
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: existing_type.clone(),
+                                found: param.type_info.clone(),
+                                location: Default::default(),
+                            });
+                        }
+                    }
+                }
                 self.visit_handler_block(&handler.block, ctx)?;
             }
         }
@@ -311,6 +362,29 @@ impl TypeVisitor for DefaultVisitor {
         // Visit observe handlers if present
         if let Some(observe) = &agent.observe {
             for handler in &observe.handlers {
+                // 既存の型定義がない場合のみデフォルト値を設定
+                if ctx.scope.get_type("return_type").is_none() {
+                    ctx.scope.insert_type(
+                        "return_type".to_string(),
+                        TypeInfo::Result {
+                            ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
+                            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                        },
+                    );
+                }
+
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: existing_type.clone(),
+                                found: param.type_info.clone(),
+                                location: Default::default(),
+                            });
+                        }
+                    }
+                }
                 self.visit_handler_block(&handler.block, ctx)?;
             }
         }
@@ -318,6 +392,29 @@ impl TypeVisitor for DefaultVisitor {
         // Visit react handlers if present
         if let Some(react) = &agent.react {
             for handler in &react.handlers {
+                // 既存の型定義がない場合のみデフォルト値を設定
+                if ctx.scope.get_type("return_type").is_none() {
+                    ctx.scope.insert_type(
+                        "return_type".to_string(),
+                        TypeInfo::Result {
+                            ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
+                            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                        },
+                    );
+                }
+
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            return Err(TypeCheckError::TypeMismatch {
+                                expected: existing_type.clone(),
+                                found: param.type_info.clone(),
+                                location: Default::default(),
+                            });
+                        }
+                    }
+                }
                 self.visit_handler_block(&handler.block, ctx)?;
             }
         }
@@ -398,10 +495,19 @@ impl TypeVisitor for DefaultVisitor {
             }
             Statement::Return(expr) => {
                 // Get current function's return type from context
-                if let Some(expected_type) = ctx.scope.get_type("return_type") {
-                    let expected_type = expected_type.clone();
-                    self.check_return_type(expr, &expected_type, ctx)?;
-                }
+                // For RequestHandler, use its own return_type
+                // For other handlers, use return_type from scope
+                let expected_type =
+                    if let Some(return_type) = ctx.scope.get_type("handler_return_type") {
+                        return_type.clone()
+                    } else if let Some(return_type) = ctx.scope.get_type("return_type") {
+                        return_type.clone()
+                    } else {
+                        return Err(TypeCheckError::TypeInferenceError {
+                            message: "No return type found for handler".to_string(),
+                        });
+                    };
+                self.check_return_type(expr, &expected_type, ctx)?;
                 Ok(())
             }
             Statement::Block(statements) => {
