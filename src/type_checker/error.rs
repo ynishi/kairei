@@ -83,6 +83,45 @@ impl std::fmt::Display for MetaError {
     }
 }
 
+impl TypeCheckError {
+    pub fn with_meta(self, meta: MetaError) -> Self {
+        match self {
+            Self::InvalidOperatorType {
+                operator,
+                left_type,
+                right_type,
+                ..
+            } => Self::InvalidOperatorType {
+                operator,
+                left_type,
+                right_type,
+                meta,
+            },
+            _ => self,
+        }
+    }
+
+    pub fn type_mismatch(expected: TypeInfo, found: TypeInfo, location: Location) -> Self {
+        Self::TypeMismatch {
+            expected,
+            found,
+            location,
+        }
+    }
+
+    pub fn undefined_type(name: String) -> Self {
+        Self::UndefinedType(name)
+    }
+
+    pub fn undefined_variable(name: String) -> Self {
+        Self::UndefinedVariable(name)
+    }
+
+    pub fn type_inference_error(message: String) -> Self {
+        Self::TypeInferenceError { message }
+    }
+}
+
 impl MetaError {
     pub fn new(location: Location, help: &str, suggestion: &str) -> Self {
         Self {
@@ -92,14 +131,28 @@ impl MetaError {
         }
     }
 
-    pub fn with_help(mut self, help: String) -> Self {
-        self.help = Some(help);
-        self
+    pub fn with_location(location: Location) -> Self {
+        Self {
+            location,
+            help: None,
+            suggestion: None,
+        }
     }
 
-    pub fn with_suggestion(mut self, suggestion: String) -> Self {
-        self.suggestion = Some(suggestion);
-        self
+    pub fn with_context(location: Location, help: &str) -> Self {
+        Self {
+            location,
+            help: Some(help.to_string()),
+            suggestion: None,
+        }
+    }
+
+    pub fn with_suggestion(location: Location, help: &str, suggestion: &str) -> Self {
+        Self {
+            location,
+            help: Some(help.to_string()),
+            suggestion: Some(suggestion.to_string()),
+        }
     }
 }
 
@@ -119,3 +172,41 @@ impl std::fmt::Display for Location {
 
 /// Result type for type checking operations
 pub type TypeCheckResult<T> = Result<T, TypeCheckError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_helpers() {
+        let location = Location::default();
+        let type_info = TypeInfo::Simple("Int".to_string());
+
+        // Test type mismatch helper
+        let error = TypeCheckError::type_mismatch(
+            type_info.clone(),
+            TypeInfo::Simple("String".to_string()),
+            location.clone(),
+        );
+        assert!(matches!(error, TypeCheckError::TypeMismatch { .. }));
+
+        // Test undefined type helper
+        let error = TypeCheckError::undefined_type("MyType".to_string());
+        assert!(matches!(error, TypeCheckError::UndefinedType(..)));
+
+        // Test with_meta helper
+        let meta = MetaError::with_suggestion(
+            location,
+            "Invalid types for operation",
+            "Use numeric types",
+        );
+        let error = TypeCheckError::InvalidOperatorType {
+            operator: "+".to_string(),
+            left_type: type_info.clone(),
+            right_type: type_info,
+            meta: MetaError::default(),
+        }
+        .with_meta(meta);
+        assert!(matches!(error, TypeCheckError::InvalidOperatorType { .. }));
+    }
+}
