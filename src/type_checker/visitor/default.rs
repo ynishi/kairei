@@ -1,10 +1,10 @@
-use crate::ast::{
-    Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, StateDef, Statement, TypeInfo,
+use std::collections::HashMap;
+
+use crate::{
+    ast::{Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, StateDef, Statement, TypeInfo, FieldInfo},
+    type_checker::{visitor::common::TypeVisitor, TypeCheckError, TypeCheckResult, TypeContext},
+    Argument,
 };
-use crate::type_checker::{
-    visitor::common::TypeVisitor, TypeCheckError, TypeCheckResult, TypeContext,
-};
-use crate::Argument;
 
 use super::{
     expression::{DefaultExpressionChecker, ExpressionTypeChecker},
@@ -38,15 +38,11 @@ impl DefaultVisitor {
             Expression::BinaryOp { op, left, right } => {
                 let left_type = self.infer_type(left, ctx)?;
                 let right_type = self.infer_type(right, ctx)?;
-                self.expression_checker
-                    .infer_binary_op_type(&left_type, &right_type, op)
+                self.expression_checker.infer_binary_op_type(&left_type, &right_type, op)
             }
-            Expression::FunctionCall {
-                function,
-                arguments,
-            } => self
-                .function_checker
-                .check_function_call(function, arguments, ctx),
+            Expression::FunctionCall { function, arguments } => {
+                self.function_checker.check_function_call(function, arguments, ctx)
+            }
             Expression::Think { args, .. } => {
                 // Check argument types
                 for arg in args {
@@ -92,10 +88,46 @@ impl DefaultVisitor {
                 })
             }
             Expression::StateAccess(path) => {
-                if let Some(type_info) = ctx.scope.get_type(&path.0.join(".")) {
-                    Ok(type_info.clone())
+                let full_path = path.0.join(".");
+                if let Some(type_info) = ctx.scope.get_type(&path.0[0]) {
+                    match &type_info {
+                        TypeInfo::Custom { fields, .. } => {
+                            if path.0.len() > 1 {
+                                // Field access
+                                let field_name = &path.0[1];
+                                if let Some(field_info) = fields.get(field_name) {
+                                    if let Some(field_type) = &field_info.type_info {
+                                        Ok(field_type.clone())
+                                    } else {
+                                        // Infer type from default value if available
+                                        if let Some(default_value) = &field_info.default_value {
+                                            self.infer_type(default_value, ctx)
+                                        } else {
+                                            Err(TypeCheckError::TypeInferenceError {
+                                                message: format!("Cannot infer type for field {}", field_name),
+                                            })
+                                        }
+                                    }
+                                } else {
+                                    Err(TypeCheckError::UndefinedVariable(format!(
+                                        "Field {} not found in type",
+                                        field_name
+                                    )))
+                                }
+                            } else {
+                                Ok(type_info.clone())
+                            }
+                        }
+                        _ => {
+                            if let Some(type_info) = ctx.scope.get_type(&full_path) {
+                                Ok(type_info.clone())
+                            } else {
+                                Err(TypeCheckError::UndefinedVariable(full_path))
+                            }
+                        }
+                    }
                 } else {
-                    Err(TypeCheckError::UndefinedVariable(path.0.join(".")))
+                    Err(TypeCheckError::UndefinedVariable(full_path))
                 }
             }
             Expression::Await(exprs) => {
@@ -110,6 +142,48 @@ impl DefaultVisitor {
                 Ok(TypeInfo::Simple("Any".to_string()))
             }
         }
+    }
+
+    fn check_custom_type_fields(
+        &self,
+        fields: &HashMap<String, FieldInfo>,
+        ctx: &TypeContext,
+    ) -> TypeCheckResult<()> {
+        for (_, field_info) in fields {
+            // Check field type if specified
+            if let Some(field_type) = &field_info.type_info {
+                match field_type {
+                    TypeInfo::Simple(type_name) => {
+                        if !ctx.scope.contains_type(type_name) {
+                            return Err(TypeCheckError::UndefinedType(type_name.clone()));
+                        }
+                    }
+                    TypeInfo::Custom { name, fields } => {
+                        // Recursively check nested custom types
+                        if !ctx.scope.contains_type(name) {
+                            return Err(TypeCheckError::UndefinedType(name.clone()));
+                        }
+                        self.check_custom_type_fields(fields, ctx)?;
+                    }
+                    _ => {} // Other type variants are valid
+                }
+            }
+
+            // Check default value type if provided
+            if let Some(default_value) = &field_info.default_value {
+                let default_type = self.infer_type(default_value, ctx)?;
+                if let Some(field_type) = &field_info.type_info {
+                    if default_type != *field_type {
+                        return Err(TypeCheckError::TypeMismatch {
+                            expected: field_type.clone(),
+                            found: default_type,
+                            location: Default::default(),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -184,10 +258,19 @@ impl TypeVisitor for DefaultVisitor {
         // Check each state variable's type
         for var_def in &state.variables {
             let var_def = var_def.1;
-            if let crate::ast::TypeInfo::Simple(type_name) = &var_def.type_info {
-                if !ctx.scope.contains_type(type_name) {
-                    return Err(TypeCheckError::UndefinedType(type_name.clone()));
+            match &var_def.type_info {
+                TypeInfo::Simple(type_name) => {
+                    if !ctx.scope.contains_type(type_name) {
+                        return Err(TypeCheckError::UndefinedType(type_name.clone()));
+                    }
                 }
+                TypeInfo::Custom { name, fields } => {
+                    if !ctx.scope.contains_type(name) {
+                        return Err(TypeCheckError::UndefinedType(name.clone()));
+                    }
+                    self.check_custom_type_fields(fields, ctx)?;
+                }
+                _ => {}
             }
 
             // If there's an initial value, check its type
@@ -243,14 +326,17 @@ impl TypeVisitor for DefaultVisitor {
                 Ok(())
             }
             Statement::Return(expr) => {
+                let expr_type = self.infer_type(expr, ctx)?;
                 // Get current function's return type from context
                 if let Some(expected_type) = ctx.scope.get_type("return_type") {
-                    self.function_checker.check_return_type(
-                        "current_function",
-                        expr,
-                        &expected_type,
-                        ctx,
-                    )?;
+                    // Compare inferred type with expected type
+                    if expr_type != expected_type {
+                        return Err(TypeCheckError::TypeMismatch {
+                            expected: expected_type.clone(),
+                            found: expr_type,
+                            location: Default::default(),
+                        });
+                    }
                 }
                 Ok(())
             }
