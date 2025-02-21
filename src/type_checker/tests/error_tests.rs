@@ -1,98 +1,132 @@
-use super::*;
-use crate::{ast::TypeInfo, type_checker::error::Location};
+use crate::{
+    ast::{BinaryOperator, Expression, Literal, TypeInfo},
+    type_checker::{
+        visitor::{common::TypeVisitor, default::DefaultVisitor},
+        TypeCheckError, TypeCheckResult, TypeContext,
+    },
+};
 
 #[test]
-fn test_type_check_error_display() {
-    let location = Location {
-        line: 1,
-        column: 1,
-        file: "test.kr".to_string(),
+fn test_invalid_operator_type() -> TypeCheckResult<()> {
+    let mut visitor = DefaultVisitor::new();
+    let mut ctx = TypeContext::new();
+
+    // Try to add a string and an integer
+    let expr = Expression::BinaryOp {
+        left: Box::new(Expression::Literal(Literal::String("hello".to_string()))),
+        right: Box::new(Expression::Literal(Literal::Integer(42))),
+        op: BinaryOperator::Add,
     };
 
-    let error = TypeCheckError::TypeMismatch {
-        expected: TypeInfo::Simple("String".to_string()),
-        found: TypeInfo::Simple("Int".to_string()),
-        location,
+    let result = visitor.visit_expression(&expr, &mut ctx);
+    assert!(matches!(
+        result,
+        Err(TypeCheckError::InvalidOperatorType { .. })
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn test_invalid_logical_operator_type() -> TypeCheckResult<()> {
+    let mut visitor = DefaultVisitor::new();
+    let mut ctx = TypeContext::new();
+
+    // Try to use AND with non-boolean operands
+    let expr = Expression::BinaryOp {
+        left: Box::new(Expression::Literal(Literal::Integer(1))),
+        right: Box::new(Expression::Literal(Literal::Integer(2))),
+        op: BinaryOperator::And,
     };
 
-    assert!(error.to_string().contains("Type mismatch"));
-    assert!(error.to_string().contains("String"));
-    assert!(error.to_string().contains("Int"));
+    let result = visitor.visit_expression(&expr, &mut ctx);
+    assert!(matches!(
+        result,
+        Err(TypeCheckError::InvalidOperatorType { .. })
+    ));
+
+    Ok(())
 }
 
 #[test]
-fn test_type_check_error_undefined_type() {
-    let error = TypeCheckError::UndefinedType("CustomType".to_string());
-    assert!(error.to_string().contains("Undefined type"));
-    assert!(error.to_string().contains("CustomType"));
-}
+fn test_invalid_function_argument_type() -> TypeCheckResult<()> {
+    let mut visitor = DefaultVisitor::new();
+    let mut ctx = TypeContext::new();
 
-#[test]
-fn test_type_check_result() {
-    let result: TypeCheckResult<()> = Ok(());
-    assert!(result.is_ok());
-
-    let error_result: TypeCheckResult<()> = Err(TypeCheckError::UndefinedType("Test".to_string()));
-    assert!(error_result.is_err());
-}
-
-#[test]
-fn test_plugin_type_error() {
-    let error = TypeCheckError::PluginTypeError {
-        message: "Invalid plugin configuration".to_string(),
-    };
-    assert!(error.to_string().contains("Invalid plugin configuration"));
-}
-
-#[test]
-fn test_invalid_state_variable() {
-    let error = TypeCheckError::InvalidStateVariable {
-        message: "Missing required field".to_string(),
-    };
-    assert!(error.to_string().contains("Missing required field"));
-}
-
-#[test]
-fn test_invalid_handler_signature() {
-    let error = TypeCheckError::InvalidHandlerSignature {
-        message: "Invalid parameter type".to_string(),
-    };
-    assert!(error.to_string().contains("Invalid parameter type"));
-}
-
-#[test]
-fn test_invalid_think_block() {
-    let error = TypeCheckError::InvalidThinkBlock {
-        message: "Invalid think block configuration".to_string(),
-    };
-    assert!(error
-        .to_string()
-        .contains("Invalid think block configuration"));
-}
-
-#[test]
-fn test_location_display() {
-    let location = Location {
-        line: 42,
-        column: 10,
-        file: "test.kr".to_string(),
-    };
-    assert_eq!(location.to_string(), "test.kr:42:10");
-}
-
-#[test]
-fn test_type_check_error_debug() {
-    let error = TypeCheckError::TypeMismatch {
-        expected: TypeInfo::Simple("String".to_string()),
-        found: TypeInfo::Simple("Int".to_string()),
-        location: Location {
-            line: 1,
-            column: 1,
-            file: "test.kr".to_string(),
+    // Register function type
+    ctx.scope.insert_type(
+        "test_func".to_string(),
+        TypeInfo::Result {
+            ok_type: Box::new(TypeInfo::Simple("Int".to_string())),
+            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
         },
+    );
+
+    // Call function with wrong argument type
+    let expr = Expression::FunctionCall {
+        function: "test_func".to_string(),
+        arguments: vec![Expression::Literal(Literal::String(
+            "wrong type".to_string(),
+        ))],
     };
-    let debug_str = format!("{:?}", error);
-    assert!(debug_str.contains("TypeMismatch"));
-    assert!(debug_str.contains("String"));
-    assert!(debug_str.contains("Int"));
+
+    let result = visitor.visit_expression(&expr, &mut ctx);
+    assert!(matches!(
+        result,
+        Err(TypeCheckError::InvalidArgumentType { .. })
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn test_undefined_variable() -> TypeCheckResult<()> {
+    let mut visitor = DefaultVisitor::new();
+    let mut ctx = TypeContext::new();
+
+    let expr = Expression::Variable("undefined_var".to_string());
+    let result = visitor.visit_expression(&expr, &mut ctx);
+    assert!(matches!(result, Err(TypeCheckError::UndefinedVariable(..))));
+
+    Ok(())
+}
+
+#[test]
+fn test_undefined_function() -> TypeCheckResult<()> {
+    let mut visitor = DefaultVisitor::new();
+    let mut ctx = TypeContext::new();
+
+    let expr = Expression::FunctionCall {
+        function: "undefined_func".to_string(),
+        arguments: vec![],
+    };
+    let result = visitor.visit_expression(&expr, &mut ctx);
+    assert!(matches!(result, Err(TypeCheckError::UndefinedFunction(..))));
+
+    Ok(())
+}
+
+#[test]
+fn test_type_mismatch_in_assignment() -> TypeCheckResult<()> {
+    let mut visitor = DefaultVisitor::new();
+    let mut ctx = TypeContext::new();
+
+    // Register variable type
+    ctx.scope
+        .insert_type("x".to_string(), TypeInfo::Simple("Int".to_string()));
+
+    // Try to assign string to int variable
+    let expr = Expression::Variable("x".to_string());
+    let value = Expression::Literal(Literal::String("wrong type".to_string()));
+
+    let result = visitor.visit_statement(
+        &crate::ast::Statement::Assignment {
+            target: vec![expr],
+            value: value,
+        },
+        &mut ctx,
+    );
+    assert!(matches!(result, Err(TypeCheckError::TypeMismatch { .. })));
+
+    Ok(())
 }

@@ -1,5 +1,4 @@
-use super::*;
-use crate::ast::TypeInfo;
+use crate::{ast::TypeInfo, type_checker::TypeScope};
 
 #[test]
 fn test_type_scope_basic_operations() {

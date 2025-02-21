@@ -649,6 +649,25 @@ pub enum BinaryOperator {
     Or,
 }
 
+impl fmt::Display for BinaryOperator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BinaryOperator::Add => write!(f, "+"),
+            BinaryOperator::Subtract => write!(f, "-"),
+            BinaryOperator::Multiply => write!(f, "*"),
+            BinaryOperator::Divide => write!(f, "/"),
+            BinaryOperator::Equal => write!(f, "=="),
+            BinaryOperator::NotEqual => write!(f, "!="),
+            BinaryOperator::LessThan => write!(f, "<"),
+            BinaryOperator::GreaterThan => write!(f, ">"),
+            BinaryOperator::LessThanEqual => write!(f, "<="),
+            BinaryOperator::GreaterThanEqual => write!(f, ">="),
+            BinaryOperator::And => write!(f, "&&"),
+            BinaryOperator::Or => write!(f, "||"),
+        }
+    }
+}
+
 // 文（MicroAgentと共通だが、World用に制限される）
 #[derive(Debug, Clone, PartialEq)]
 pub enum WorldStatement {

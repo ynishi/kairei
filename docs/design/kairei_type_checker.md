@@ -11,8 +11,7 @@ The TypeCheck phase serves as a critical validation layer between the Parser and
    - Ensure type safety of state definitions and their initial values
    - Verify type compatibility in request/response handlers
    - Check type correctness in think block interpolations
-   - Validate plugin API type contracts
-
+  
 2. Error Collection
    - Collect and aggregate type errors across the entire AST
    - Follow existing error collection pattern used in Parser
@@ -23,111 +22,71 @@ The TypeCheck phase serves as a critical validation layer between the Parser and
    - Resolve type references across the codebase
    - Handle type inference for state variables
    - Validate generic type parameters
-   - Ensure plugin API type compatibility
-
+ 
 4. Integration Points
    - Hook into expression evaluation for type checking
    - Integrate with existing error reporting mechanisms
    - Provide type information for the runtime system
-   - Support plugin system type validation
 
 ### 1.2 Component Architecture
 
-The type checker is designed with a modular architecture that follows existing patterns in the codebase:
+The TypeChecker consists of the following components:
 
 1. Core Components
-   ```rust
-   // Core type checker trait
-   pub trait TypeChecker {
-       fn check_types(&self, ast: &Root) -> TypeCheckResult<()>;
-       fn collect_errors(&self) -> Vec<TypeCheckError>;
-   }
+```rust
+// Main type checker
+pub struct TypeChecker {
+    plugins: Vec<Box<dyn PluginVisitor>>,
+    default_visitor: DefaultVisitor,
+}
 
-   // Type validation context
-   pub struct TypeContext {
-       errors: Vec<TypeCheckError>,
-       scope: TypeScope,
-       plugins: Arc<DashMap<String, PluginTypeInfo>>,
-   }
+// Type checking context
+pub struct TypeContext {
+    scope: TypeScope,
+    errors: Vec<TypeCheckError>,
+}
 
-   // Error types
-   pub enum TypeCheckError {
-       TypeMismatch { expected: TypeInfo, found: TypeInfo, location: Location },
-       UndefinedType { name: String, location: Location },
-       InvalidTypeArguments { message: String, location: Location },
-       PluginTypeError { plugin: String, message: String, location: Location },
-   }
-   ```
+// Error types
+pub enum TypeCheckError {
+    TypeMismatch { expected: TypeInfo, found: TypeInfo },
+    UndefinedType(String),
+    TypeInferenceError { message: String },
+}
+```
 
-2. Visitor Components
-   - AST traversal using visitor pattern
-   - Separate visitors for different language constructs
-   - Type validation rules implemented in visitors
-   - Error collection during traversal
+2. AST Integration
+- Type checking for each AST node (Root, MicroAgent, State, Handler, etc.)
+- AST traversal using the Visitor pattern
+- Error collection and propagation
 
-3. Type Resolution System
-   - Type scope management
-   - Generic type parameter resolution
-   - Plugin type information resolution
-   - Type inference engine
+### 1.3 Extensibility
 
-4. Error Reporting System
-   - Error collection and aggregation
-   - Source location tracking
-   - Detailed error message formatting
-   - Integration with existing error system
+The type checker can be extended in the following ways:
 
-### 1.3 Interface Definitions
+1. Plugin System
+```rust
+// Base trait for plugins
+pub trait TypeVisitor {
+    fn visit_root(&mut self, root: &mut Root, ctx: &mut TypeContext) -> TypeCheckResult<()>;
+    fn visit_micro_agent(&mut self, agent: &mut MicroAgentDef, ctx: &mut TypeContext) -> TypeCheckResult<()>;
+    // ... other visit methods
+}
 
-The type checker defines clear interfaces for integration with other components:
+// Plugin lifecycle hooks
+pub trait PluginVisitor: TypeVisitor {
+    fn before_root(&mut self, root: &mut Root, ctx: &mut TypeContext) -> TypeCheckResult<()>;
+    fn after_root(&mut self, root: &mut Root, ctx: &mut TypeContext) -> TypeCheckResult<()>;
+    // ... other hooks
+}
+```
 
-1. Type Checking Interface
-   ```rust
-   pub trait TypeCheck {
-       // Main entry point for type checking
-       fn check_types(&self, ast: &Root) -> TypeCheckResult<()>;
-       
-       // Type checking for specific constructs
-       fn check_micro_agent(&self, agent: &MicroAgentDef) -> TypeCheckResult<()>;
-       fn check_state(&self, state: &StateDef) -> TypeCheckResult<()>;
-       fn check_handler(&self, handler: &HandlerDef) -> TypeCheckResult<()>;
-       fn check_think(&self, think: &Expression) -> TypeCheckResult<()>;
-       
-       // Error handling
-       fn collect_errors(&self) -> Vec<TypeCheckError>;
-   }
-   ```
+2. Extension Points
+- Addition of custom type checking rules
+- Introduction of new types
+- Extension of error reporting
+- Enhancement of type inference
 
-2. Error Reporting Interface
-   ```rust
-   pub trait TypeErrorReporter {
-       fn report_error(&self, error: TypeCheckError);
-       fn has_errors(&self) -> bool;
-       fn error_count(&self) -> usize;
-       fn format_errors(&self) -> String;
-   }
-   ```
-
-3. Plugin Validation Interface
-   ```rust
-   pub trait PluginTypeValidator {
-       // Validate plugin type contracts
-       fn validate_plugin_types(&self, plugin: &ProviderPlugin) -> TypeCheckResult<()>;
-       
-       // Check plugin-specific type rules
-       fn check_plugin_request(&self, request: &ProviderRequest) -> TypeCheckResult<()>;
-       fn check_plugin_response(&self, response: &ProviderResponse) -> TypeCheckResult<()>;
-   }
-   ```
-
-4. Type Resolution Interface
-   ```rust
-   pub trait TypeResolver {
-       fn resolve_type(&self, type_info: &TypeInfo) -> TypeCheckResult<ResolvedType>;
-       fn resolve_generic(&self, type_params: &[TypeInfo]) -> TypeCheckResult<ResolvedType>;
-       fn infer_type(&self, expr: &Expression) -> TypeCheckResult<TypeInfo>;
-   }
-   ```
+This design allows for extending the type checker's functionality while maintaining its core features.
 
 ### 1.4 Error Reporting Mechanism
 
@@ -156,13 +115,6 @@ The error reporting mechanism follows the existing error handling patterns in th
        
        // Generic type errors
        InvalidTypeArguments {
-           message: String,
-           location: Location,
-       },
-       
-       // Plugin-specific errors
-       PluginTypeError {
-           plugin: String,
            message: String,
            location: Location,
        },
@@ -242,21 +194,7 @@ The KAIREI type system is built on a hierarchical structure that supports both b
    }
    ```
 
-4. Plugin API Types
-   ```rust
-   // Plugin interface types
-   type PluginRequest {
-       method: String,
-       parameters: Map<String, Value>
-   }
-   
-   type PluginResponse {
-       status: Int,
-       data: Result<Value, Error>
-   }
-   ```
-
-5. Type Relationships
+4. Type Relationships
    ```
    Value
    ├── Primitive Types
@@ -327,12 +265,6 @@ The type checker enforces the following rules:
    // Rule 1: String interpolation types must be stringifiable
    think("Count is ${count}")     // Valid if count is Int/String/etc
    think("Data is ${complex}")    // Error if complex lacks Display
-   
-   // Rule 2: Plugin configurations must match schema
-   think("Query") with {
-       model: "gpt-4",           // Valid: string config
-       temperature: "high"       // Error: expected float
-   }
    ```
 
 4. Binary Operation Rules
@@ -348,24 +280,6 @@ The type checker enforces the following rules:
    // Rule 3: Logical operations require boolean operands
    Boolean && Boolean  // Valid
    Int || Boolean     // Error
-   ```
-
-5. Plugin API Rules
-   ```rust
-   // Rule 1: Plugin requests must match declared schema
-   plugin.execute({
-       method: "search",         // Valid: matches schema
-       params: {                 // Valid: matches parameter types
-           query: "test",
-           limit: 10
-       }
-   })
-   
-   // Rule 2: Plugin responses must be handled appropriately
-   match plugin.response {
-       Ok(data: Value) => {},    // Valid: handles success case
-       Err(e: Error) => {}       // Valid: handles error case
-   }
    ```
 
 ### 2.3 Error Cases
@@ -399,24 +313,7 @@ The type checker handles the following error scenarios:
    // Help: Consider parsing strings to integers
    ```
 
-3. Plugin API Errors
-   ```rust
-   // Case 1: Invalid plugin configuration
-   plugin.configure({
-       model: 123,  // should be string
-       temp: "hot"  // should be float
-   })
-   // Error: Invalid type for plugin config 'model'
-   // Help: 'model' must be a string
-   
-   // Case 2: Invalid response handling
-   plugin.execute()
-       .map(|x: String| x.len())
-   // Error: Plugin response type mismatch
-   // Help: Plugin returns Value, not String
-   ```
-
-4. Think Block Errors
+3. Think Block Errors
    ```rust
    // Case 1: Invalid interpolation
    think("Data: ${complex_obj}")
@@ -431,7 +328,7 @@ The type checker handles the following error scenarios:
    // Help: temperature must be a float between 0 and 1
    ```
 
-5. State Definition Errors
+4. State Definition Errors
    ```rust
    // Case 1: Invalid initial values
    state {
@@ -448,7 +345,7 @@ The type checker handles the following error scenarios:
    // Help: Use a valid type like Int, String, etc.
    ```
 
-6. Request Handler Errors
+5. Request Handler Errors
    ```rust
    // Case 1: Return type mismatch
    on request Process() -> Result<Int> {
@@ -527,16 +424,12 @@ The type system supports limited type inference with clear rules and limitations
    }
    // Error: Conflicting types in branches
    
-   // Case 3: Plugin interactions
-   plugin.execute(data)   // Error: Cannot infer plugin types
-   plugin.execute(data: RequestType)  // Valid: Type specified
    ```
 
 5. Type Inference Rules
    - Inference flows from values to variables
    - Explicit types take precedence over inference
    - Generic types require sufficient context
-   - Plugin API types must be explicit
    - Think block interpolation types must be explicit
 
 ## 3. Implementation Guide
@@ -587,7 +480,6 @@ The type checker implementation follows a modular design pattern:
    pub struct StateTypeVisitor;
    pub struct HandlerTypeVisitor;
    pub struct ExpressionTypeVisitor;
-   pub struct PluginTypeVisitor;
    ```
 
 3. Type Resolution
@@ -659,23 +551,6 @@ The type checker defines the following core interfaces:
    }
    ```
 
-3. Plugin Validator Interface
-   ```rust
-   pub trait PluginValidator {
-       // Plugin type validation
-       fn validate_plugin(&self, plugin: &ProviderPlugin) -> TypeCheckResult<()>;
-       fn validate_plugin_config(&self, config: &PluginConfig) -> TypeCheckResult<()>;
-       
-       // Request/Response validation
-       fn validate_request(&self, request: &ProviderRequest) -> TypeCheckResult<()>;
-       fn validate_response(&self, response: &ProviderResponse) -> TypeCheckResult<()>;
-       
-       // Schema validation
-       fn validate_schema(&self, schema: &PluginSchema) -> TypeCheckResult<()>;
-       fn validate_against_schema(&self, value: &Value, schema: &PluginSchema) -> TypeCheckResult<()>;
-   }
-   ```
-
 4. Type Context Interface
    ```rust
    pub trait TypeContext {
@@ -708,7 +583,6 @@ The type checker implements a robust error handling strategy:
            
            // Collect errors from all phases
            self.check_types(ast, &mut collector)?;
-           self.check_plugins(ast, &mut collector)?;
            self.check_think_blocks(ast, &mut collector)?;
            
            // Process collected errors
@@ -767,11 +641,6 @@ The type checker implements a robust error handling strategy:
                TypeCheckError::TypeMismatch { .. } => {
                    self.report_error(error);
                    Ok(()) // Continue checking
-               }
-               
-               // Stop on critical errors
-               TypeCheckError::InvalidPlugin { .. } => {
-                   Err(error.clone()) // Stop checking
                }
                
                // Other cases...
