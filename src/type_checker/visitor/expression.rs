@@ -35,9 +35,10 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
             Literal::Duration(_) => TypeInfo::Simple("Duration".to_string()),
             Literal::List(items) => {
                 if items.is_empty() {
-                    return Err(TypeCheckError::TypeInferenceError {
-                        message: "Cannot infer type of empty list".to_string(),
-                    });
+                    return Err(TypeCheckError::type_inference_error(
+                        "Cannot infer type of empty list".to_string(),
+                        Default::default(),
+                    ));
                 }
                 // Infer type from first item
                 let first_type = self.infer_literal_type(&items[0], _ctx)?;
@@ -46,12 +47,13 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
                 for item in items.iter().skip(1) {
                     let item_type = self.infer_literal_type(item, _ctx)?;
                     if item_type != first_type {
-                        return Err(TypeCheckError::TypeInferenceError {
-                            message: format!(
+                        return Err(TypeCheckError::type_inference_error(
+                            format!(
                                 "List contains mixed types: found both {} and {}",
                                 first_type, item_type
                             ),
-                        });
+                            Default::default(),
+                        ));
                     }
                 }
 
@@ -59,9 +61,10 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
             }
             Literal::Map(entries) => {
                 if entries.is_empty() {
-                    return Err(TypeCheckError::TypeInferenceError {
-                        message: "Cannot infer type of empty map".to_string(),
-                    });
+                    return Err(TypeCheckError::type_inference_error(
+                        "Cannot infer type of empty map".to_string(),
+                        Default::default(),
+                    ));
                 }
 
                 // Get first entry to infer key and value types
@@ -76,20 +79,22 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
                     let v_type = self.infer_literal_type(value, _ctx)?;
 
                     if k_type != key_type {
-                        return Err(TypeCheckError::TypeInferenceError {
-                            message: format!(
+                        return Err(TypeCheckError::type_inference_error(
+                            format!(
                                 "Map contains mixed key types: found both {} and {}",
                                 key_type, k_type
                             ),
-                        });
+                            Default::default(),
+                        ));
                     }
                     if v_type != value_type {
-                        return Err(TypeCheckError::TypeInferenceError {
-                            message: format!(
+                        return Err(TypeCheckError::type_inference_error(
+                            format!(
                                 "Map contains mixed value types: found both {} and {}",
                                 value_type, v_type
                             ),
-                        });
+                            Default::default(),
+                        ));
                     }
                 }
 
@@ -97,9 +102,10 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
             }
             Literal::Null => TypeInfo::Simple("Null".to_string()),
             _ => {
-                return Err(TypeCheckError::TypeInferenceError {
-                    message: "Unsupported literal type".to_string(),
-                })
+                return Err(TypeCheckError::type_inference_error(
+                    "Unsupported literal type".to_string(),
+                    Default::default(),
+                ))
             }
         })
     }

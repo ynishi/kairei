@@ -36,7 +36,10 @@ pub enum TypeCheckError {
     InvalidPluginConfig { message: String },
 
     #[error("Type inference error: {message}")]
-    TypeInferenceError { message: String },
+    TypeInferenceError {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Undefined variable: {0}")]
     UndefinedVariable(String),
@@ -140,8 +143,14 @@ impl TypeCheckError {
         Self::UndefinedVariable(name)
     }
 
-    pub fn type_inference_error(message: String) -> Self {
-        Self::TypeInferenceError { message }
+    pub fn type_inference_error(message: String, location: Location) -> Self {
+        Self::TypeInferenceError {
+            message,
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Error during type inference")
+                .with_suggestion("Check that all types can be inferred from context"),
+        }
     }
 }
 
@@ -302,6 +311,28 @@ mod tests {
             assert_eq!(error_meta.suggestion, "Test suggestion");
         } else {
             panic!("Expected TypeMismatch error");
+        }
+    }
+
+    #[test]
+    fn test_type_inference_error_with_meta() {
+        let location = Location {
+            line: 10,
+            column: 20,
+            file: "test.rs".to_string(),
+        };
+        let error =
+            TypeCheckError::type_inference_error("Cannot infer type".to_string(), location.clone());
+
+        if let TypeCheckError::TypeInferenceError { meta, .. } = error {
+            assert_eq!(meta.location, location);
+            assert_eq!(meta.help, "Error during type inference");
+            assert_eq!(
+                meta.suggestion,
+                "Check that all types can be inferred from context"
+            );
+        } else {
+            panic!("Expected TypeInferenceError");
         }
     }
 }
