@@ -41,18 +41,18 @@ impl DefaultVisitor {
                     // Any型は任意の型を受け入れる
                     if let TypeInfo::Simple(type_name) = &**ok_type {
                         if type_name != "Any" && inner_type != **ok_type {
-                            return Err(TypeCheckError::TypeMismatch {
-                                expected: (**ok_type).clone(),
-                                found: inner_type,
-                                location: Default::default(),
-                            });
+                            return Err(TypeCheckError::type_mismatch(
+                                (**ok_type).clone(),
+                                inner_type,
+                                Default::default(),
+                            ));
                         }
                     } else if inner_type != **ok_type {
-                        return Err(TypeCheckError::TypeMismatch {
-                            expected: (**ok_type).clone(),
-                            found: inner_type,
-                            location: Default::default(),
-                        });
+                        return Err(TypeCheckError::type_mismatch(
+                            (**ok_type).clone(),
+                            inner_type,
+                            Default::default(),
+                        ));
                     }
                 }
                 Expression::Err(inner_expr) => {
@@ -63,29 +63,29 @@ impl DefaultVisitor {
                             return Ok(());
                         }
                     }
-                    return Err(TypeCheckError::TypeMismatch {
-                        expected: (**err_type).clone(),
-                        found: inner_type,
-                        location: Default::default(),
-                    });
+                    return Err(TypeCheckError::type_mismatch(
+                        (**err_type).clone(),
+                        inner_type,
+                        Default::default(),
+                    ));
                 }
                 _ => {
                     let expr_type = self.infer_type(expr, ctx)?;
-                    return Err(TypeCheckError::TypeMismatch {
-                        expected: expected_type.clone(),
-                        found: expr_type,
-                        location: Default::default(),
-                    });
+                    return Err(TypeCheckError::type_mismatch(
+                        expected_type.clone(),
+                        expr_type,
+                        Default::default(),
+                    ));
                 }
             },
             _ => {
                 let expr_type = self.infer_type(expr, ctx)?;
                 if expr_type != *expected_type {
-                    return Err(TypeCheckError::TypeMismatch {
-                        expected: expected_type.clone(),
-                        found: expr_type,
-                        location: Default::default(),
-                    });
+                    return Err(TypeCheckError::type_mismatch(
+                        expected_type.clone(),
+                        expr_type,
+                        Default::default(),
+                    ));
                 }
             }
         }
@@ -95,11 +95,11 @@ impl DefaultVisitor {
     fn check_condition(&self, condition: &Expression, ctx: &TypeContext) -> TypeCheckResult<()> {
         let cond_type = self.infer_type(condition, ctx)?;
         if !self.expression_checker.is_boolean(&cond_type) {
-            return Err(TypeCheckError::TypeMismatch {
-                expected: TypeInfo::Simple("Boolean".to_string()),
-                found: cond_type,
-                location: Default::default(),
-            });
+            return Err(TypeCheckError::type_mismatch(
+                TypeInfo::Simple("Boolean".to_string()),
+                cond_type,
+                Default::default(),
+            ));
         }
         Ok(())
     }
@@ -255,11 +255,11 @@ impl DefaultVisitor {
                 let default_type = self.infer_type(default_value, ctx)?;
                 if let Some(field_type) = &field_info.1.type_info {
                     if default_type != *field_type {
-                        return Err(TypeCheckError::TypeMismatch {
-                            expected: field_type.clone(),
-                            found: default_type,
-                            location: Default::default(),
-                        });
+                        return Err(TypeCheckError::type_mismatch(
+                            field_type.clone(),
+                            default_type,
+                            Default::default(),
+                        ));
                     }
                 }
             }
@@ -294,11 +294,11 @@ impl TypeVisitor for DefaultVisitor {
                 for param in &handler.parameters {
                     if let Some(existing_type) = ctx.scope.get_type(&param.name) {
                         if existing_type != param.type_info {
-                            return Err(TypeCheckError::TypeMismatch {
-                                expected: existing_type.clone(),
-                                found: param.type_info.clone(),
-                                location: Default::default(),
-                            });
+                            return Err(TypeCheckError::type_mismatch(
+                                existing_type.clone(),
+                                param.type_info.clone(),
+                                Default::default(),
+                            ));
                         }
                     }
                 }
@@ -347,11 +347,11 @@ impl TypeVisitor for DefaultVisitor {
                 for param in &handler.parameters {
                     if let Some(existing_type) = ctx.scope.get_type(&param.name) {
                         if existing_type != param.type_info {
-                            return Err(TypeCheckError::TypeMismatch {
-                                expected: existing_type.clone(),
-                                found: param.type_info.clone(),
-                                location: Default::default(),
-                            });
+                            return Err(TypeCheckError::type_mismatch(
+                                existing_type.clone(),
+                                param.type_info.clone(),
+                                Default::default(),
+                            ));
                         }
                     }
                 }
@@ -377,11 +377,11 @@ impl TypeVisitor for DefaultVisitor {
                 for param in &handler.parameters {
                     if let Some(existing_type) = ctx.scope.get_type(&param.name) {
                         if existing_type != param.type_info {
-                            return Err(TypeCheckError::TypeMismatch {
-                                expected: existing_type.clone(),
-                                found: param.type_info.clone(),
-                                location: Default::default(),
-                            });
+                            return Err(TypeCheckError::type_mismatch(
+                                existing_type.clone(),
+                                param.type_info.clone(),
+                                Default::default(),
+                            ));
                         }
                     }
                 }
@@ -407,11 +407,11 @@ impl TypeVisitor for DefaultVisitor {
                 for param in &handler.parameters {
                     if let Some(existing_type) = ctx.scope.get_type(&param.name) {
                         if existing_type != param.type_info {
-                            return Err(TypeCheckError::TypeMismatch {
-                                expected: existing_type.clone(),
-                                found: param.type_info.clone(),
-                                location: Default::default(),
-                            });
+                            return Err(TypeCheckError::type_mismatch(
+                                existing_type.clone(),
+                                param.type_info.clone(),
+                                Default::default(),
+                            ));
                         }
                     }
                 }
@@ -445,11 +445,11 @@ impl TypeVisitor for DefaultVisitor {
             if let Some(init_value) = &var_def.initial_value {
                 let init_type = self.infer_type(init_value, ctx)?;
                 if init_type != var_def.type_info {
-                    return Err(TypeCheckError::TypeMismatch {
-                        expected: var_def.type_info.clone(),
-                        found: init_type,
-                        location: Default::default(),
-                    });
+                    return Err(TypeCheckError::type_mismatch(
+                        var_def.type_info.clone(),
+                        init_type,
+                        Default::default(),
+                    ));
                 }
             }
         }
@@ -485,11 +485,11 @@ impl TypeVisitor for DefaultVisitor {
                 let value_type = self.infer_type(value, ctx)?;
                 // Check compatibility
                 if target_type != value_type {
-                    return Err(TypeCheckError::TypeMismatch {
-                        expected: target_type,
-                        found: value_type,
-                        location: Default::default(),
-                    });
+                    return Err(TypeCheckError::type_mismatch(
+                        target_type,
+                        value_type,
+                        Default::default(),
+                    ));
                 }
                 Ok(())
             }
