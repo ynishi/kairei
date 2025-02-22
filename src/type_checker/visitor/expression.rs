@@ -1,6 +1,6 @@
 use crate::{
     ast::{BinaryOperator, Literal, TypeInfo},
-    type_checker::{error::MetaError, TypeCheckError, TypeCheckResult, TypeContext},
+    type_checker::{error::TypeCheckErrorMeta, TypeCheckError, TypeCheckResult, TypeContext},
 };
 
 /// Expression type inference implementation
@@ -119,7 +119,7 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
                         operator: op.to_string(),
                         left_type: left.clone(),
                         right_type: right.clone(),
-                        meta: MetaError::new(
+                        meta: TypeCheckErrorMeta::new(
                             Default::default(),
                             "Only numeric types are supported",
                             "Use Int or Float types",
@@ -142,7 +142,7 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
                         operator: op.to_string(),
                         left_type: left.clone(),
                         right_type: right.clone(),
-                        meta: MetaError::new(
+                        meta: TypeCheckErrorMeta::new(
                             Default::default(),
                             "Only boolean types are supported",
                             "Use Boolean type",

@@ -1,6 +1,9 @@
 use crate::ast::TypeInfo;
 use thiserror::Error;
 
+const DEFAULT_HELP: &str = "No help available";
+const DEFAULT_SUGGESTION: &str = "No suggestion available";
+
 /// Error type for type checking operations
 #[derive(Error, Debug, Clone)]
 pub enum TypeCheckError {
@@ -62,29 +65,39 @@ pub enum TypeCheckError {
         operator: String,
         left_type: TypeInfo,
         right_type: TypeInfo,
-        meta: MetaError,
+        meta: TypeCheckErrorMeta,
     },
 }
 
 #[derive(Error, Debug, Clone)]
-pub struct MetaError {
+pub struct TypeCheckErrorMeta {
     pub location: Location,
-    pub help: Option<String>,
-    pub suggestion: Option<String>,
+    pub help: String,
+    pub suggestion: String,
 }
 
-impl std::fmt::Display for MetaError {
+impl std::fmt::Display for TypeCheckErrorMeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "MetaError at {}: help: {:?}, suggestion: {:?}",
+            "TypeCheckErrorMeta at {}: help: {}, suggestion: {}",
             self.location, self.help, self.suggestion
         )
     }
 }
 
+impl Default for TypeCheckErrorMeta {
+    fn default() -> Self {
+        Self {
+            location: Location::default(),
+            help: DEFAULT_HELP.to_string(),
+            suggestion: DEFAULT_SUGGESTION.to_string(),
+        }
+    }
+}
+
 impl TypeCheckError {
-    pub fn with_meta(self, meta: MetaError) -> Self {
+    pub fn with_meta(self, meta: TypeCheckErrorMeta) -> Self {
         match self {
             Self::InvalidOperatorType {
                 operator,
@@ -122,47 +135,37 @@ impl TypeCheckError {
     }
 }
 
-impl MetaError {
+impl TypeCheckErrorMeta {
     pub fn new(location: Location, help: &str, suggestion: &str) -> Self {
         Self {
             location,
-            help: Some(help.to_string()),
-            suggestion: Some(suggestion.to_string()),
+            help: help.to_string(),
+            suggestion: suggestion.to_string(),
         }
     }
 
     pub fn with_location(location: Location) -> Self {
         Self {
             location,
-            help: None,
-            suggestion: None,
+            help: DEFAULT_HELP.to_string(),
+            suggestion: DEFAULT_SUGGESTION.to_string(),
         }
     }
 
     pub fn with_context(location: Location, help: &str) -> Self {
         Self {
             location,
-            help: Some(help.to_string()),
-            suggestion: None,
+            help: help.to_string(),
+            suggestion: DEFAULT_SUGGESTION.to_string(),
         }
     }
 
     pub fn with_suggestion(location: Location, help: &str, suggestion: &str) -> Self {
         Self {
             location,
-            help: Some(help.to_string()),
-            suggestion: Some(suggestion.to_string()),
+            help: help.to_string(),
+            suggestion: suggestion.to_string(),
         }
-    }
-
-    pub fn with_help(mut self, help: String) -> Self {
-        self.help = Some(help);
-        self
-    }
-
-    pub fn with_suggestion_str(mut self, suggestion: String) -> Self {
-        self.suggestion = Some(suggestion);
-        self
     }
 }
 
@@ -205,7 +208,7 @@ mod tests {
         assert!(matches!(error, TypeCheckError::UndefinedType(..)));
 
         // Test with_meta helper
-        let meta = MetaError::with_suggestion(
+        let meta = TypeCheckErrorMeta::with_suggestion(
             location,
             "Invalid types for operation",
             "Use numeric types",
@@ -214,7 +217,7 @@ mod tests {
             operator: "+".to_string(),
             left_type: type_info.clone(),
             right_type: type_info,
-            meta: MetaError::default(),
+            meta: TypeCheckErrorMeta::with_location(location.clone()),
         }
         .with_meta(meta);
         assert!(matches!(error, TypeCheckError::InvalidOperatorType { .. }));
