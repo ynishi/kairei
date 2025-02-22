@@ -196,6 +196,32 @@ fn test_undefined_variable_with_meta() {
 }
 
 #[test]
+fn test_invalid_state_variable_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_state_variable(
+        "Invalid state variable access".to_string(),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidStateVariable { meta, message } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(message, "Invalid state variable access");
+        assert!(meta
+            .help
+            .contains("Invalid state variable declaration or usage"));
+        assert!(meta
+            .suggestion
+            .contains("Check that the state variable is properly declared"));
+    } else {
+        panic!("Expected InvalidStateVariable error");
+    }
+}
+
+#[test]
 fn test_invalid_type_arguments_with_meta() {
     let location = Location {
         line: 1,
@@ -214,5 +240,86 @@ fn test_invalid_type_arguments_with_meta() {
         assert!(meta.suggestion.contains("Check the type arguments"));
     } else {
         panic!("Expected InvalidTypeArguments error");
+    }
+}
+
+#[test]
+fn test_invalid_return_type_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_return_type(
+        TypeInfo::Simple("Int".to_string()),
+        TypeInfo::Simple("String".to_string()),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidReturnType {
+        meta,
+        expected,
+        found,
+    } = error
+    {
+        assert_eq!(meta.location, location);
+        assert_eq!(expected, TypeInfo::Simple("Int".to_string()));
+        assert_eq!(found, TypeInfo::Simple("String".to_string()));
+        assert!(meta.help.contains("Return type mismatch"));
+        assert!(meta.suggestion.contains("Ensure the function returns"));
+    } else {
+        panic!("Expected InvalidReturnType error");
+    }
+}
+
+#[test]
+fn test_invalid_handler_signature_with_meta() {
+    let location = Location {
+        line: 10,
+        column: 20,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_handler_signature(
+        "Mismatched parameter types".to_string(),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidHandlerSignature { meta, .. } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(
+            meta.help,
+            "Handler signature does not match the expected format"
+        );
+        assert_eq!(
+            meta.suggestion,
+            "Check handler parameter types and return type match the event definition"
+        );
+    } else {
+        panic!("Expected InvalidHandlerSignature error");
+    }
+}
+
+#[test]
+fn test_invalid_think_block_with_meta() {
+    let location = Location {
+        line: 15,
+        column: 25,
+        file: "test.rs".to_string(),
+    };
+    let error =
+        TypeCheckError::invalid_think_block("Invalid expression".to_string(), location.clone());
+
+    if let TypeCheckError::InvalidThinkBlock { meta, .. } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(
+            meta.help,
+            "Think block contains invalid expressions or types"
+        );
+        assert_eq!(
+            meta.suggestion,
+            "Check that the think block follows the expected format and contains valid expressions"
+        );
+    } else {
+        panic!("Expected InvalidThinkBlock error");
     }
 }
