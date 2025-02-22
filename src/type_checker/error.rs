@@ -11,7 +11,7 @@ pub enum TypeCheckError {
     TypeMismatch {
         expected: TypeInfo,
         found: TypeInfo,
-        location: Location,
+        meta: TypeCheckErrorMeta,
     },
 
     #[error("Undefined type: {0}")]
@@ -110,6 +110,13 @@ impl TypeCheckError {
                 right_type,
                 meta,
             },
+            Self::TypeMismatch {
+                expected, found, ..
+            } => Self::TypeMismatch {
+                expected,
+                found,
+                meta,
+            },
             _ => self,
         }
     }
@@ -118,7 +125,10 @@ impl TypeCheckError {
         Self::TypeMismatch {
             expected,
             found,
-            location,
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Type mismatch in expression")
+                .with_suggestion("Make sure the types match the expected types"),
         }
     }
 
@@ -269,5 +279,29 @@ mod tests {
             meta.to_string(),
             "TypeCheckErrorMeta at main.rs:10:20: help: Test help, suggestion: Test suggestion"
         );
+    }
+
+    #[test]
+    fn test_type_mismatch_with_meta() {
+        let location = Location::default();
+        let meta = TypeCheckErrorMeta::context(location.clone(), "Test help")
+            .with_suggestion("Test suggestion");
+
+        let error = TypeCheckError::type_mismatch(
+            TypeInfo::Simple("Int".to_string()),
+            TypeInfo::Simple("String".to_string()),
+            location,
+        )
+        .with_meta(meta.clone());
+
+        if let TypeCheckError::TypeMismatch {
+            meta: error_meta, ..
+        } = error
+        {
+            assert_eq!(error_meta.help, "Test help");
+            assert_eq!(error_meta.suggestion, "Test suggestion");
+        } else {
+            panic!("Expected TypeMismatch error");
+        }
     }
 }
