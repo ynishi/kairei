@@ -48,8 +48,11 @@ pub enum TypeCheckError {
         meta: TypeCheckErrorMeta,
     },
 
-    #[error("Undefined function: {0}")]
-    UndefinedFunction(String),
+    #[error("Undefined function: {name}")]
+    UndefinedFunction {
+        name: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Invalid return type: expected {expected}, found {found}")]
     InvalidReturnType {
@@ -127,6 +130,7 @@ impl TypeCheckError {
             Self::InvalidTypeArguments { message, .. } => {
                 Self::InvalidTypeArguments { message, meta }
             }
+            Self::UndefinedFunction { name, .. } => Self::UndefinedFunction { name, meta },
             _ => self,
         }
     }
@@ -189,6 +193,19 @@ impl TypeCheckError {
                 .with_location(location)
                 .with_help("Invalid arguments provided for type")
                 .with_suggestion("Check the type arguments match the expected types and arity"),
+        }
+    }
+
+    pub fn undefined_function(name: String, location: Location) -> Self {
+        Self::UndefinedFunction {
+            name: name.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help(&format!(
+                    "Function '{}' is not defined in the current scope",
+                    name
+                ))
+                .with_suggestion("Check function name for typos or ensure it is imported/defined"),
         }
     }
 }
