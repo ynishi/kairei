@@ -257,7 +257,10 @@ mod tests {
         // Test undefined function
         let args = vec![Expression::Literal(Literal::Integer(42))];
         let result = checker.check_function_call("undefined_func", &args, &ctx);
-        assert!(matches!(result, Err(TypeCheckError::UndefinedFunction { name: _, meta: _ })));
+        assert!(matches!(
+            result,
+            Err(TypeCheckError::UndefinedFunction { name: _, meta: _ })
+        ));
 
         Ok(())
     }

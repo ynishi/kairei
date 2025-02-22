@@ -105,7 +105,10 @@ fn test_undefined_function() -> TypeCheckResult<()> {
         arguments: vec![],
     };
     let result = visitor.visit_expression(&expr, &mut ctx);
-    assert!(matches!(result, Err(TypeCheckError::UndefinedFunction { name: _, meta: _ })));
+    assert!(matches!(
+        result,
+        Err(TypeCheckError::UndefinedFunction { name: _, meta: _ })
+    ));
 
     Ok(())
 }
