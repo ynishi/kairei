@@ -28,7 +28,10 @@ pub enum TypeCheckError {
     },
 
     #[error("Invalid state variable: {message}")]
-    InvalidStateVariable { message: String },
+    InvalidStateVariable {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Invalid handler signature: {message}")]
     InvalidHandlerSignature { message: String },
@@ -127,6 +130,9 @@ impl TypeCheckError {
             Self::InvalidTypeArguments { message, .. } => {
                 Self::InvalidTypeArguments { message, meta }
             }
+            Self::InvalidStateVariable { message, .. } => {
+                Self::InvalidStateVariable { message, meta }
+            }
             _ => self,
         }
     }
@@ -169,6 +175,16 @@ impl TypeCheckError {
                 .with_suggestion(
                     "Check variable name for typos or ensure it is declared before use",
                 ),
+        }
+    }
+
+    pub fn invalid_state_variable(message: String, location: Location) -> Self {
+        Self::InvalidStateVariable {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Invalid state variable declaration or usage")
+                .with_suggestion("Check that the state variable is properly declared and used within a valid scope"),
         }
     }
 
