@@ -16,7 +16,7 @@ pub struct TypeChecker {
 }
 
 impl TypeChecker {
-    /// Creates a new TypeChecker instance
+    /// Creates a new TypeChecker instance without plugins
     pub fn new() -> Self {
         let mut checker = Self {
             plugins: Vec::new(),
