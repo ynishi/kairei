@@ -36,9 +36,6 @@ pub enum TypeCheckError {
     #[error("Invalid think block: {message}")]
     InvalidThinkBlock { message: String },
 
-    #[error("Invalid plugin configuration: {message}")]
-    InvalidPluginConfig { message: String },
-
     #[error("Type inference error: {message}")]
     TypeInferenceError {
         message: String,
