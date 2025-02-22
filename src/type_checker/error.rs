@@ -20,8 +20,11 @@ pub enum TypeCheckError {
         meta: TypeCheckErrorMeta,
     },
 
-    #[error("Invalid type arguments: {0}")]
-    InvalidTypeArguments(String),
+    #[error("Invalid type arguments: {message}")]
+    InvalidTypeArguments {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Plugin type error: {message}")]
     PluginTypeError { message: String },
@@ -126,6 +129,9 @@ impl TypeCheckError {
                 found,
                 meta,
             },
+            Self::InvalidTypeArguments { message, .. } => {
+                Self::InvalidTypeArguments { message, meta }
+            }
             _ => self,
         }
     }
@@ -178,6 +184,16 @@ impl TypeCheckError {
                 .with_location(location)
                 .with_help("Error during type inference")
                 .with_suggestion("Check that all types can be inferred from context"),
+        }
+    }
+
+    pub fn invalid_type_arguments(message: String, location: Location) -> Self {
+        Self::InvalidTypeArguments {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Invalid arguments provided for type")
+                .with_suggestion("Check the type arguments match the expected types and arity"),
         }
     }
 }

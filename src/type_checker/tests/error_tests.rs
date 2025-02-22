@@ -172,3 +172,25 @@ fn test_undefined_variable_with_meta() {
         panic!("Expected UndefinedVariable error");
     }
 }
+
+#[test]
+fn test_invalid_type_arguments_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_type_arguments(
+        "Wrong number of type arguments".to_string(),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidTypeArguments { meta, message } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(message, "Wrong number of type arguments");
+        assert!(meta.help.contains("Invalid arguments provided"));
+        assert!(meta.suggestion.contains("Check the type arguments"));
+    } else {
+        panic!("Expected InvalidTypeArguments error");
+    }
+}
