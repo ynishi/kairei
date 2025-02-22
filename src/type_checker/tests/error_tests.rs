@@ -216,3 +216,40 @@ fn test_invalid_type_arguments_with_meta() {
         panic!("Expected InvalidTypeArguments error");
     }
 }
+
+#[test]
+fn test_invalid_argument_type_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_argument_type(
+        "test_func".to_string(),
+        "arg0".to_string(),
+        TypeInfo::Simple("Int".to_string()),
+        TypeInfo::Simple("String".to_string()),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidArgumentType {
+        meta,
+        function,
+        argument,
+        expected,
+        found,
+    } = error
+    {
+        assert_eq!(meta.location, location);
+        assert_eq!(function, "test_func");
+        assert_eq!(argument, "arg0");
+        assert_eq!(expected, TypeInfo::Simple("Int".to_string()));
+        assert_eq!(found, TypeInfo::Simple("String".to_string()));
+        assert!(meta.help.contains("argument 'arg0' has wrong type"));
+        assert!(meta
+            .suggestion
+            .contains("Provide an argument of type Int instead of String"));
+    } else {
+        panic!("Expected InvalidArgumentType error");
+    }
+}

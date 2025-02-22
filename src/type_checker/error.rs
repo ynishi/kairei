@@ -67,7 +67,7 @@ pub enum TypeCheckError {
         argument: String,
         expected: TypeInfo,
         found: TypeInfo,
-        location: Location,
+        meta: TypeCheckErrorMeta,
     },
 
     #[error("Invalid operator type: operator {operator} cannot be applied to {left_type} and {right_type}")]
@@ -206,6 +206,31 @@ impl TypeCheckError {
                     name
                 ))
                 .with_suggestion("Check function name for typos or ensure it is imported/defined"),
+        }
+    }
+
+    pub fn invalid_argument_type(
+        function: String,
+        argument: String,
+        expected: TypeInfo,
+        found: TypeInfo,
+        location: Location,
+    ) -> Self {
+        Self::InvalidArgumentType {
+            function: function.clone(),
+            argument: argument.clone(),
+            expected: expected.clone(),
+            found: found.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help(&format!(
+                    "Argument type mismatch in function '{}': argument '{}' has wrong type",
+                    function, argument
+                ))
+                .with_suggestion(&format!(
+                    "Provide an argument of type {} instead of {}",
+                    expected, found
+                )),
         }
     }
 }
