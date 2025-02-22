@@ -3,14 +3,14 @@ use crate::{
         AnswerDef, Expression, HandlerBlock, MicroAgentDef, RequestHandler, Root, Statement,
         TypeInfo, RequestType, Literal,
     },
-    type_checker::{TypeCheckError, TypeContext, DefaultTypeVisitor},
+    type_checker::{TypeCheckError, TypeContext, visitor::DefaultVisitor},
     Argument,
 };
 
 #[test]
 fn test_think_expression_type_checking() {
     let mut ctx = TypeContext::new();
-    let mut visitor = DefaultTypeVisitor::new();
+    let mut visitor = DefaultVisitor::new();
 
     // Create AST that matches the original failing case
     let ast = Root {
