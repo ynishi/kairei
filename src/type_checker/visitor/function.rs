@@ -157,22 +157,22 @@ impl FunctionTypeChecker for DefaultFunctionChecker {
             (Expression::Literal(lit), TypeInfo::Result { ok_type, .. }) => {
                 let actual_type = self.expression_checker.infer_literal_type(lit, ctx)?;
                 if actual_type != **ok_type {
-                    return Err(TypeCheckError::InvalidReturnType {
-                        expected: (**ok_type).clone(),
-                        found: actual_type,
-                        location: Default::default(),
-                    });
+                    return Err(TypeCheckError::invalid_return_type(
+                        (**ok_type).clone(),
+                        actual_type,
+                        Default::default(),
+                    ));
                 }
             }
             (Expression::Ok(expr), TypeInfo::Result { ok_type, .. }) => match &**expr {
                 Expression::Literal(lit) => {
                     let actual_type = self.expression_checker.infer_literal_type(lit, ctx)?;
                     if actual_type != **ok_type {
-                        return Err(TypeCheckError::InvalidReturnType {
-                            expected: (**ok_type).clone(),
-                            found: actual_type,
-                            location: Default::default(),
-                        });
+                        return Err(TypeCheckError::invalid_return_type(
+                            (**ok_type).clone(),
+                            actual_type,
+                            Default::default(),
+                        ));
                     }
                 }
                 _ => {
@@ -186,11 +186,11 @@ impl FunctionTypeChecker for DefaultFunctionChecker {
                 Expression::Literal(lit) => {
                     let actual_type = self.expression_checker.infer_literal_type(lit, ctx)?;
                     if actual_type != **err_type {
-                        return Err(TypeCheckError::InvalidReturnType {
-                            expected: (**err_type).clone(),
-                            found: actual_type,
-                            location: Default::default(),
-                        });
+                        return Err(TypeCheckError::invalid_return_type(
+                            (**err_type).clone(),
+                            actual_type,
+                            Default::default(),
+                        ));
                     }
                 }
                 _ => {

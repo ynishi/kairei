@@ -58,7 +58,7 @@ pub enum TypeCheckError {
     InvalidReturnType {
         expected: TypeInfo,
         found: TypeInfo,
-        location: Location,
+        meta: TypeCheckErrorMeta,
     },
 
     #[error("Invalid argument type for function {function}: argument {argument} expected {expected}, found {found}")]
@@ -206,6 +206,20 @@ impl TypeCheckError {
                     name
                 ))
                 .with_suggestion("Check function name for typos or ensure it is imported/defined"),
+        }
+    }
+
+    pub fn invalid_return_type(expected: TypeInfo, found: TypeInfo, location: Location) -> Self {
+        Self::InvalidReturnType {
+            expected: expected.clone(),
+            found: found.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help(&format!(
+                    "Return type mismatch: expected {}, found {}",
+                    expected, found
+                ))
+                .with_suggestion("Ensure the function returns a value of the expected type"),
         }
     }
 }
