@@ -199,6 +199,7 @@ fn test_invalid_state_variable_with_meta() {
     }
 }
 
+#[test]
 fn test_invalid_type_arguments_with_meta() {
     let location = Location {
         line: 1,
