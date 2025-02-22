@@ -1,9 +1,9 @@
-use crate::{
+use kairei::{
     ast::{MicroAgentDef, Root},
     type_checker::{TypeCheckResult, TypeChecker},
 };
 
-use super::super::TestPlugin;
+use super::TestPlugin;
 
 #[test]
 fn test_plugin_integration() -> TypeCheckResult<()> {
