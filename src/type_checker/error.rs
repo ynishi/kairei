@@ -1,6 +1,15 @@
 use crate::ast::TypeInfo;
 use thiserror::Error;
 
+#[derive(Debug, Clone)]
+pub struct InvalidArgumentTypeData {
+    pub function: String,
+    pub argument: String,
+    pub expected: TypeInfo,
+    pub found: TypeInfo,
+    pub meta: TypeCheckErrorMeta,
+}
+
 const DEFAULT_HELP: &str = "No help available";
 const DEFAULT_SUGGESTION: &str = "No suggestion available";
 
@@ -28,10 +37,16 @@ pub enum TypeCheckError {
     },
 
     #[error("Invalid state variable: {message}")]
-    InvalidStateVariable { message: String },
+    InvalidStateVariable {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Invalid handler signature: {message}")]
-    InvalidHandlerSignature { message: String },
+    InvalidHandlerSignature {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Invalid think block: {message}")]
     InvalidThinkBlock {
@@ -51,24 +66,21 @@ pub enum TypeCheckError {
         meta: TypeCheckErrorMeta,
     },
 
-    #[error("Undefined function: {0}")]
-    UndefinedFunction(String),
+    #[error("Undefined function: {name}")]
+    UndefinedFunction {
+        name: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Invalid return type: expected {expected}, found {found}")]
     InvalidReturnType {
         expected: TypeInfo,
         found: TypeInfo,
-        location: Location,
+        meta: TypeCheckErrorMeta,
     },
 
-    #[error("Invalid argument type for function {function}: argument {argument} expected {expected}, found {found}")]
-    InvalidArgumentType {
-        function: String,
-        argument: String,
-        expected: TypeInfo,
-        found: TypeInfo,
-        location: Location,
-    },
+    #[error("Invalid argument type for function {}: argument {} expected {}, found {}", .0.function, .0.argument, .0.expected, .0.found)]
+    InvalidArgumentType(Box<InvalidArgumentTypeData>),
 
     #[error("Invalid operator type: operator {operator} cannot be applied to {left_type} and {right_type}")]
     InvalidOperatorType {
@@ -131,6 +143,13 @@ impl TypeCheckError {
                 Self::InvalidTypeArguments { message, meta }
             }
             Self::InvalidThinkBlock { message, .. } => Self::InvalidThinkBlock { message, meta },
+            Self::InvalidHandlerSignature { message, .. } => {
+                Self::InvalidHandlerSignature { message, meta }
+            }
+            Self::InvalidStateVariable { message, .. } => {
+                Self::InvalidStateVariable { message, meta }
+            }
+            Self::UndefinedFunction { name, .. } => Self::UndefinedFunction { name, meta },
             _ => self,
         }
     }
@@ -176,6 +195,16 @@ impl TypeCheckError {
         }
     }
 
+    pub fn invalid_state_variable(message: String, location: Location) -> Self {
+        Self::InvalidStateVariable {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Invalid state variable declaration or usage")
+                .with_suggestion("Check that the state variable is properly declared and used within a valid scope"),
+        }
+    }
+
     pub fn type_inference_error(message: String, location: Location) -> Self {
         Self::TypeInferenceError {
             message,
@@ -195,6 +224,15 @@ impl TypeCheckError {
                 .with_suggestion("Check that the think block follows the expected format and contains valid expressions"),
         }
     }
+    pub fn invalid_handler_signature(message: String, location: Location) -> Self {
+        Self::InvalidHandlerSignature {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Invalid event handler signature")
+                .with_suggestion("Check that the handler signature matches the expected format"),
+        }
+    }
 
     pub fn invalid_type_arguments(message: String, location: Location) -> Self {
         Self::InvalidTypeArguments {
@@ -204,6 +242,58 @@ impl TypeCheckError {
                 .with_help("Invalid arguments provided for type")
                 .with_suggestion("Check the type arguments match the expected types and arity"),
         }
+    }
+
+    pub fn undefined_function(name: String, location: Location) -> Self {
+        Self::UndefinedFunction {
+            name: name.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help(&format!(
+                    "Function '{}' is not defined in the current scope",
+                    name
+                ))
+                .with_suggestion("Check function name for typos or ensure it is imported/defined"),
+        }
+    }
+
+    pub fn invalid_return_type(expected: TypeInfo, found: TypeInfo, location: Location) -> Self {
+        Self::InvalidReturnType {
+            expected: expected.clone(),
+            found,
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Return type does not match function signature")
+                .with_suggestion(&format!(
+                    "Ensure the returned value matches the expected type: {}",
+                    expected
+                )),
+        }
+    }
+
+    pub fn invalid_argument_type(
+        function: String,
+        argument: String,
+        expected: TypeInfo,
+        found: TypeInfo,
+        location: Location,
+    ) -> Self {
+        Self::InvalidArgumentType(Box::new(InvalidArgumentTypeData {
+            function: function.clone(),
+            argument: argument.clone(),
+            expected: expected.clone(),
+            found: found.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help(&format!(
+                    "Invalid argument type for function '{}': argument '{}' has wrong type",
+                    function, argument
+                ))
+                .with_suggestion(&format!(
+                    "Provide an argument of type {} instead of {}",
+                    expected, found
+                )),
+        }))
     }
 }
 

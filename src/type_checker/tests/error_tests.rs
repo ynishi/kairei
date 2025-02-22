@@ -105,9 +105,31 @@ fn test_undefined_function() -> TypeCheckResult<()> {
         arguments: vec![],
     };
     let result = visitor.visit_expression(&expr, &mut ctx);
-    assert!(matches!(result, Err(TypeCheckError::UndefinedFunction(..))));
+    assert!(matches!(
+        result,
+        Err(TypeCheckError::UndefinedFunction { name: _, meta: _ })
+    ));
 
     Ok(())
+}
+
+#[test]
+fn test_undefined_function_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::undefined_function("test_func".to_string(), location.clone());
+
+    if let TypeCheckError::UndefinedFunction { meta, name } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(name, "test_func");
+        assert!(meta.help.contains("Function 'test_func' is not defined"));
+        assert!(meta.suggestion.contains("Check function name for typos"));
+    } else {
+        panic!("Expected UndefinedFunction error");
+    }
 }
 
 #[test]
@@ -174,6 +196,32 @@ fn test_undefined_variable_with_meta() {
 }
 
 #[test]
+fn test_invalid_state_variable_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_state_variable(
+        "Invalid state variable access".to_string(),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidStateVariable { meta, message } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(message, "Invalid state variable access");
+        assert!(meta
+            .help
+            .contains("Invalid state variable declaration or usage"));
+        assert!(meta
+            .suggestion
+            .contains("Check that the state variable is properly declared"));
+    } else {
+        panic!("Expected InvalidStateVariable error");
+    }
+}
+
+#[test]
 fn test_invalid_type_arguments_with_meta() {
     let location = Location {
         line: 1,
@@ -218,5 +266,29 @@ fn test_invalid_think_block_with_meta() {
             .contains("Check that the think block follows the expected format"));
     } else {
         panic!("Expected InvalidThinkBlock error");
+    }
+}
+
+#[test]
+fn test_invalid_handler_signature_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_handler_signature(
+        "Invalid handler format".to_string(),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidHandlerSignature { meta, message } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(message, "Invalid handler format");
+        assert!(meta.help.contains("Invalid event handler signature"));
+        assert!(meta
+            .suggestion
+            .contains("Check that the handler signature matches"));
+    } else {
+        panic!("Expected InvalidHandlerSignature error");
     }
 }
