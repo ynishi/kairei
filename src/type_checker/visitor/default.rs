@@ -111,7 +111,10 @@ impl DefaultVisitor {
                 if let Some(type_info) = ctx.scope.get_type(name) {
                     Ok(type_info.clone())
                 } else {
-                    Err(TypeCheckError::UndefinedVariable(name.clone()))
+                    Err(TypeCheckError::undefined_variable(
+                        name.clone(),
+                        Default::default(),
+                    ))
                 }
             }
             Expression::BinaryOp { op, left, right } => {
@@ -192,10 +195,10 @@ impl DefaultVisitor {
                                     }
                                 }
                             } else {
-                                Err(TypeCheckError::UndefinedVariable(format!(
-                                    "Field {} not found in type",
-                                    field_name
-                                )))
+                                Err(TypeCheckError::undefined_variable(
+                                    format!("Field {} not found in type", field_name),
+                                    Default::default(),
+                                ))
                             }
                         } else {
                             Ok(type_info.clone())
@@ -203,10 +206,16 @@ impl DefaultVisitor {
                     } else if let Some(type_info) = ctx.scope.get_type(&full_path) {
                         Ok(type_info.clone())
                     } else {
-                        Err(TypeCheckError::UndefinedVariable(full_path.clone()))
+                        Err(TypeCheckError::undefined_variable(
+                            full_path.clone(),
+                            Default::default(),
+                        ))
                     }
                 } else {
-                    Err(TypeCheckError::UndefinedVariable(full_path))
+                    Err(TypeCheckError::undefined_variable(
+                        full_path,
+                        Default::default(),
+                    ))
                 }
             }
             Expression::Await(exprs) => {
@@ -235,13 +244,19 @@ impl DefaultVisitor {
                 match field_type {
                     TypeInfo::Simple(type_name) => {
                         if !ctx.scope.contains_type(type_name) {
-                            return Err(TypeCheckError::UndefinedType(type_name.clone()));
+                            return Err(TypeCheckError::undefined_type(
+                                type_name.clone(),
+                                Default::default(),
+                            ));
                         }
                     }
                     TypeInfo::Custom { name, fields } => {
                         // Recursively check nested custom types
                         if !ctx.scope.contains_type(name) {
-                            return Err(TypeCheckError::UndefinedType(name.clone()));
+                            return Err(TypeCheckError::undefined_type(
+                                name.clone(),
+                                Default::default(),
+                            ));
                         }
                         self.check_custom_type_fields(fields, ctx)?;
                     }
@@ -428,12 +443,18 @@ impl TypeVisitor for DefaultVisitor {
             match &var_def.type_info {
                 TypeInfo::Simple(type_name) => {
                     if !ctx.scope.contains_type(type_name) {
-                        return Err(TypeCheckError::UndefinedType(type_name.clone()));
+                        return Err(TypeCheckError::undefined_type(
+                            type_name.clone(),
+                            Default::default(),
+                        ));
                     }
                 }
                 TypeInfo::Custom { name, fields } => {
                     if !ctx.scope.contains_type(name) {
-                        return Err(TypeCheckError::UndefinedType(name.clone()));
+                        return Err(TypeCheckError::undefined_type(
+                            name.clone(),
+                            Default::default(),
+                        ));
                     }
                     self.check_custom_type_fields(fields, ctx)?;
                 }
