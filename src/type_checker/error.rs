@@ -31,10 +31,16 @@ pub enum TypeCheckError {
     InvalidStateVariable { message: String },
 
     #[error("Invalid handler signature: {message}")]
-    InvalidHandlerSignature { message: String },
+    InvalidHandlerSignature {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Invalid think block: {message}")]
-    InvalidThinkBlock { message: String },
+    InvalidThinkBlock {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Type inference error: {message}")]
     TypeInferenceError {
@@ -131,6 +137,10 @@ impl TypeCheckError {
                 Self::InvalidTypeArguments { message, meta }
             }
             Self::UndefinedFunction { name, .. } => Self::UndefinedFunction { name, meta },
+            Self::InvalidHandlerSignature { message, .. } => {
+                Self::InvalidHandlerSignature { message, meta }
+            }
+            Self::InvalidThinkBlock { message, .. } => Self::InvalidThinkBlock { message, meta },
             _ => self,
         }
     }
@@ -206,6 +216,28 @@ impl TypeCheckError {
                     name
                 ))
                 .with_suggestion("Check function name for typos or ensure it is imported/defined"),
+        }
+    }
+
+    pub fn invalid_handler_signature(message: String, location: Location) -> Self {
+        Self::InvalidHandlerSignature {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Handler signature does not match the expected format")
+                .with_suggestion(
+                    "Check handler parameter types and return type match the event definition",
+                ),
+        }
+    }
+
+    pub fn invalid_think_block(message: String, location: Location) -> Self {
+        Self::InvalidThinkBlock {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Think block contains invalid expressions or types")
+                .with_suggestion("Ensure all expressions in the think block are well-typed and return compatible types"),
         }
     }
 }
@@ -389,6 +421,58 @@ mod tests {
             );
         } else {
             panic!("Expected TypeInferenceError");
+        }
+    }
+
+    #[test]
+    fn test_invalid_handler_signature_with_meta() {
+        let location = Location {
+            line: 10,
+            column: 20,
+            file: "test.rs".to_string(),
+        };
+        let error = TypeCheckError::invalid_handler_signature(
+            "Mismatched parameter types".to_string(),
+            location.clone(),
+        );
+
+        if let TypeCheckError::InvalidHandlerSignature { meta, .. } = error {
+            assert_eq!(meta.location, location);
+            assert_eq!(
+                meta.help,
+                "Handler signature does not match the expected format"
+            );
+            assert_eq!(
+                meta.suggestion,
+                "Check handler parameter types and return type match the event definition"
+            );
+        } else {
+            panic!("Expected InvalidHandlerSignature error");
+        }
+    }
+
+    #[test]
+    fn test_invalid_think_block_with_meta() {
+        let location = Location {
+            line: 15,
+            column: 25,
+            file: "test.rs".to_string(),
+        };
+        let error =
+            TypeCheckError::invalid_think_block("Invalid expression".to_string(), location.clone());
+
+        if let TypeCheckError::InvalidThinkBlock { meta, .. } = error {
+            assert_eq!(meta.location, location);
+            assert_eq!(
+                meta.help,
+                "Think block contains invalid expressions or types"
+            );
+            assert_eq!(
+                meta.suggestion,
+                "Ensure all expressions in the think block are well-typed and return compatible types"
+            );
+        } else {
+            panic!("Expected InvalidThinkBlock error");
         }
     }
 }
