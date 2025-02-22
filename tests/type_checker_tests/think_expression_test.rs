@@ -1,9 +1,9 @@
-use crate::{
+use kairei::{
     ast::{
-        AnswerDef, Expression, HandlerBlock, MicroAgentDef, RequestHandler, Root, Statement,
-        TypeInfo, RequestType, Literal,
+        AnswerDef, Expression, HandlerBlock, Literal, MicroAgentDef, RequestHandler, RequestType,
+        Root, Statement, TypeInfo,
     },
-    type_checker::{TypeCheckError, TypeContext, visitor::DefaultVisitor},
+    type_checker::{visitor::DefaultVisitor, TypeCheckError, TypeContext, TypeVisitor},
     Argument,
 };
 
@@ -32,9 +32,9 @@ fn test_think_expression_type_checking() {
                     constraints: None,
                     block: HandlerBlock {
                         statements: vec![Statement::Return(Expression::Think {
-                            args: vec![Argument::Positional(Expression::Literal(
-                                Literal::String("Tokyo".to_string()),
-                            ))],
+                            args: vec![Argument::Positional(Expression::Literal(Literal::String(
+                                "Tokyo".to_string(),
+                            )))],
                             with_block: None,
                         })],
                     },
