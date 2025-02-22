@@ -196,6 +196,32 @@ fn test_undefined_variable_with_meta() {
 }
 
 #[test]
+fn test_invalid_state_variable_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_state_variable(
+        "Invalid state variable access".to_string(),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidStateVariable { meta, message } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(message, "Invalid state variable access");
+        assert!(meta
+            .help
+            .contains("Invalid state variable declaration or usage"));
+        assert!(meta
+            .suggestion
+            .contains("Check that the state variable is properly declared"));
+    } else {
+        panic!("Expected InvalidStateVariable error");
+    }
+}
+
+#[test]
 fn test_invalid_type_arguments_with_meta() {
     let location = Location {
         line: 1,
