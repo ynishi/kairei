@@ -244,6 +244,32 @@ fn test_invalid_type_arguments_with_meta() {
 }
 
 #[test]
+fn test_invalid_think_block_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_think_block(
+        "Invalid think block format".to_string(),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidThinkBlock { meta, message } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(message, "Invalid think block format");
+        assert!(meta
+            .help
+            .contains("Invalid think block structure or content"));
+        assert!(meta
+            .suggestion
+            .contains("Check that the think block follows the expected format"));
+    } else {
+        panic!("Expected InvalidThinkBlock error");
+    }
+}
+
+#[test]
 fn test_invalid_handler_signature_with_meta() {
     let location = Location {
         line: 1,
