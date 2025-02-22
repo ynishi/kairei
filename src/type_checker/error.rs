@@ -220,17 +220,20 @@ impl TypeCheckError {
             message: message.clone(),
             meta: TypeCheckErrorMeta::default()
                 .with_location(location)
-                .with_help("Invalid think block structure or content")
+                .with_help("Think block contains invalid expressions or types")
                 .with_suggestion("Check that the think block follows the expected format and contains valid expressions"),
         }
     }
+
     pub fn invalid_handler_signature(message: String, location: Location) -> Self {
         Self::InvalidHandlerSignature {
             message: message.clone(),
             meta: TypeCheckErrorMeta::default()
                 .with_location(location)
-                .with_help("Invalid event handler signature")
-                .with_suggestion("Check that the handler signature matches the expected format"),
+                .with_help("Handler signature does not match the expected format")
+                .with_suggestion(
+                    "Check handler parameter types and return type match the event definition",
+                ),
         }
     }
 

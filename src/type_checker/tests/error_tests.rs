@@ -273,51 +273,53 @@ fn test_invalid_return_type_with_meta() {
 }
 
 #[test]
-fn test_invalid_think_block_with_meta() {
+fn test_invalid_handler_signature_with_meta() {
     let location = Location {
-        line: 1,
-        column: 1,
+        line: 10,
+        column: 20,
         file: "test.rs".to_string(),
     };
-    let error = TypeCheckError::invalid_think_block(
-        "Invalid think block format".to_string(),
+    let error = TypeCheckError::invalid_handler_signature(
+        "Mismatched parameter types".to_string(),
         location.clone(),
     );
 
-    if let TypeCheckError::InvalidThinkBlock { meta, message } = error {
+    if let TypeCheckError::InvalidHandlerSignature { meta, .. } = error {
         assert_eq!(meta.location, location);
-        assert_eq!(message, "Invalid think block format");
-        assert!(meta
-            .help
-            .contains("Invalid think block structure or content"));
-        assert!(meta
-            .suggestion
-            .contains("Check that the think block follows the expected format"));
+        assert_eq!(
+            meta.help,
+            "Handler signature does not match the expected format"
+        );
+        assert_eq!(
+            meta.suggestion,
+            "Check handler parameter types and return type match the event definition"
+        );
     } else {
-        panic!("Expected InvalidThinkBlock error");
+        panic!("Expected InvalidHandlerSignature error");
     }
 }
 
 #[test]
-fn test_invalid_handler_signature_with_meta() {
+fn test_invalid_think_block_with_meta() {
     let location = Location {
-        line: 1,
-        column: 1,
+        line: 15,
+        column: 25,
         file: "test.rs".to_string(),
     };
-    let error = TypeCheckError::invalid_handler_signature(
-        "Invalid handler format".to_string(),
-        location.clone(),
-    );
+    let error =
+        TypeCheckError::invalid_think_block("Invalid expression".to_string(), location.clone());
 
-    if let TypeCheckError::InvalidHandlerSignature { meta, message } = error {
+    if let TypeCheckError::InvalidThinkBlock { meta, .. } = error {
         assert_eq!(meta.location, location);
-        assert_eq!(message, "Invalid handler format");
-        assert!(meta.help.contains("Invalid event handler signature"));
-        assert!(meta
-            .suggestion
-            .contains("Check that the handler signature matches"));
+        assert_eq!(
+            meta.help,
+            "Think block contains invalid expressions or types"
+        );
+        assert_eq!(
+            meta.suggestion,
+            "Check that the think block follows the expected format and contains valid expressions"
+        );
     } else {
-        panic!("Expected InvalidHandlerSignature error");
+        panic!("Expected InvalidThinkBlock error");
     }
 }
