@@ -145,19 +145,19 @@ impl TypeCheckErrorMeta {
     }
 
     // builder pattern
-    pub fn with_location(&mut self, location: Location) -> Self {
+    pub fn with_location(mut self, location: Location) -> Self {
         self.location = location;
-        self.clone()
+        self
     }
 
-    pub fn with_help(&mut self, help: &str) -> Self {
+    pub fn with_help(mut self, help: &str) -> Self {
         self.help = help.to_string();
-        self.clone()
+        self
     }
 
-    pub fn with_suggestion(&mut self, suggestion: &str) -> Self {
+    pub fn with_suggestion(mut self, suggestion: &str) -> Self {
         self.suggestion = suggestion.to_string();
-        self.clone()
+        self
     }
 
     pub fn context(location: Location, help: &str) -> Self {
