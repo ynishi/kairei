@@ -43,7 +43,10 @@ pub enum TypeCheckError {
     },
 
     #[error("Invalid handler signature: {message}")]
-    InvalidHandlerSignature { message: String },
+    InvalidHandlerSignature {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Invalid think block: {message}")]
     InvalidThinkBlock { message: String },
@@ -136,6 +139,9 @@ impl TypeCheckError {
             Self::InvalidTypeArguments { message, .. } => {
                 Self::InvalidTypeArguments { message, meta }
             }
+            Self::InvalidHandlerSignature { message, .. } => {
+                Self::InvalidHandlerSignature { message, meta }
+            }
             Self::InvalidStateVariable { message, .. } => {
                 Self::InvalidStateVariable { message, meta }
             }
@@ -202,6 +208,16 @@ impl TypeCheckError {
                 .with_location(location)
                 .with_help("Error during type inference")
                 .with_suggestion("Check that all types can be inferred from context"),
+        }
+    }
+
+    pub fn invalid_handler_signature(message: String, location: Location) -> Self {
+        Self::InvalidHandlerSignature {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Invalid event handler signature")
+                .with_suggestion("Check that the handler signature matches the expected format"),
         }
     }
 

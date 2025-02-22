@@ -242,3 +242,27 @@ fn test_invalid_type_arguments_with_meta() {
         panic!("Expected InvalidTypeArguments error");
     }
 }
+
+#[test]
+fn test_invalid_handler_signature_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_handler_signature(
+        "Invalid handler format".to_string(),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidHandlerSignature { meta, message } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(message, "Invalid handler format");
+        assert!(meta.help.contains("Invalid event handler signature"));
+        assert!(meta
+            .suggestion
+            .contains("Check that the handler signature matches"));
+    } else {
+        panic!("Expected InvalidHandlerSignature error");
+    }
+}
