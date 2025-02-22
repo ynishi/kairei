@@ -61,7 +61,7 @@ pub enum TypeCheckError {
     InvalidReturnType {
         expected: TypeInfo,
         found: TypeInfo,
-        location: Location,
+        meta: TypeCheckErrorMeta,
     },
 
     #[error("Invalid argument type for function {function}: argument {argument} expected {expected}, found {found}")]
@@ -70,7 +70,7 @@ pub enum TypeCheckError {
         argument: String,
         expected: TypeInfo,
         found: TypeInfo,
-        location: Location,
+        meta: TypeCheckErrorMeta,
     },
 
     #[error("Invalid operator type: operator {operator} cannot be applied to {left_type} and {right_type}")]
