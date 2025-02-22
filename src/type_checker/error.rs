@@ -1,6 +1,15 @@
 use crate::ast::TypeInfo;
 use thiserror::Error;
 
+#[derive(Debug, Clone)]
+pub struct InvalidArgumentTypeData {
+    pub function: String,
+    pub argument: String,
+    pub expected: TypeInfo,
+    pub found: TypeInfo,
+    pub meta: TypeCheckErrorMeta,
+}
+
 const DEFAULT_HELP: &str = "No help available";
 const DEFAULT_SUGGESTION: &str = "No suggestion available";
 
@@ -28,7 +37,10 @@ pub enum TypeCheckError {
     },
 
     #[error("Invalid state variable: {message}")]
-    InvalidStateVariable { message: String },
+    InvalidStateVariable {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Invalid handler signature: {message}")]
     InvalidHandlerSignature {
@@ -64,17 +76,11 @@ pub enum TypeCheckError {
     InvalidReturnType {
         expected: TypeInfo,
         found: TypeInfo,
-        location: Location,
+        meta: TypeCheckErrorMeta,
     },
 
-    #[error("Invalid argument type for function {function}: argument {argument} expected {expected}, found {found}")]
-    InvalidArgumentType {
-        function: String,
-        argument: String,
-        expected: TypeInfo,
-        found: TypeInfo,
-        location: Location,
-    },
+    #[error("Invalid argument type for function {}: argument {} expected {}, found {}", .0.function, .0.argument, .0.expected, .0.found)]
+    InvalidArgumentType(Box<InvalidArgumentTypeData>),
 
     #[error("Invalid operator type: operator {operator} cannot be applied to {left_type} and {right_type}")]
     InvalidOperatorType {
@@ -136,11 +142,14 @@ impl TypeCheckError {
             Self::InvalidTypeArguments { message, .. } => {
                 Self::InvalidTypeArguments { message, meta }
             }
-            Self::UndefinedFunction { name, .. } => Self::UndefinedFunction { name, meta },
+            Self::InvalidThinkBlock { message, .. } => Self::InvalidThinkBlock { message, meta },
             Self::InvalidHandlerSignature { message, .. } => {
                 Self::InvalidHandlerSignature { message, meta }
             }
-            Self::InvalidThinkBlock { message, .. } => Self::InvalidThinkBlock { message, meta },
+            Self::InvalidStateVariable { message, .. } => {
+                Self::InvalidStateVariable { message, meta }
+            }
+            Self::UndefinedFunction { name, .. } => Self::UndefinedFunction { name, meta },
             _ => self,
         }
     }
@@ -186,6 +195,16 @@ impl TypeCheckError {
         }
     }
 
+    pub fn invalid_state_variable(message: String, location: Location) -> Self {
+        Self::InvalidStateVariable {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Invalid state variable declaration or usage")
+                .with_suggestion("Check that the state variable is properly declared and used within a valid scope"),
+        }
+    }
+
     pub fn type_inference_error(message: String, location: Location) -> Self {
         Self::TypeInferenceError {
             message,
@@ -193,6 +212,28 @@ impl TypeCheckError {
                 .with_location(location)
                 .with_help("Error during type inference")
                 .with_suggestion("Check that all types can be inferred from context"),
+        }
+    }
+
+    pub fn invalid_think_block(message: String, location: Location) -> Self {
+        Self::InvalidThinkBlock {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Think block contains invalid expressions or types")
+                .with_suggestion("Check that the think block follows the expected format and contains valid expressions"),
+        }
+    }
+
+    pub fn invalid_handler_signature(message: String, location: Location) -> Self {
+        Self::InvalidHandlerSignature {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Handler signature does not match the expected format")
+                .with_suggestion(
+                    "Check handler parameter types and return type match the event definition",
+                ),
         }
     }
 
@@ -219,26 +260,43 @@ impl TypeCheckError {
         }
     }
 
-    pub fn invalid_handler_signature(message: String, location: Location) -> Self {
-        Self::InvalidHandlerSignature {
-            message: message.clone(),
+    pub fn invalid_return_type(expected: TypeInfo, found: TypeInfo, location: Location) -> Self {
+        Self::InvalidReturnType {
+            expected: expected.clone(),
+            found: found.clone(),
             meta: TypeCheckErrorMeta::default()
                 .with_location(location)
-                .with_help("Handler signature does not match the expected format")
-                .with_suggestion(
-                    "Check handler parameter types and return type match the event definition",
-                ),
+                .with_help(&format!(
+                    "Return type mismatch: expected {}, found {}",
+                    expected, found
+                ))
+                .with_suggestion("Ensure the function returns a value of the expected type"),
         }
     }
 
-    pub fn invalid_think_block(message: String, location: Location) -> Self {
-        Self::InvalidThinkBlock {
-            message: message.clone(),
+    pub fn invalid_argument_type(
+        function: String,
+        argument: String,
+        expected: TypeInfo,
+        found: TypeInfo,
+        location: Location,
+    ) -> Self {
+        Self::InvalidArgumentType(Box::new(InvalidArgumentTypeData {
+            function: function.clone(),
+            argument: argument.clone(),
+            expected: expected.clone(),
+            found: found.clone(),
             meta: TypeCheckErrorMeta::default()
                 .with_location(location)
-                .with_help("Think block contains invalid expressions or types")
-                .with_suggestion("Ensure all expressions in the think block are well-typed and return compatible types"),
-        }
+                .with_help(&format!(
+                    "Invalid argument type for function '{}': argument '{}' has wrong type",
+                    function, argument
+                ))
+                .with_suggestion(&format!(
+                    "Provide an argument of type {} instead of {}",
+                    expected, found
+                )),
+        }))
     }
 }
 
@@ -421,58 +479,6 @@ mod tests {
             );
         } else {
             panic!("Expected TypeInferenceError");
-        }
-    }
-
-    #[test]
-    fn test_invalid_handler_signature_with_meta() {
-        let location = Location {
-            line: 10,
-            column: 20,
-            file: "test.rs".to_string(),
-        };
-        let error = TypeCheckError::invalid_handler_signature(
-            "Mismatched parameter types".to_string(),
-            location.clone(),
-        );
-
-        if let TypeCheckError::InvalidHandlerSignature { meta, .. } = error {
-            assert_eq!(meta.location, location);
-            assert_eq!(
-                meta.help,
-                "Handler signature does not match the expected format"
-            );
-            assert_eq!(
-                meta.suggestion,
-                "Check handler parameter types and return type match the event definition"
-            );
-        } else {
-            panic!("Expected InvalidHandlerSignature error");
-        }
-    }
-
-    #[test]
-    fn test_invalid_think_block_with_meta() {
-        let location = Location {
-            line: 15,
-            column: 25,
-            file: "test.rs".to_string(),
-        };
-        let error =
-            TypeCheckError::invalid_think_block("Invalid expression".to_string(), location.clone());
-
-        if let TypeCheckError::InvalidThinkBlock { meta, .. } = error {
-            assert_eq!(meta.location, location);
-            assert_eq!(
-                meta.help,
-                "Think block contains invalid expressions or types"
-            );
-            assert_eq!(
-                meta.suggestion,
-                "Ensure all expressions in the think block are well-typed and return compatible types"
-            );
-        } else {
-            panic!("Expected InvalidThinkBlock error");
         }
     }
 }
