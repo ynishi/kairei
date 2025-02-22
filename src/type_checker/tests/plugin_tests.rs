@@ -1,6 +1,5 @@
 use crate::{
-    ast::{Expression, Literal, Location, ThinkAttributes},
-    expression::Value,
+    ast::{Expression, Literal, ThinkAttributes},
     type_checker::{
         visitor::common::PluginVisitor, PluginConfigValidator, TypeChecker, TypeCheckResult,
         TypeContext,
@@ -87,22 +86,34 @@ fn test_plugin_config_validation() {
 
     // Test valid config
     let mut valid_config = HashMap::new();
-    valid_config.insert("provider_type".to_string(), Value::String("test".to_string()));
-    valid_config.insert("name".to_string(), Value::String("test".to_string()));
+    valid_config.insert("provider_type".to_string(), Literal::String("test".to_string()));
+    valid_config.insert("name".to_string(), Literal::String("test".to_string()));
 
     let expr = Expression::Think {
-        config: Some(valid_config),
-        block: None,
-        location: Location::default(),
+        args: vec![],
+        with_block: Some(ThinkAttributes {
+            plugins: {
+                let mut plugins = HashMap::new();
+                plugins.insert("provider".to_string(), valid_config);
+                plugins
+            },
+            ..Default::default()
+        }),
     };
     assert!(type_checker.visit_expression(&expr, &mut ctx).is_ok());
 
     // Test invalid config (missing required fields)
     let invalid_config = HashMap::new();
     let expr = Expression::Think {
-        config: Some(invalid_config),
-        block: None,
-        location: Location::default(),
+        args: vec![],
+        with_block: Some(ThinkAttributes {
+            plugins: {
+                let mut plugins = HashMap::new();
+                plugins.insert("provider".to_string(), invalid_config);
+                plugins
+            },
+            ..Default::default()
+        }),
     };
     assert!(type_checker.visit_expression(&expr, &mut ctx).is_err());
 }
@@ -115,12 +126,18 @@ fn test_plugin_config_validation_error_messages() {
 
     // Test missing provider_type error
     let mut config = HashMap::new();
-    config.insert("name".to_string(), Value::String("test".to_string()));
+    config.insert("name".to_string(), Literal::String("test".to_string()));
     
     let expr = Expression::Think {
-        config: Some(config),
-        block: None,
-        location: Location::default(),
+        args: vec![],
+        with_block: Some(ThinkAttributes {
+            plugins: {
+                let mut plugins = HashMap::new();
+                plugins.insert("provider".to_string(), config);
+                plugins
+            },
+            ..Default::default()
+        }),
     };
     let result = type_checker.visit_expression(&expr, &mut ctx);
     assert!(result.is_err());
@@ -129,12 +146,18 @@ fn test_plugin_config_validation_error_messages() {
 
     // Test missing name error
     let mut config = HashMap::new();
-    config.insert("provider_type".to_string(), Value::String("test".to_string()));
+    config.insert("provider_type".to_string(), Literal::String("test".to_string()));
     
     let expr = Expression::Think {
-        config: Some(config),
-        block: None,
-        location: Location::default(),
+        args: vec![],
+        with_block: Some(ThinkAttributes {
+            plugins: {
+                let mut plugins = HashMap::new();
+                plugins.insert("provider".to_string(), config);
+                plugins
+            },
+            ..Default::default()
+        }),
     };
     let result = type_checker.visit_expression(&expr, &mut ctx);
     assert!(result.is_err());
