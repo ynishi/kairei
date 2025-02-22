@@ -4,7 +4,8 @@ use thiserror::Error;
 const DEFAULT_HELP: &str = "No help available";
 const DEFAULT_SUGGESTION: &str = "No suggestion available";
 
-/// Error type for type checking operations
+/// Error types for type checking
+/// Plugin errors are handled through the visitor pattern using general type error variants
 #[derive(Error, Debug, Clone)]
 pub enum TypeCheckError {
     #[error("Type mismatch: expected {expected}, found {found}")]
@@ -22,9 +23,6 @@ pub enum TypeCheckError {
 
     #[error("Invalid type arguments: {0}")]
     InvalidTypeArguments(String),
-
-    #[error("Plugin type error: {message}")]
-    PluginTypeError { message: String },
 
     #[error("Invalid state variable: {message}")]
     InvalidStateVariable { message: String },
