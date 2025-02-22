@@ -141,6 +141,7 @@ impl TypeCheckError {
             }
             Self::InvalidHandlerSignature { message, .. } => {
                 Self::InvalidHandlerSignature { message, meta }
+            }
             Self::InvalidStateVariable { message, .. } => {
                 Self::InvalidStateVariable { message, meta }
             }
