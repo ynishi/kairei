@@ -945,6 +945,7 @@ mod tests {
         config::{ProviderConfig, ProviderConfigs, ProviderSecretConfig},
         event_registry::EventType,
         tokenizer::{self, token::Token},
+        type_checker::run_type_checker,
         AnswerDef, EventHandler, Expression, HandlerBlock, Literal, ReactDef, RequestHandler,
         StateAccessPath, StateDef, StateVarDef, Statement, TypeInfo,
     };
@@ -1074,9 +1075,12 @@ mod tests {
             .collect();
 
         // Rootのパース
-        let (_, root_ast) = analyzer::parsers::world::parse_root()
+        let (_, mut root_ast) = analyzer::parsers::world::parse_root()
             .parse(tokens.as_slice(), 0)
             .unwrap();
+
+        // Type Check
+        run_type_checker(&mut root_ast).unwrap();
 
         // システムの初期化
         system.initialize(root_ast).await.unwrap();
