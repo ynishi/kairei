@@ -241,10 +241,10 @@ fn test_invalid_argument_type_with_meta() {
     } = error
     {
         assert_eq!(meta.location, location);
-        assert_eq!(function, "test_func");
-        assert_eq!(argument, "arg0");
-        assert_eq!(expected, TypeInfo::Simple("Int".to_string()));
-        assert_eq!(found, TypeInfo::Simple("String".to_string()));
+        assert_eq!(*function, "test_func");
+        assert_eq!(*argument, "arg0");
+        assert_eq!(*expected, TypeInfo::Simple("Int".to_string()));
+        assert_eq!(*found, TypeInfo::Simple("String".to_string()));
         assert!(meta.help.contains("argument 'arg0' has wrong type"));
         assert!(meta
             .suggestion

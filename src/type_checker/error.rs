@@ -63,10 +63,10 @@ pub enum TypeCheckError {
 
     #[error("Invalid argument type for function {function}: argument {argument} expected {expected}, found {found}")]
     InvalidArgumentType {
-        function: String,
-        argument: String,
-        expected: TypeInfo,
-        found: TypeInfo,
+        function: Box<String>,
+        argument: Box<String>,
+        expected: Box<TypeInfo>,
+        found: Box<TypeInfo>,
         meta: TypeCheckErrorMeta,
     },
 
@@ -217,10 +217,10 @@ impl TypeCheckError {
         location: Location,
     ) -> Self {
         Self::InvalidArgumentType {
-            function: function.clone(),
-            argument: argument.clone(),
-            expected: expected.clone(),
-            found: found.clone(),
+            function: Box::new(function.clone()),
+            argument: Box::new(argument.clone()),
+            expected: Box::new(expected.clone()),
+            found: Box::new(found.clone()),
             meta: TypeCheckErrorMeta::default()
                 .with_location(location)
                 .with_help(&format!(
