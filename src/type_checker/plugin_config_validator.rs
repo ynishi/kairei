@@ -1,5 +1,5 @@
 use crate::{
-    ast::Expression,
+    ast,
     config::ProviderConfig,
     eval::expression::Value,
     type_checker::{visitor::common::PluginVisitor, TypeCheckResult, TypeContext},
@@ -14,7 +14,7 @@ impl PluginVisitor for PluginConfigValidator {
         expr: &Expression,
         _ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
-        if let Expression::Think {
+        if let ast::Expression::Think {
             args: _,
             with_block: Some(attrs),
         } = expr
