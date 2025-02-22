@@ -11,7 +11,7 @@ pub struct PluginConfigValidator;
 impl PluginVisitor for PluginConfigValidator {
     fn before_expression(
         &mut self,
-        expr: &Expression,
+        expr: &ast::Expression,
         _ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
         if let ast::Expression::Think {
@@ -23,7 +23,7 @@ impl PluginVisitor for PluginConfigValidator {
                 let config_map: HashMap<String, Value> = config
                     .iter()
                     .map(|(k, v)| match v {
-                        crate::ast::Literal::String(s) => (k.clone(), Value::String(s.clone())),
+                        ast::Literal::String(s) => (k.clone(), Value::String(s.clone())),
                         _ => (k.clone(), Value::String(v.to_string())),
                     })
                     .collect();
