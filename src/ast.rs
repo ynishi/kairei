@@ -451,6 +451,8 @@ use proc_macro2::TokenStream;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::type_checker::TypeCheckError;
+
 // リクエストオプション
 #[derive(Debug, Clone, PartialEq)]
 pub struct RequestAttributes {
@@ -776,6 +778,8 @@ pub enum ASTError {
     ParseError { target: String, message: String },
     #[error("AST not found: {0}")]
     ASTNotFound(String),
+    #[error("Type check error: {0}")]
+    TypeCheckError(#[from] TypeCheckError),
 }
 
 pub type ASTResult<T> = Result<T, ASTError>;
