@@ -2,7 +2,7 @@ use crate::{
     ast::{BinaryOperator, Expression, Literal, TypeInfo},
     type_checker::{
         visitor::{common::TypeVisitor, default::DefaultVisitor},
-        TypeCheckError, TypeCheckResult, TypeContext,
+        error::Location, TypeCheckError, TypeCheckResult, TypeContext,
     },
 };
 
@@ -86,7 +86,10 @@ fn test_undefined_variable() -> TypeCheckResult<()> {
 
     let expr = Expression::Variable("undefined_var".to_string());
     let result = visitor.visit_expression(&expr, &mut ctx);
-    assert!(matches!(result, Err(TypeCheckError::UndefinedVariable(..))));
+    assert!(matches!(
+        result,
+        Err(TypeCheckError::UndefinedVariable { .. })
+    ));
 
     Ok(())
 }
@@ -129,4 +132,42 @@ fn test_type_mismatch_in_assignment() -> TypeCheckResult<()> {
     assert!(matches!(result, Err(TypeCheckError::TypeMismatch { .. })));
 
     Ok(())
+}
+
+#[test]
+fn test_undefined_type_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::undefined_type("MyType".to_string(), location.clone());
+
+    if let TypeCheckError::UndefinedType { meta, name } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(name, "MyType");
+        assert!(meta.help.contains("MyType"));
+        assert!(meta.suggestion.contains("Check type name"));
+    } else {
+        panic!("Expected UndefinedType error");
+    }
+}
+
+#[test]
+fn test_undefined_variable_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::undefined_variable("x".to_string(), location.clone());
+
+    if let TypeCheckError::UndefinedVariable { meta, name } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(name, "x");
+        assert!(meta.help.contains("x"));
+        assert!(meta.suggestion.contains("Check variable name"));
+    } else {
+        panic!("Expected UndefinedVariable error");
+    }
 }

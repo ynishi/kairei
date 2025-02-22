@@ -14,8 +14,11 @@ pub enum TypeCheckError {
         meta: TypeCheckErrorMeta,
     },
 
-    #[error("Undefined type: {0}")]
-    UndefinedType(String),
+    #[error("Undefined type: {name}")]
+    UndefinedType {
+        name: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Invalid type arguments: {0}")]
     InvalidTypeArguments(String),
@@ -41,8 +44,11 @@ pub enum TypeCheckError {
         meta: TypeCheckErrorMeta,
     },
 
-    #[error("Undefined variable: {0}")]
-    UndefinedVariable(String),
+    #[error("Undefined variable: {name}")]
+    UndefinedVariable {
+        name: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Undefined function: {0}")]
     UndefinedFunction(String),
@@ -135,12 +141,34 @@ impl TypeCheckError {
         }
     }
 
-    pub fn undefined_type(name: String) -> Self {
-        Self::UndefinedType(name)
+    pub fn undefined_type(name: String, location: Location) -> Self {
+        Self::UndefinedType {
+            name: name.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help(&format!(
+                    "Type '{}' is not defined in the current scope",
+                    name
+                ))
+                .with_suggestion(
+                    "Check type name for typos or ensure the type is imported/defined",
+                ),
+        }
     }
 
-    pub fn undefined_variable(name: String) -> Self {
-        Self::UndefinedVariable(name)
+    pub fn undefined_variable(name: String, location: Location) -> Self {
+        Self::UndefinedVariable {
+            name: name.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help(&format!(
+                    "Variable '{}' is not defined in the current scope",
+                    name
+                ))
+                .with_suggestion(
+                    "Check variable name for typos or ensure it is declared before use",
+                ),
+        }
     }
 
     pub fn type_inference_error(message: String, location: Location) -> Self {
@@ -223,8 +251,8 @@ mod tests {
         assert!(matches!(error, TypeCheckError::TypeMismatch { .. }));
 
         // Test undefined type helper
-        let error = TypeCheckError::undefined_type("MyType".to_string());
-        assert!(matches!(error, TypeCheckError::UndefinedType(..)));
+        let error = TypeCheckError::undefined_type("MyType".to_string(), location.clone());
+        assert!(matches!(error, TypeCheckError::UndefinedType { .. }));
 
         // Test with_meta helper
         let meta = TypeCheckErrorMeta::context(location.clone(), "Invalid types for operation")
