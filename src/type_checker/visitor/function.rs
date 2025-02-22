@@ -40,9 +40,9 @@ impl DefaultFunctionChecker {
         function: &str,
         ctx: &TypeContext,
     ) -> TypeCheckResult<TypeInfo> {
-        ctx.scope
-            .get_type(function)
-            .ok_or_else(|| TypeCheckError::UndefinedFunction(function.to_string()))
+        ctx.scope.get_type(function).ok_or_else(|| {
+            TypeCheckError::undefined_function(function.to_string(), Default::default())
+        })
     }
 
     fn extract_parameter_types(
@@ -257,7 +257,10 @@ mod tests {
         // Test undefined function
         let args = vec![Expression::Literal(Literal::Integer(42))];
         let result = checker.check_function_call("undefined_func", &args, &ctx);
-        assert!(matches!(result, Err(TypeCheckError::UndefinedFunction(..))));
+        assert!(matches!(
+            result,
+            Err(TypeCheckError::UndefinedFunction { name: _, meta: _ })
+        ));
 
         Ok(())
     }
