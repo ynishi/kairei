@@ -35,49 +35,65 @@ impl DefaultVisitor {
         ctx: &TypeContext,
     ) -> TypeCheckResult<()> {
         match expected_type {
-            TypeInfo::Result { ok_type, err_type } => match expr {
-                Expression::Ok(inner_expr) => {
-                    let inner_type = self.infer_type(inner_expr, ctx)?;
-                    // Any型は任意の型を受け入れる
-                    if let TypeInfo::Simple(type_name) = &**ok_type {
-                        if type_name != "Any" && inner_type != **ok_type {
+            TypeInfo::Result { ok_type, err_type } => {
+                let expr_type = self.infer_type(expr, ctx)?;
+                match expr {
+                    Expression::Ok(inner_expr) => {
+                        let inner_type = self.infer_type(inner_expr, ctx)?;
+                        if let TypeInfo::Simple(type_name) = &**ok_type {
+                            if type_name != "Any" && inner_type != **ok_type {
+                                return Err(TypeCheckError::type_mismatch(
+                                    (**ok_type).clone(),
+                                    inner_type,
+                                    Default::default(),
+                                ));
+                            }
+                        } else if inner_type != **ok_type {
                             return Err(TypeCheckError::type_mismatch(
                                 (**ok_type).clone(),
                                 inner_type,
                                 Default::default(),
                             ));
                         }
-                    } else if inner_type != **ok_type {
+                    }
+                    Expression::Err(inner_expr) => {
+                        let inner_type = self.infer_type(inner_expr, ctx)?;
+                        if let TypeInfo::Simple(type_name) = &inner_type {
+                            if type_name == "String" {
+                                return Ok(());
+                            }
+                        }
                         return Err(TypeCheckError::type_mismatch(
-                            (**ok_type).clone(),
+                            (**err_type).clone(),
                             inner_type,
                             Default::default(),
                         ));
                     }
-                }
-                Expression::Err(inner_expr) => {
-                    let inner_type = self.infer_type(inner_expr, ctx)?;
-                    // エラーの場合、String型をError型として扱う
-                    if let TypeInfo::Simple(type_name) = &inner_type {
-                        if type_name == "String" {
+                    _ => {
+                        // For expressions that return Result type (like Think)
+                        if let TypeInfo::Result {
+                            ok_type: ref found_ok,
+                            err_type: ref found_err,
+                        } = expr_type
+                        {
+                            if **ok_type != **found_ok || **err_type != **found_err {
+                                return Err(TypeCheckError::type_mismatch(
+                                    expected_type.clone(),
+                                    expr_type,
+                                    Default::default(),
+                                ));
+                            }
                             return Ok(());
+                        } else {
+                            return Err(TypeCheckError::type_mismatch(
+                                expected_type.clone(),
+                                expr_type,
+                                Default::default(),
+                            ));
                         }
                     }
-                    return Err(TypeCheckError::type_mismatch(
-                        (**err_type).clone(),
-                        inner_type,
-                        Default::default(),
-                    ));
                 }
-                _ => {
-                    let expr_type = self.infer_type(expr, ctx)?;
-                    return Err(TypeCheckError::type_mismatch(
-                        expected_type.clone(),
-                        expr_type,
-                        Default::default(),
-                    ));
-                }
-            },
+            }
             _ => {
                 let expr_type = self.infer_type(expr, ctx)?;
                 if expr_type != *expected_type {
