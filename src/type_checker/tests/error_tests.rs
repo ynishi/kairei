@@ -216,3 +216,32 @@ fn test_invalid_type_arguments_with_meta() {
         panic!("Expected InvalidTypeArguments error");
     }
 }
+
+#[test]
+fn test_invalid_return_type_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::invalid_return_type(
+        TypeInfo::Simple("Int".to_string()),
+        TypeInfo::Simple("String".to_string()),
+        location.clone(),
+    );
+
+    if let TypeCheckError::InvalidReturnType {
+        meta,
+        expected,
+        found,
+    } = error
+    {
+        assert_eq!(meta.location, location);
+        assert_eq!(expected, TypeInfo::Simple("Int".to_string()));
+        assert_eq!(found, TypeInfo::Simple("String".to_string()));
+        assert!(meta.help.contains("Return type mismatch"));
+        assert!(meta.suggestion.contains("Ensure the function returns"));
+    } else {
+        panic!("Expected InvalidReturnType error");
+    }
+}
