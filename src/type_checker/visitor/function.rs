@@ -1,6 +1,6 @@
 use crate::{
     ast::{Expression, TypeInfo},
-    type_checker::{TypeCheckError, TypeCheckResult, TypeContext},
+    type_checker::{error::TypeCheckError, TypeCheckResult, TypeContext},
 };
 
 use super::expression::{DefaultExpressionChecker, ExpressionTypeChecker};
@@ -168,11 +168,11 @@ impl FunctionTypeChecker for DefaultFunctionChecker {
                 Expression::Literal(lit) => {
                     let actual_type = self.expression_checker.infer_literal_type(lit, ctx)?;
                     if actual_type != **ok_type {
-                        return Err(TypeCheckError::InvalidReturnType {
-                            expected: (**ok_type).clone(),
-                            found: actual_type,
-                            location: Default::default(),
-                        });
+                        return Err(TypeCheckError::invalid_return_type(
+                            (**ok_type).clone(),
+                            actual_type,
+                            Default::default(),
+                        ));
                     }
                 }
                 _ => {

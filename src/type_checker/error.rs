@@ -1,6 +1,15 @@
 use crate::ast::TypeInfo;
 use thiserror::Error;
 
+#[derive(Debug, Clone)]
+pub struct InvalidArgumentTypeData {
+    pub function: String,
+    pub argument: String,
+    pub expected: TypeInfo,
+    pub found: TypeInfo,
+    pub meta: TypeCheckErrorMeta,
+}
+
 const DEFAULT_HELP: &str = "No help available";
 const DEFAULT_SUGGESTION: &str = "No suggestion available";
 
@@ -64,14 +73,8 @@ pub enum TypeCheckError {
         meta: TypeCheckErrorMeta,
     },
 
-    #[error("Invalid argument type for function {function}: argument {argument} expected {expected}, found {found}")]
-    InvalidArgumentType {
-        function: String,
-        argument: String,
-        expected: TypeInfo,
-        found: TypeInfo,
-        meta: TypeCheckErrorMeta,
-    },
+    #[error("Invalid argument type for function {}: argument {} expected {}, found {}", .0.function, .0.argument, .0.expected, .0.found)]
+    InvalidArgumentType(Box<InvalidArgumentTypeData>),
 
     #[error("Invalid operator type: operator {operator} cannot be applied to {left_type} and {right_type}")]
     InvalidOperatorType {
@@ -223,6 +226,45 @@ impl TypeCheckError {
                 ))
                 .with_suggestion("Check function name for typos or ensure it is imported/defined"),
         }
+    }
+
+    pub fn invalid_return_type(expected: TypeInfo, found: TypeInfo, location: Location) -> Self {
+        Self::InvalidReturnType {
+            expected: expected.clone(),
+            found,
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Return type does not match function signature")
+                .with_suggestion(&format!(
+                    "Ensure the returned value matches the expected type: {}",
+                    expected
+                )),
+        }
+    }
+
+    pub fn invalid_argument_type(
+        function: String,
+        argument: String,
+        expected: TypeInfo,
+        found: TypeInfo,
+        location: Location,
+    ) -> Self {
+        Self::InvalidArgumentType(Box::new(InvalidArgumentTypeData {
+            function: function.clone(),
+            argument: argument.clone(),
+            expected: expected.clone(),
+            found: found.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help(&format!(
+                    "Invalid argument type for function '{}': argument '{}' has wrong type",
+                    function, argument
+                ))
+                .with_suggestion(&format!(
+                    "Provide an argument of type {} instead of {}",
+                    expected, found
+                )),
+        }))
     }
 }
 
