@@ -1,8 +1,8 @@
 pub mod checker;
 mod error;
 mod init;
-pub mod plugin_interface;
 mod plugin_config_validator;
+pub mod plugin_interface;
 pub mod scope;
 pub mod visitor;
 
@@ -13,8 +13,8 @@ pub use crate::type_checker::visitor::common::TypeVisitor;
 pub use checker::TypeChecker;
 pub use error::{TypeCheckError, TypeCheckResult};
 pub use init::create_type_checker;
-pub use plugin_interface::TypeCheckerPlugin;
 pub use plugin_config_validator::PluginConfigValidator;
+pub use plugin_interface::TypeCheckerPlugin;
 pub use scope::TypeScope;
 
 use crate::ast;
