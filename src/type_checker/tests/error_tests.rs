@@ -105,9 +105,31 @@ fn test_undefined_function() -> TypeCheckResult<()> {
         arguments: vec![],
     };
     let result = visitor.visit_expression(&expr, &mut ctx);
-    assert!(matches!(result, Err(TypeCheckError::UndefinedFunction(..))));
+    assert!(matches!(
+        result,
+        Err(TypeCheckError::UndefinedFunction { name: _, meta: _ })
+    ));
 
     Ok(())
+}
+
+#[test]
+fn test_undefined_function_with_meta() {
+    let location = Location {
+        line: 1,
+        column: 1,
+        file: "test.rs".to_string(),
+    };
+    let error = TypeCheckError::undefined_function("test_func".to_string(), location.clone());
+
+    if let TypeCheckError::UndefinedFunction { meta, name } = error {
+        assert_eq!(meta.location, location);
+        assert_eq!(name, "test_func");
+        assert!(meta.help.contains("Function 'test_func' is not defined"));
+        assert!(meta.suggestion.contains("Check function name for typos"));
+    } else {
+        panic!("Expected UndefinedFunction error");
+    }
 }
 
 #[test]
