@@ -99,7 +99,10 @@ fn test_custom_type_field_access() -> TypeCheckResult<()> {
         "invalid_field".to_string(),
     ]));
     let result = visitor.visit_expression(&expr, &mut ctx);
-    assert!(matches!(result, Err(TypeCheckError::UndefinedVariable(..))));
+    assert!(matches!(
+        result,
+        Err(TypeCheckError::UndefinedVariable { .. })
+    ));
 
     Ok(())
 }
