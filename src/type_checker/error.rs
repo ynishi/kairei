@@ -144,27 +144,27 @@ impl TypeCheckErrorMeta {
         }
     }
 
-    pub fn with_location(location: Location) -> Self {
-        Self {
-            location,
-            help: DEFAULT_HELP.to_string(),
-            suggestion: DEFAULT_SUGGESTION.to_string(),
-        }
+    // builder pattern
+    pub fn with_location(&mut self, location: Location) -> Self {
+        self.location = location;
+        self.clone()
     }
 
-    pub fn with_context(location: Location, help: &str) -> Self {
+    pub fn with_help(&mut self, help: &str) -> Self {
+        self.help = help.to_string();
+        self.clone()
+    }
+
+    pub fn with_suggestion(&mut self, suggestion: &str) -> Self {
+        self.suggestion = suggestion.to_string();
+        self.clone()
+    }
+
+    pub fn context(location: Location, help: &str) -> Self {
         Self {
             location,
             help: help.to_string(),
             suggestion: DEFAULT_SUGGESTION.to_string(),
-        }
-    }
-
-    pub fn with_suggestion(&mut self, suggestion: &str) -> Self {
-        Self {
-            location: self.location.clone(),
-            help: self.help.clone(),
-            suggestion: suggestion.to_string(),
         }
     }
 }
@@ -208,17 +208,13 @@ mod tests {
         assert!(matches!(error, TypeCheckError::UndefinedType(..)));
 
         // Test with_meta helper
-        let meta = TypeCheckErrorMeta::with_context(
-            location.clone(),
-            "Invalid types for operation",
-        ).with_suggestion(
-            "Use numeric types"
-        );
+        let meta = TypeCheckErrorMeta::context(location.clone(), "Invalid types for operation")
+            .with_suggestion("Use numeric types");
         let error = TypeCheckError::InvalidOperatorType {
             operator: "+".to_string(),
             left_type: type_info.clone(),
             right_type: type_info,
-            meta: TypeCheckErrorMeta::with_location(location.clone()),
+            meta: TypeCheckErrorMeta::default().with_location(location.clone()),
         }
         .with_meta(meta);
         assert!(matches!(error, TypeCheckError::InvalidOperatorType { .. }));
