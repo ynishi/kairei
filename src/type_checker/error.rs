@@ -49,7 +49,10 @@ pub enum TypeCheckError {
     },
 
     #[error("Invalid think block: {message}")]
-    InvalidThinkBlock { message: String },
+    InvalidThinkBlock {
+        message: String,
+        meta: TypeCheckErrorMeta,
+    },
 
     #[error("Type inference error: {message}")]
     TypeInferenceError {
@@ -139,6 +142,7 @@ impl TypeCheckError {
             Self::InvalidTypeArguments { message, .. } => {
                 Self::InvalidTypeArguments { message, meta }
             }
+            Self::InvalidThinkBlock { message, .. } => Self::InvalidThinkBlock { message, meta },
             Self::InvalidHandlerSignature { message, .. } => {
                 Self::InvalidHandlerSignature { message, meta }
             }
@@ -211,6 +215,15 @@ impl TypeCheckError {
         }
     }
 
+    pub fn invalid_think_block(message: String, location: Location) -> Self {
+        Self::InvalidThinkBlock {
+            message: message.clone(),
+            meta: TypeCheckErrorMeta::default()
+                .with_location(location)
+                .with_help("Invalid think block structure or content")
+                .with_suggestion("Check that the think block follows the expected format and contains valid expressions"),
+        }
+    }
     pub fn invalid_handler_signature(message: String, location: Location) -> Self {
         Self::InvalidHandlerSignature {
             message: message.clone(),
