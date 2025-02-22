@@ -1,8 +1,9 @@
 use crate::{
     ast::{BinaryOperator, Expression, Literal, TypeInfo},
     type_checker::{
+        error::Location,
         visitor::{common::TypeVisitor, default::DefaultVisitor},
-        error::Location, TypeCheckError, TypeCheckResult, TypeContext,
+        TypeCheckError, TypeCheckResult, TypeContext,
     },
 };
 
