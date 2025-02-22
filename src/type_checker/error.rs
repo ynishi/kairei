@@ -219,4 +219,55 @@ mod tests {
         .with_meta(meta);
         assert!(matches!(error, TypeCheckError::InvalidOperatorType { .. }));
     }
+
+    #[test]
+    fn test_builder_pattern() {
+        let location = Location::default();
+
+        // Test chaining with defaults
+        let meta = TypeCheckErrorMeta::default()
+            .with_help("Custom help")
+            .with_suggestion("Custom suggestion");
+        assert_eq!(meta.help, "Custom help");
+        assert_eq!(meta.suggestion, "Custom suggestion");
+        assert_eq!(meta.location, Location::default());
+
+        // Test context constructor with custom location
+        let meta = TypeCheckErrorMeta::context(
+            Location {
+                line: 1,
+                column: 2,
+                file: "test.rs".to_string(),
+            },
+            "Test help",
+        );
+        assert_eq!(meta.help, "Test help");
+        assert_eq!(meta.suggestion, DEFAULT_SUGGESTION);
+        assert_eq!(meta.location.line, 1);
+        assert_eq!(meta.location.column, 2);
+        assert_eq!(meta.location.file, "test.rs");
+
+        // Test full builder chain
+        let meta = TypeCheckErrorMeta::default()
+            .with_location(location.clone())
+            .with_help("Help message")
+            .with_suggestion("Suggestion message");
+        assert_eq!(meta.help, "Help message");
+        assert_eq!(meta.suggestion, "Suggestion message");
+        assert_eq!(meta.location, location);
+    }
+
+    #[test]
+    fn test_error_formatting() {
+        let location = Location {
+            line: 10,
+            column: 20,
+            file: "main.rs".to_string(),
+        };
+        let meta = TypeCheckErrorMeta::new(location, "Test help", "Test suggestion");
+        assert_eq!(
+            meta.to_string(),
+            "TypeCheckErrorMeta at main.rs:10:20: help: Test help, suggestion: Test suggestion"
+        );
+    }
 }
