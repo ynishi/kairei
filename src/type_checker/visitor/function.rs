@@ -104,13 +104,13 @@ impl DefaultFunctionChecker {
                 Expression::Literal(lit) => {
                     let arg_type = self.expression_checker.infer_literal_type(lit, ctx)?;
                     if arg_type != *expected_type {
-                        return Err(TypeCheckError::InvalidArgumentType {
-                            function: function.to_string(),
-                            argument: format!("arg{}", i),
-                            expected: expected_type.clone(),
-                            found: arg_type,
-                            location: Default::default(),
-                        });
+                        return Err(TypeCheckError::invalid_argument_type(
+                            function.to_string(),
+                            format!("arg{}", i),
+                            expected_type.clone(),
+                            arg_type,
+                            Default::default(),
+                        ));
                     }
                 }
                 _ => {
@@ -157,11 +157,11 @@ impl FunctionTypeChecker for DefaultFunctionChecker {
             (Expression::Literal(lit), TypeInfo::Result { ok_type, .. }) => {
                 let actual_type = self.expression_checker.infer_literal_type(lit, ctx)?;
                 if actual_type != **ok_type {
-                    return Err(TypeCheckError::InvalidReturnType {
-                        expected: (**ok_type).clone(),
-                        found: actual_type,
-                        location: Default::default(),
-                    });
+                    return Err(TypeCheckError::invalid_return_type(
+                        (**ok_type).clone(),
+                        actual_type,
+                        Default::default(),
+                    ));
                 }
             }
             (Expression::Ok(expr), TypeInfo::Result { ok_type, .. }) => match &**expr {
@@ -186,11 +186,11 @@ impl FunctionTypeChecker for DefaultFunctionChecker {
                 Expression::Literal(lit) => {
                     let actual_type = self.expression_checker.infer_literal_type(lit, ctx)?;
                     if actual_type != **err_type {
-                        return Err(TypeCheckError::InvalidReturnType {
-                            expected: (**err_type).clone(),
-                            found: actual_type,
-                            location: Default::default(),
-                        });
+                        return Err(TypeCheckError::invalid_return_type(
+                            (**err_type).clone(),
+                            actual_type,
+                            Default::default(),
+                        ));
                     }
                 }
                 _ => {
