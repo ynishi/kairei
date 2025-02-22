@@ -1,16 +1,16 @@
 use crate::{
     ast::{
         AnswerDef, Expression, HandlerBlock, MicroAgentDef, RequestHandler, Root, Statement,
-        TypeInfo,
+        TypeInfo, RequestType, Literal,
     },
-    type_checker::{TypeCheckError, TypeContext, TypeVisitor},
+    type_checker::{TypeCheckError, TypeContext, DefaultTypeVisitor},
     Argument,
 };
 
 #[test]
 fn test_think_expression_type_checking() {
     let mut ctx = TypeContext::new();
-    let mut visitor = super::create_test_visitor();
+    let mut visitor = DefaultTypeVisitor::new();
 
     // Create AST that matches the original failing case
     let ast = Root {
@@ -23,7 +23,7 @@ fn test_think_expression_type_checking() {
             observe: None,
             answer: Some(AnswerDef {
                 handlers: vec![RequestHandler {
-                    request_type: TypeInfo::Custom("PlanTrip".to_string(), Default::default()),
+                    request_type: RequestType::Custom("PlanTrip".to_string()),
                     parameters: vec![],
                     return_type: TypeInfo::Result {
                         ok_type: Box::new(TypeInfo::Simple("String".to_string())),
@@ -33,7 +33,7 @@ fn test_think_expression_type_checking() {
                     block: HandlerBlock {
                         statements: vec![Statement::Return(Expression::Think {
                             args: vec![Argument::Positional(Expression::Literal(
-                                "Tokyo".to_string().into(),
+                                Literal::String("Tokyo".to_string()),
                             ))],
                             with_block: None,
                         })],
