@@ -119,10 +119,11 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
                         operator: op.to_string(),
                         left_type: left.clone(),
                         right_type: right.clone(),
-                        meta: TypeCheckErrorMeta::new(
-                            Default::default(),
+                        meta: TypeCheckErrorMeta::with_context(
+                            Location::default(),
                             "Only numeric types are supported",
-                            "Use Int or Float types",
+                        ).with_suggestion(
+                            "Use Int or Float types"
                         ),
                     });
                 }
@@ -142,10 +143,11 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
                         operator: op.to_string(),
                         left_type: left.clone(),
                         right_type: right.clone(),
-                        meta: TypeCheckErrorMeta::new(
-                            Default::default(),
+                        meta: TypeCheckErrorMeta::with_context(
+                            Location::default(),
                             "Only boolean types are supported",
-                            "Use Boolean type",
+                        ).with_suggestion(
+                            "Use Boolean type"
                         ),
                     });
                 }

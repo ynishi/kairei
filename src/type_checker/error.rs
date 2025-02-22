@@ -160,10 +160,10 @@ impl TypeCheckErrorMeta {
         }
     }
 
-    pub fn with_suggestion(location: Location, help: &str, suggestion: &str) -> Self {
+    pub fn with_suggestion(&mut self, suggestion: &str) -> Self {
         Self {
-            location,
-            help: help.to_string(),
+            location: self.location.clone(),
+            help: self.help.clone(),
             suggestion: suggestion.to_string(),
         }
     }
@@ -208,10 +208,11 @@ mod tests {
         assert!(matches!(error, TypeCheckError::UndefinedType(..)));
 
         // Test with_meta helper
-        let meta = TypeCheckErrorMeta::with_suggestion(
-            location,
+        let meta = TypeCheckErrorMeta::with_context(
+            location.clone(),
             "Invalid types for operation",
-            "Use numeric types",
+        ).with_suggestion(
+            "Use numeric types"
         );
         let error = TypeCheckError::InvalidOperatorType {
             operator: "+".to_string(),
