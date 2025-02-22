@@ -1,7 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Duration};
 
-use crate::{provider::provider::ProviderType, Error, InternalResult};
+use crate::{
+    expression::Value,
+    provider::provider::ProviderType,
+    type_checker::TypeCheckError,
+    Error, InternalResult,
+};
+use std::convert::TryFrom;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemConfig {
@@ -217,6 +223,35 @@ impl Default for ProviderConfig {
             provider_specific: HashMap::new(),
             plugin_configs: HashMap::new(),
         }
+    }
+}
+
+impl TryFrom<HashMap<String, Value>> for ProviderConfig {
+    type Error = TypeCheckError;
+
+    fn try_from(value: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        // Validate required fields
+        let provider_type = value.get("provider_type")
+            .ok_or_else(|| TypeCheckError::invalid_type_arguments(
+                "Missing required field 'provider_type'".to_string(),
+                Default::default(),
+            ))?;
+
+        let name = value.get("name")
+            .ok_or_else(|| TypeCheckError::invalid_type_arguments(
+                "Missing required field 'name'".to_string(),
+                Default::default(),
+            ))?;
+
+        // Create default config with validated fields
+        Ok(Self {
+            provider_type: ProviderType::default(), // TODO: Parse from value
+            name: name.to_string(),
+            common_config: CommonConfig::default(),
+            endpoint: EndpointConfig::default(),
+            provider_specific: HashMap::new(),
+            plugin_configs: HashMap::new(),
+        })
     }
 }
 
