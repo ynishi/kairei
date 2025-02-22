@@ -170,7 +170,7 @@ impl TypeCheckErrorMeta {
 }
 
 /// Location information for error reporting
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Location {
     pub line: usize,
     pub column: usize,
