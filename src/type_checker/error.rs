@@ -154,6 +154,16 @@ impl MetaError {
             suggestion: Some(suggestion.to_string()),
         }
     }
+
+    pub fn with_help(mut self, help: String) -> Self {
+        self.help = Some(help);
+        self
+    }
+
+    pub fn with_suggestion_str(mut self, suggestion: String) -> Self {
+        self.suggestion = Some(suggestion);
+        self
+    }
 }
 
 /// Location information for error reporting
