@@ -56,9 +56,10 @@ impl DefaultFunctionChecker {
                     TypeInfo::Simple(_) => vec![(**ok_type).clone()],
                     TypeInfo::Array(elem_type) => vec![(**elem_type).clone()],
                     _ => {
-                        return Err(TypeCheckError::TypeInferenceError {
-                            message: "Invalid function parameter type".to_string(),
-                        })
+                        return Err(TypeCheckError::type_inference_error(
+                            "Invalid function parameter type".to_string(),
+                            Default::default(),
+                        ))
                     }
                 };
 
@@ -70,9 +71,10 @@ impl DefaultFunctionChecker {
 
                 Ok((param_types, return_type))
             }
-            _ => Err(TypeCheckError::TypeInferenceError {
-                message: "Invalid function type signature".to_string(),
-            }),
+            _ => Err(TypeCheckError::type_inference_error(
+                "Invalid function type signature".to_string(),
+                Default::default(),
+            )),
         }
     }
 
@@ -85,14 +87,15 @@ impl DefaultFunctionChecker {
     ) -> TypeCheckResult<()> {
         // Check number of arguments
         if arguments.len() != expected_types.len() {
-            return Err(TypeCheckError::TypeInferenceError {
-                message: format!(
+            return Err(TypeCheckError::type_inference_error(
+                format!(
                     "Function {} requires {} arguments, but {} were provided",
                     function,
                     expected_types.len(),
                     arguments.len()
                 ),
-            });
+                Default::default(),
+            ));
         }
 
         // Check each argument type
@@ -111,9 +114,10 @@ impl DefaultFunctionChecker {
                     }
                 }
                 _ => {
-                    return Err(TypeCheckError::TypeInferenceError {
-                        message: format!("Unsupported argument type for function {}", function),
-                    })
+                    return Err(TypeCheckError::type_inference_error(
+                        format!("Unsupported argument type for function {}", function),
+                        Default::default(),
+                    ))
                 }
             }
         }
@@ -172,9 +176,10 @@ impl FunctionTypeChecker for DefaultFunctionChecker {
                     }
                 }
                 _ => {
-                    return Err(TypeCheckError::TypeInferenceError {
-                        message: format!("Unsupported Ok value type for function {}", function),
-                    })
+                    return Err(TypeCheckError::type_inference_error(
+                        format!("Unsupported Ok value type for function {}", function),
+                        Default::default(),
+                    ))
                 }
             },
             (Expression::Err(expr), TypeInfo::Result { err_type, .. }) => match &**expr {
@@ -189,15 +194,17 @@ impl FunctionTypeChecker for DefaultFunctionChecker {
                     }
                 }
                 _ => {
-                    return Err(TypeCheckError::TypeInferenceError {
-                        message: format!("Unsupported Err value type for function {}", function),
-                    })
+                    return Err(TypeCheckError::type_inference_error(
+                        format!("Unsupported Err value type for function {}", function),
+                        Default::default(),
+                    ))
                 }
             },
             _ => {
-                return Err(TypeCheckError::TypeInferenceError {
-                    message: format!("Invalid return type for function {}", function),
-                })
+                return Err(TypeCheckError::type_inference_error(
+                    format!("Invalid return type for function {}", function),
+                    Default::default(),
+                ))
             }
         }
         Ok(())

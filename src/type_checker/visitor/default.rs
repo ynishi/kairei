@@ -185,12 +185,10 @@ impl DefaultVisitor {
                                     if let Some(default_value) = &field_info.default_value {
                                         self.infer_type(default_value, ctx)
                                     } else {
-                                        Err(TypeCheckError::TypeInferenceError {
-                                            message: format!(
-                                                "Cannot infer type for field {}",
-                                                field_name
-                                            ),
-                                        })
+                                        Err(TypeCheckError::type_inference_error(
+                                            format!("Cannot infer type for field {}", field_name),
+                                            Default::default(),
+                                        ))
                                     }
                                 }
                             } else {
@@ -215,9 +213,10 @@ impl DefaultVisitor {
                 for expr in exprs {
                     let expr_type = self.infer_type(expr, ctx)?;
                     if !matches!(expr_type, TypeInfo::Result { .. }) {
-                        return Err(TypeCheckError::TypeInferenceError {
-                            message: "Can only await Result types".to_string(),
-                        });
+                        return Err(TypeCheckError::type_inference_error(
+                            "Can only await Result types".to_string(),
+                            Default::default(),
+                        ));
                     }
                 }
                 Ok(TypeInfo::Simple("Any".to_string()))
@@ -503,9 +502,10 @@ impl TypeVisitor for DefaultVisitor {
                     } else if let Some(return_type) = ctx.scope.get_type("return_type") {
                         return_type.clone()
                     } else {
-                        return Err(TypeCheckError::TypeInferenceError {
-                            message: "No return type found for handler".to_string(),
-                        });
+                        return Err(TypeCheckError::type_inference_error(
+                            "No return type found for handler".to_string(),
+                            Default::default(),
+                        ));
                     };
                 self.check_return_type(expr, &expected_type, ctx)?;
                 Ok(())
