@@ -260,14 +260,14 @@ impl TypeCheckError {
     pub fn invalid_return_type(expected: TypeInfo, found: TypeInfo, location: Location) -> Self {
         Self::InvalidReturnType {
             expected: expected.clone(),
-            found,
+            found: found.clone(),
             meta: TypeCheckErrorMeta::default()
                 .with_location(location)
-                .with_help("Return type does not match function signature")
-                .with_suggestion(&format!(
-                    "Ensure the returned value matches the expected type: {}",
-                    expected
-                )),
+                .with_help(&format!(
+                    "Return type mismatch: expected {}, found {}",
+                    expected, found
+                ))
+                .with_suggestion("Ensure the function returns a value of the expected type"),
         }
     }
 
