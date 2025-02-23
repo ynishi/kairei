@@ -1,0 +1,136 @@
+name: Scope Expansion Detection
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+
+jobs:
+  detect-scope-expansion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Analyze scope expansion
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            // Get PR and issue details
+            const pr = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: context.issue.number
+            });
+            
+            // Extract issue number from PR body if it references one
+            const issueMatch = pr.data.body.match(/#(\d+)/);
+            if (!issueMatch) return;
+            
+            const issueNumber = issueMatch[1];
+            const issue = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: parseInt(issueNumber)
+            });
+            
+            // Get changed files
+            const files = await github.rest.pulls.listFiles({
+              owner,
+              repo,
+              pull_number: context.issue.number
+            });
+            
+            // Analyze complexity indicators
+            const indicators = {
+              fileCount: files.data.length,
+              totalChanges: files.data.reduce((acc, file) => acc + file.changes, 0),
+              componentsAffected: new Set(
+                files.data
+                  .map(f => f.filename.split('/')[1])
+                  .filter(c => ['tokenizer', 'parser', 'type_checker', 'runtime', 'system'].includes(c))
+              ).size
+            };
+            
+            // Define thresholds for scope expansion
+            const thresholds = {
+              fileCount: 5,
+              totalChanges: 200,
+              componentsAffected: 2
+            };
+            
+            // Check if scope has expanded
+            const hasExpanded = 
+              indicators.fileCount > thresholds.fileCount ||
+              indicators.totalChanges > thresholds.totalChanges ||
+              indicators.componentsAffected > thresholds.componentsAffected;
+            
+            if (hasExpanded) {
+              // Create knowledge base entry
+              const knowledgeEntry = {
+                title: `スコープ拡大検知: Issue #${issueNumber}`,
+                description: `
+# スコープ拡大の分析
+
+## 元のIssue
+${issue.data.title}
+
+## 拡大指標
+- 変更ファイル数: ${indicators.fileCount} (閾値: ${thresholds.fileCount})
+- 総変更行数: ${indicators.totalChanges} (閾値: ${thresholds.totalChanges})
+- 影響コンポーネント数: ${indicators.componentsAffected} (閾値: ${thresholds.componentsAffected})
+
+## 分析
+- 当初のIssueより範囲が拡大しています
+- 複数のコンポーネントに変更が及んでいます
+- 変更量が予想を超えています
+
+## 推奨アクション
+1. 現在の変更をレビュー
+2. タスクの分割検討
+3. 追加Issue作成の検討
+
+## 影響範囲
+${files.data.map(f => `- ${f.filename}: ${f.changes} 行の変更`).join('\n')}
+                `,
+                tags: ['scope-expansion', 'complexity-increase', `issue-${issueNumber}`]
+              };
+              
+              // Add comment to PR
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: context.issue.number,
+                body: `# 🔍 スコープ拡大検知
+
+元のIssue #${issueNumber} から、実装範囲が拡大している可能性があります。
+
+## 分析結果
+- 変更ファイル数: ${indicators.fileCount} ファイル
+- 総変更行数: ${indicators.totalChanges} 行
+- 影響コンポーネント数: ${indicators.componentsAffected}
+
+## 提案
+1. 現在の変更を一時停止
+2. 以下の検討をお願いします：
+   - タスクの分割
+   - 追加Issueの作成
+   - 実装範囲の見直し
+
+この分析結果はナレッジベースに記録されました。`
+              });
+              
+              // Add label to PR
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: context.issue.number,
+                labels: ['scope-expanded']
+              });
+            }
