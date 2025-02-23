@@ -29,6 +29,26 @@ jobs:
               pull_number: context.issue.number
             });
             
+            // Check for docs/design reference in PR
+            const hasDesignDocRef = pr.data.body.toLowerCase().includes('docs/design');
+            if (!hasDesignDocRef) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: context.issue.number,
+                body: `# ⚠️ 設計ドキュメント参照の確認
+
+docs/design (Single Source of Truth) への参照が見つかりません。
+実装前に必ず設計ドキュメントを確認してください。
+
+## アクション
+1. docs/design の関連ドキュメントを確認
+2. PRの説明に参照した設計ドキュメントを記載
+3. 設計との整合性を確認`
+              });
+              return;
+            }
+            
             // Extract issue number from PR body if it references one
             const issueMatch = pr.data.body.match(/#(\d+)/);
             if (!issueMatch) return;
