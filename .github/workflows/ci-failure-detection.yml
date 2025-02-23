@@ -67,19 +67,19 @@ jobs:
                     issue_number: pr.data[0].number,
                     body: `🛑 CI Loop Detection
 
-3回連続でCIが失敗しました。同じエラーパターンが検出されたため、ループの可能性があります。
+CI has failed 3 consecutive times with similar error patterns. A loop may be occurring.
 
-最新のエラー:
+Latest error:
 \`\`\`
 ${errorMessages[0].substring(0, 500)}
 \`\`\`
 
-対応方法:
-1. エラーメッセージを確認し、根本的な原因を特定してください
-2. 必要に応じてタスクを分割することを検討してください
-3. ローカルでのテスト実行を確認してから再度プッシュしてください
+Recommended actions:
+1. Review error messages and identify root cause
+2. Consider splitting the task if needed
+3. Verify changes locally before pushing again
 
-このコメントは自動生成されています。`
+This comment was automatically generated.`
                   });
                 }
               }
