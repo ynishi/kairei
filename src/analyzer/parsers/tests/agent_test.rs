@@ -5,7 +5,7 @@ use crate::analyzer::parsers::handlers::answer::parse_answer;
 use crate::analyzer::parsers::handlers::observe::parse_observe;
 use crate::analyzer::parsers::handlers::react::parse_react;
 use crate::analyzer::Parser;
-use crate::tokenizer::literal::StringPart;
+use crate::tokenizer::literal::{StringLiteral, StringPart};
 use crate::tokenizer::symbol::Operator;
 use crate::tokenizer::{keyword::Keyword, literal::Literal, symbol::Delimiter, token::Token};
 use crate::{ast, RequestHandler};
@@ -183,9 +183,9 @@ fn test_parse_full_state_block() {
         Token::Delimiter(Delimiter::Colon),
         Token::Identifier("String".to_string()),
         Token::Delimiter(Delimiter::Equal),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "test".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("test".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::Semicolon),
         // active: Bool = true
         Token::Identifier("active".to_string()),
@@ -301,9 +301,9 @@ fn test_parse_observe_block() {
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Identifier("name".to_string()),
         Token::Delimiter(Delimiter::Equal),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "updated".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("updated".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::CloseBrace),
         Token::Delimiter(Delimiter::CloseBrace),
     ];
@@ -478,15 +478,15 @@ fn test_parse_react_block() {
         Token::Delimiter(Delimiter::OpenParen),
         Token::Identifier("agent".to_string()),
         Token::Delimiter(Delimiter::Colon),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "self".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("self".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::Comma),
         Token::Identifier("counter".to_string()),
         Token::Delimiter(Delimiter::Colon),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "counter".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("counter".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::CloseParen),
         Token::Keyword(Keyword::To),
         Token::Identifier("manager".to_string()),
@@ -570,9 +570,9 @@ fn test_parse_agent() {
         Token::Delimiter(Delimiter::Colon),
         Token::Identifier("String".to_string()),
         Token::Delimiter(Delimiter::Equal),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "test".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("test".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::Semicolon),
         // active: Bool = true
         Token::Identifier("active".to_string()),
@@ -603,9 +603,9 @@ fn test_parse_agent() {
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Identifier("name".to_string()),
         Token::Delimiter(Delimiter::Equal),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "updated".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("updated".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::CloseBrace),
         Token::Delimiter(Delimiter::CloseBrace),
         Token::Keyword(Keyword::Answer),
@@ -683,15 +683,15 @@ fn test_parse_agent() {
         Token::Delimiter(Delimiter::OpenParen),
         Token::Identifier("agent".to_string()),
         Token::Delimiter(Delimiter::Colon),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "self".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("self".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::Comma),
         Token::Identifier("counter".to_string()),
         Token::Delimiter(Delimiter::Colon),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "counter".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("counter".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::CloseParen),
         Token::Keyword(Keyword::To),
         Token::Identifier("manager".to_string()),
