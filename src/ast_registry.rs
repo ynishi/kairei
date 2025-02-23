@@ -9,6 +9,7 @@ use crate::{
     config::AgentConfig,
     preprocessor::{self, Preprocessor},
     tokenizer::{self, token::Token},
+    type_checker::run_type_checker,
     ASTError, ASTResult, AnswerDef, EventsDef, Expression, HandlerBlock, HandlersDef, Literal,
     MicroAgentDef, RequestHandler, RequestType, StateAccessPath, StateDef, StateVarDef, Statement,
     TypeInfo, WorldDef,
@@ -25,12 +26,13 @@ impl AstRegistry {
         let preprocessor = preprocessor::TokenPreprocessor::default();
         let tokens: Vec<Token> = preprocessor.process(tokens);
         debug!("{:?}", tokens);
-        let (pos, root) = analyzer::parsers::world::parse_root()
+        let (pos, mut root) = analyzer::parsers::world::parse_root()
             .parse(tokens.as_slice(), 0)
             .map_err(|e: analyzer::ParseError| ASTError::ParseError {
                 message: format!("failed to parse DSL {}", e),
                 target: "root".to_string(),
             })?;
+        debug!("{:?}", root);
         if pos != tokens.len() {
             warn!(
                 "Failed to parse DSL: {:?}, {}, {}",
@@ -43,6 +45,8 @@ impl AstRegistry {
                 target: "root".to_string(),
             });
         }
+        // type check
+        run_type_checker(&mut root).map_err(ASTError::from)?;
         Ok(root)
     }
     pub async fn register_agent_ast(
