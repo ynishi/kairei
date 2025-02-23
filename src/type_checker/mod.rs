@@ -67,3 +67,8 @@ pub fn run_type_checker(root: &mut ast::Root) -> TypeCheckResult<()> {
     let mut checker = TypeChecker::new();
     checker.check_types(root)
 }
+
+// Test change in type_checker
+pub fn test_multi_component_change_type_checker() {
+    println!("Test type checker change");
+}
