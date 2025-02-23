@@ -13,9 +13,9 @@ fn test_parse_world() {
         Token::Identifier("test".to_string()),
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Keyword(Keyword::Policy),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "test".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("test".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::CloseBrace),
     ];
     let (rest, world) = parse_world().parse(&input, 0).unwrap();
