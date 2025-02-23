@@ -1,7 +1,7 @@
 use crate::analyzer::parsers::types::*;
 use crate::analyzer::Parser;
 use crate::ast;
-use crate::tokenizer::literal::StringPart;
+use crate::tokenizer::literal::{StringLiteral, StringPart};
 use crate::tokenizer::symbol::{Delimiter, Operator};
 use crate::tokenizer::{literal::Literal, token::Token};
 
@@ -56,9 +56,9 @@ fn test_parse_custom_type_with_type_and_default() {
         Token::Delimiter(Delimiter::Colon),
         Token::Identifier("String".to_string()),
         Token::Delimiter(Delimiter::Equal),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "John".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("John".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::CloseBrace),
     ];
 
@@ -150,9 +150,9 @@ fn test_parse_custom_type_multiple_fields() {
         Token::Delimiter(Delimiter::Colon),
         Token::Identifier("String".to_string()),
         Token::Delimiter(Delimiter::Equal),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "John".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("John".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::Comma),
         // age = 32
         Token::Identifier("age".to_string()),
@@ -218,9 +218,9 @@ fn test_parse_field_typed_with_default() {
         Token::Delimiter(Delimiter::Colon),
         Token::Identifier("String".to_string()),
         Token::Delimiter(Delimiter::Equal),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "test".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("test".to_string()),
+        ]))),
     ];
     let (pos, field_info) = parse_field_typed_with_default().parse(input, 0).unwrap();
     assert_eq!(pos, input.len());
