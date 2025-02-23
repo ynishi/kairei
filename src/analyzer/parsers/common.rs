@@ -97,21 +97,70 @@ fn parse_integer() -> impl Parser<Token, ast::Literal> {
 
 fn parse_string() -> impl Parser<Token, ast::Literal> {
     with_context(
-        satisfy(|token| match token {
-            Token::Literal(Literal::String(parts)) => {
-                if parts.len() == 1 {
-                    match &parts[0] {
-                        StringPart::Literal(s) => Some(ast::Literal::String(s.clone())),
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }),
+        choice(vec![
+            Box::new(parse_triple_quoted_string()),
+            Box::new(parse_regular_string()),
+        ]),
         "string",
     )
+}
+
+fn parse_triple_quoted_string() -> impl Parser<Token, ast::Literal> {
+    satisfy(|token| match token {
+        Token::Literal(Literal::String(parts)) => {
+            if let Some(StringPart::TripleQuoted(inner_parts)) = parts.first() {
+                let mut result = String::new();
+                let mut at_line_start = true;
+
+                for part in inner_parts {
+                    match part {
+                        StringPart::Literal(s) => {
+                            if at_line_start {
+                                let content = s.trim_start().to_string();
+                                if !content.is_empty() {
+                                    result.push_str(&content);
+                                    at_line_start = false;
+                                }
+                            } else {
+                                result.push_str(s);
+                            }
+                        }
+                        StringPart::NewLine => {
+                            result.push('\n');
+                            at_line_start = true;
+                        }
+                        StringPart::Interpolation(var) => {
+                            result.push_str("${");
+                            result.push_str(var);
+                            result.push('}');
+                            at_line_start = false;
+                        }
+                        _ => return None,
+                    }
+                }
+                Some(ast::Literal::String(result))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    })
+}
+
+fn parse_regular_string() -> impl Parser<Token, ast::Literal> {
+    satisfy(|token| match token {
+        Token::Literal(Literal::String(parts)) => {
+            if parts.len() == 1 {
+                match &parts[0] {
+                    StringPart::Literal(s) => Some(ast::Literal::String(s.clone())),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
+        _ => None,
+    })
 }
 
 fn parse_boolean() -> impl Parser<Token, ast::Literal> {
