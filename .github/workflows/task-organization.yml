@@ -61,24 +61,24 @@ jobs:
               
               // Create knowledge base entry
               const knowledgeEntry = {
-                title: `複数コンポーネントの変更: ${componentsList}`,
+                title: `Multiple Component Changes: ${componentsList}`,
                 description: `
-# 範囲拡大の検知
+# Scope Expansion Detection
 
-## 影響を受けるコンポーネント
+## Affected Components
 ${Array.from(affectedComponents).map(c => `- ${c}`).join('\n')}
 
-## 分析
-- 当初の想定より範囲が拡大している可能性があります
-- 複数のコアコンポーネントに変更が及んでいます
+## Analysis
+- Implementation scope may have expanded beyond initial expectations
+- Multiple core components are affected
 
-## 推奨アクション
-1. タスクの分割を検討
-2. 各コンポーネントごとに独立したPRを作成
-3. 依存関係の明確化
+## Recommended Actions
+1. Consider task splitting
+2. Create independent PRs per component
+3. Document dependencies
 
-## 影響範囲
-${Array.from(affectedComponents).map(c => `### ${c}\n- 変更の概要\n- 他コンポーネントとの依存関係`).join('\n\n')}
+## Impact Areas
+${Array.from(affectedComponents).map(c => `### ${c}\n- Change summary\n- Component dependencies`).join('\n\n')}
                 `,
                 tags: ['scope-expansion', 'multiple-components', ...Array.from(affectedComponents)]
               };
@@ -88,23 +88,23 @@ ${Array.from(affectedComponents).map(c => `### ${c}\n- 変更の概要\n- 他コ
                 owner,
                 repo,
                 issue_number: context.issue.number,
-                body: `# 🔄 タスク範囲の拡大検知
+                body: `# 🔄 Task Scope Expansion Detection
 
-複数のコアコンポーネントに変更が及んでいます：
+Multiple core components are affected:
 ${Array.from(affectedComponents).map(c => `- ${c}`).join('\n')}
 
-## 提案 📝
-関連タスクを分割してもいいですか？
+## Proposal 📝
+Would you like to split these related tasks?
 
-### 分割案
-${Array.from(affectedComponents).map(c => `1. ${c}の変更`).join('\n')}
+### Suggested Split
+${Array.from(affectedComponents).map(c => `1. Changes to ${c}`).join('\n')}
 
-### メリット
-- レビューがしやすくなります
-- 各変更の影響範囲が明確になります
-- テストが効率的になります
+### Benefits
+- Easier to review
+- Clear impact scope per change
+- More efficient testing
 
-この分析結果はナレッジベースに記録されました。`
+This analysis has been recorded in the knowledge base.`
               });
               
               // Add label to PR
