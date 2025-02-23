@@ -1,26 +1,26 @@
-# CI失敗検知とループ防止
+# CI Failure Detection and Loop Prevention
 
-## 概要
-CIの連続失敗を検知し、同一エラーパターンによるループを防止する機能。
+## Overview
+A feature to detect consecutive CI failures and prevent loops caused by similar error patterns.
 
-## 動作
-1. CIが3回連続で失敗した場合:
-   - 自動的に「ループの可能性あり」と判断
-   - エラーパターンを分析
-   - PRにラベル付与とコメント追加
-   - 追跡用Issueを作成
+## Operation
+1. When CI fails 3 consecutive times:
+   - Automatically detects potential loop
+   - Analyzes error patterns
+   - Adds labels and comments to PR
+   - Creates tracking issue
 
-## エラーパターン分析
-- 直近3回の失敗ログを比較
-- 同一エラーパターンの検出
-- エラー内容の要約と提案
+## Error Pattern Analysis
+- Compares last 3 failure logs
+- Detects identical error patterns
+- Summarizes errors and suggests solutions
 
-## 推奨アクション
-1. エラーメッセージの確認
-2. ローカルでのテスト実行
-3. 必要に応じてタスクの分割
+## Recommended Actions
+1. Review error messages
+2. Run tests locally
+3. Consider task splitting if needed
 
-## 実装詳細
-- `.github/workflows/ci-failure-detection.yml`で実装
-- GitHub Actionsのworkflow_runトリガーを使用
-- エラーパターンの類似性分析機能
+## Implementation Details
+- Implemented in `.github/workflows/ci-failure-detection.yml`
+- Uses GitHub Actions workflow_run trigger
+- Error pattern similarity analysis
