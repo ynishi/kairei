@@ -1,33 +1,33 @@
-# タスク組織化と範囲拡大検知
+# Task Organization and Scope Expansion Detection
 
-## 概要
-複数コンポーネントへの変更やスコープ拡大を検知し、タスクの分割を提案する機能。
+## Overview
+A feature to detect changes across multiple components and scope expansion, suggesting task splitting when appropriate.
 
-## 検知対象
-- 複数コンポーネントへの同時変更
+## Detection Targets
+- Simultaneous changes to multiple components
   - tokenizer
   - analyzer/parser
   - type_checker
-  - その他コアコンポーネント
-- 設計ドキュメント参照の確認
+  - other core components
+- Design document reference verification
 
-## 動作
-1. PRの変更を分析:
-   - 影響を受けるコンポーネントの特定
-   - docs/design参照の確認
-   - 変更量の分析
+## Operation
+1. PR Change Analysis:
+   - Identify affected components
+   - Verify docs/design references
+   - Analyze change volume
 
-2. 複数コンポーネント変更時:
-   - タスク分割の提案
-   - ナレッジベースへの記録
-   - PRへのラベル付与とコメント
+2. Multi-component Change Response:
+   - Suggest task splitting
+   - Record in knowledge base
+   - Add labels and comments to PR
 
-## 推奨プラクティス
-1. コンポーネントごとに独立したPRを作成
-2. 設計ドキュメントの参照を明示
-3. 依存関係の明確化
+## Best Practices
+1. Create independent PRs per component
+2. Reference design documents explicitly
+3. Clarify dependencies
 
-## 実装詳細
-- `.github/workflows/task-organization.yml`で実装
-- `.github/workflows/scope-expansion-detection.yml`で実装
-- GitHub Actionsのpull_requestトリガーを使用
+## Implementation Details
+- Implemented in `.github/workflows/task-organization.yml`
+- Implemented in `.github/workflows/scope-expansion-detection.yml`
+- Uses GitHub Actions pull_request trigger
