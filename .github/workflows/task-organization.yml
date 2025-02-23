@@ -1,0 +1,117 @@
+name: Task Organization Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+
+jobs:
+  analyze-changes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Analyze changes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            // Get the PR details
+            const pr = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: context.issue.number
+            });
+            
+            // Get changed files
+            const files = await github.rest.pulls.listFiles({
+              owner,
+              repo,
+              pull_number: context.issue.number
+            });
+            
+            // Define component patterns
+            const components = {
+              'tokenizer': /src\/tokenizer/,
+              'parser': /src\/parser/,
+              'type_checker': /src\/type_checker/,
+              'runtime': /src\/runtime/,
+              'system': /src\/system/
+            };
+            
+            // Analyze which components are affected
+            const affectedComponents = new Set();
+            for (const file of files.data) {
+              for (const [component, pattern] of Object.entries(components)) {
+                if (pattern.test(file.filename)) {
+                  affectedComponents.add(component);
+                }
+              }
+            }
+            
+            // If multiple core components are affected, suggest splitting
+            if (affectedComponents.size > 1) {
+              const componentsList = Array.from(affectedComponents).join(', ');
+              
+              // Create knowledge base entry
+              const knowledgeEntry = {
+                title: `複数コンポーネントの変更: ${componentsList}`,
+                description: `
+# 範囲拡大の検知
+
+## 影響を受けるコンポーネント
+${Array.from(affectedComponents).map(c => `- ${c}`).join('\n')}
+
+## 分析
+- 当初の想定より範囲が拡大している可能性があります
+- 複数のコアコンポーネントに変更が及んでいます
+
+## 推奨アクション
+1. タスクの分割を検討
+2. 各コンポーネントごとに独立したPRを作成
+3. 依存関係の明確化
+
+## 影響範囲
+${Array.from(affectedComponents).map(c => `### ${c}\n- 変更の概要\n- 他コンポーネントとの依存関係`).join('\n\n')}
+                `,
+                tags: ['scope-expansion', 'multiple-components', ...Array.from(affectedComponents)]
+              };
+              
+              // Add comment to PR
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: context.issue.number,
+                body: `# 🔄 タスク範囲の拡大検知
+
+複数のコアコンポーネントに変更が及んでいます：
+${Array.from(affectedComponents).map(c => `- ${c}`).join('\n')}
+
+## 提案 📝
+関連タスクを分割してもいいですか？
+
+### 分割案
+${Array.from(affectedComponents).map(c => `1. ${c}の変更`).join('\n')}
+
+### メリット
+- レビューがしやすくなります
+- 各変更の影響範囲が明確になります
+- テストが効率的になります
+
+この分析結果はナレッジベースに記録されました。`
+              });
+              
+              // Add label to PR
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: context.issue.number,
+                labels: ['scope-expanded']
+              });
+            }
