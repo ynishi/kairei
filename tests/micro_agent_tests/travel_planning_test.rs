@@ -130,7 +130,19 @@ mod triple_quote_tests {
                 assert!(matches!(inner_parts[9], StringPart::NewLine));
                 assert!(matches!(
                     inner_parts[10],
-                    StringPart::Literal(ref s) if s.trim() == "Budget: ${budget} USD"
+                    StringPart::Literal(ref s) if s.trim() == "Budget:"
+                ));
+                assert!(matches!(
+                    inner_parts[11],
+                    StringPart::Literal(ref s) if s == " "
+                ));
+                assert!(matches!(
+                    inner_parts[12],
+                    StringPart::Interpolation(ref s) if s == "budget"
+                ));
+                assert!(matches!(
+                    inner_parts[13],
+                    StringPart::Literal(ref s) if s == " USD"
                 ));
             }
         } else {
