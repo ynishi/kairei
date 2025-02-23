@@ -1,0 +1,105 @@
+name: CI Failure Detection
+
+on:
+  workflow_run:
+    workflows: ['KAIREI CI', 'Test Coverage', 'Performance Tests']
+    types:
+      - completed
+
+jobs:
+  detect-failures:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - name: Check recent failures
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            // Get recent workflow runs for the same branch
+            const recentRuns = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              branch: context.event.workflow_run.head_branch,
+              per_page: 3,
+              status: 'failure'
+            });
+            
+            if (recentRuns.data.workflow_runs.length >= 3) {
+              // Get error messages from the last 3 failed runs
+              const errorMessages = [];
+              for (const run of recentRuns.data.workflow_runs.slice(0, 3)) {
+                const logs = await github.rest.actions.downloadWorkflowRunLogs({
+                  owner,
+                  repo,
+                  run_id: run.id
+                });
+                errorMessages.push(logs);
+              }
+              
+              // Check if errors are similar
+              const areErrorsSimilar = errorMessages.every((msg, i, arr) => 
+                i === 0 || msg.includes(arr[0].substring(0, 100))
+              );
+              
+              if (areErrorsSimilar) {
+                // Add label to PR
+                const pr = await github.rest.pulls.list({
+                  owner,
+                  repo,
+                  head: `${owner}:${context.event.workflow_run.head_branch}`
+                });
+                
+                if (pr.data.length > 0) {
+                  await github.rest.issues.addLabels({
+                    owner,
+                    repo,
+                    issue_number: pr.data[0].number,
+                    labels: ['ci-loop-detected']
+                  });
+                  
+                  // Add comment to PR
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: pr.data[0].number,
+                    body: `🛑 CI Loop Detection
+
+3回連続でCIが失敗しました。同じエラーパターンが検出されたため、ループの可能性があります。
+
+最新のエラー:
+\`\`\`
+${errorMessages[0].substring(0, 500)}
+\`\`\`
+
+対応方法:
+1. エラーメッセージを確認し、根本的な原因を特定してください
+2. 必要に応じてタスクを分割することを検討してください
+3. ローカルでのテスト実行を確認してから再度プッシュしてください
+
+このコメントは自動生成されています。`
+                  });
+                }
+              }
+            }
+
+      - name: Create issue for repeated failures
+        if: ${{ failure() }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🔄 CI Failure Loop Detected',
+              body: `CI has failed 3 times consecutively on branch: ${context.event.workflow_run.head_branch}
+
+Please investigate the root cause and consider:
+- Breaking down the changes into smaller PRs
+- Running tests locally before pushing
+- Reviewing the error patterns in the workflow logs
+
+Related PR: ${context.event.workflow_run.html_url}`
+            });
