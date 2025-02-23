@@ -1,67 +1,67 @@
-# KAIREIドキュメント戦略
+# KAIREI Documentation Strategy
 
-## 概要
-KAIREIのドキュメントは以下の2つの主要な場所で管理されます：
+## Overview
+KAIREI documentation is managed in two primary locations:
 
-1. RustDoc: 「今のプロダクトがどうなっているか」
-   - 実装と密接に結びついた技術仕様
-   - APIドキュメント
-   - コンポーネントの設計と構造
+1. RustDoc: "Current State of the Product"
+   - Technical specifications tightly coupled with implementation
+   - API documentation
+   - Component design and structure
 
-2. docs/: 「なぜそうなったのか、どう進めているのか」
-   - 開発プロセス
-   - 設計判断の記録
-   - チュートリアルやユースケース
-   - 図表やビジュアル資料
+2. docs/: "Historical Context and Process"
+   - Development processes
+   - Design decision records
+   - Tutorials and use cases
+   - Visual documentation and diagrams
 
-## RustDocの構成
+## RustDoc Structure
 
-### lib.rs - プロジェクト全体像
+### lib.rs - Project Overview
 ```rust
 //! # KAIREI
 //! 
-//! AIエージェント実行基盤（AI Agent Orchestration Platform）
+//! AI Agent Orchestration Platform
 //! 
 //! ## Architecture Overview
-//! KAIREIは、LLMを活用したAIエージェントの実行環境を提供します...
+//! KAIREI provides an execution environment for LLM-powered AI agents...
 //! 
 //! ## Core Design
-//! イベント駆動型アーキテクチャとMicroAgentモデルを採用し...
+//! Event-driven architecture with MicroAgent model...
 ```
 
-### dsl/mod.rs - DSL仕様
+### dsl/mod.rs - DSL Specification
 ```rust
 //! # KAIREI DSL
 //! 
-//! KAIREIのDSLは以下の主要コンポーネントで構成されています：
-//! - World定義
-//! - MicroAgent定義
-//! - think構文
+//! KAIREI DSL consists of the following core components:
+//! - World definitions
+//! - MicroAgent definitions
+//! - think syntax
 ```
 
-### agent/mod.rs - エージェント設計
+### agent/mod.rs - Agent Design
 ```rust
 //! # MicroAgent
 //! 
-//! MicroAgentは単一責務の原則に基づく実行単位で...
+//! MicroAgent is an execution unit based on the Single Responsibility Principle...
 ```
 
-## docs/の構成
-- design/: アーキテクチャと設計ドキュメント
-- process/: 開発プロセスとワークフロー
-- tutorials/: チュートリアルとガイド
-- assets/: 図表とビジュアル資料
+## docs/ Structure
+- design/: Architecture and design documents
+- process/: Development processes and workflows
+- tutorials/: Tutorials and guides
+- assets/: Diagrams and visual assets
 
-## 相互参照
-- RustDocからdocs/への参照
-  - 設計背景や詳細な説明が必要な場合
-  - 図表やビジュアル資料の参照
+## Cross-referencing
+- RustDoc to docs/ references
+  - Design background and detailed explanations
+  - Diagrams and visual assets
 
-- docs/からRustDocへの参照
-  - API仕様やインターフェースの説明
-  - 実装詳細の参照
+- docs/ to RustDoc references
+  - API specifications and interfaces
+  - Implementation details
 
-## メンテナンス
-- RustDoc: コードレビュー時に更新確認
-- docs/: 設計変更や新機能追加時に更新
-- 定期的なドキュメントレビューの実施
+## Maintenance
+- RustDoc: Review during code reviews
+- docs/: Update during design changes and feature additions
+- Regular documentation review cycles
