@@ -5,6 +5,7 @@ use kairei::{
     preprocessor::Preprocessor,
     system::System,
     tokenizer::token::Token,
+    type_checker::run_type_checker,
     Error,
 };
 use std::path::PathBuf;
@@ -25,6 +26,10 @@ struct FmtArgs {
     /// Write formatted output to stdout instead of modifying the file
     #[arg(short, long)]
     stdout: bool,
+
+    /// Strict mode, type check the DSL file
+    #[arg(long)]
+    strict: bool,
 }
 
 #[derive(Parser)]
@@ -65,6 +70,13 @@ async fn format_file(args: &FmtArgs) -> Result<(), Error> {
     let (_, root) = kairei::analyzer::parsers::world::parse_root()
         .parse(tokens.as_slice(), 0)
         .map_err(|e| Error::Internal(format!("Failed to parse: {}", e)))?;
+
+    // Type check
+    if args.strict {
+        let mut root = root.clone();
+        run_type_checker(&mut root)
+            .map_err(|e| Error::Internal(format!("Failed to type check: {}", e)))?;
+    }
 
     // Format using existing formatter
     let formatter =
