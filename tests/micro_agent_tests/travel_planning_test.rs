@@ -9,6 +9,171 @@ use crate::{micro_agent_tests::create_request, should_run_external_api_tests};
 
 use super::setup_system;
 
+use kairei::tokenizer::{
+    keyword::Keyword,
+    literal::{Literal, StringPart},
+    symbol::Delimiter,
+    token::{Token, Tokenizer},
+};
+
+#[cfg(test)]
+mod triple_quote_tests {
+    use super::*;
+
+    #[test]
+    fn test_triple_quote_think_block() {
+        let input = r#"plan = think("""
+            Create a comprehensive travel plan
+            with multiple lines and proper indentation
+            """)"#;
+        let mut tokenizer = Tokenizer::new();
+        let tokens = tokenizer.tokenize(input).unwrap();
+
+        // Filter out whitespace and newlines for easier testing
+        let important_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| !matches!(t.token, Token::Whitespace(_) | Token::Newline))
+            .collect();
+
+        // Verify assignment target
+        assert!(matches!(
+            important_tokens[0].token,
+            Token::Identifier(ref s) if s == "plan"
+        ));
+
+        // Verify equals sign
+        assert!(matches!(
+            important_tokens[1].token,
+            Token::Delimiter(Delimiter::Equal)
+        ));
+
+        // Verify think keyword
+        assert!(matches!(
+            important_tokens[2].token,
+            Token::Keyword(Keyword::Think)
+        ));
+
+        // Verify string content
+        if let Token::Literal(Literal::String(parts)) = &important_tokens[4].token {
+            assert!(matches!(parts[0], StringPart::TripleQuoted(_)));
+            if let StringPart::TripleQuoted(inner_parts) = &parts[0] {
+                // Each line is split into: content + newline
+                assert!(matches!(
+                    inner_parts[0],
+                    StringPart::Literal(ref s) if s.trim() == "Create a comprehensive travel plan"
+                ));
+                assert!(matches!(inner_parts[1], StringPart::NewLine));
+                assert!(matches!(
+                    inner_parts[2],
+                    StringPart::Literal(ref s) if s.trim() == "with multiple lines and proper indentation"
+                ));
+                assert!(matches!(inner_parts[3], StringPart::NewLine));
+            }
+        } else {
+            panic!("Expected triple-quoted string literal");
+        }
+    }
+
+    #[test]
+    fn test_triple_quote_with_interpolation_in_think() {
+        let input = r#"plan = think("""
+            Hello ${name},
+            Your travel itinerary for ${destination}:
+            Budget: ${budget} USD
+            """)"#;
+        let mut tokenizer = Tokenizer::new();
+        let tokens = tokenizer.tokenize(input).unwrap();
+
+        let important_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| !matches!(t.token, Token::Whitespace(_) | Token::Newline))
+            .collect();
+
+        // Verify string content with interpolation
+        if let Token::Literal(Literal::String(parts)) = &important_tokens[4].token {
+            assert!(matches!(parts[0], StringPart::TripleQuoted(_)));
+            if let StringPart::TripleQuoted(inner_parts) = &parts[0] {
+                // Each line is split into: content + interpolation + content + newline
+                assert!(matches!(
+                    inner_parts[0],
+                    StringPart::Literal(ref s) if s.trim() == "Hello"
+                ));
+                assert!(matches!(
+                    inner_parts[1],
+                    StringPart::Literal(ref s) if s == " "
+                ));
+                assert!(matches!(
+                    inner_parts[2],
+                    StringPart::Interpolation(ref s) if s == "name"
+                ));
+                assert!(matches!(
+                    inner_parts[3],
+                    StringPart::Literal(ref s) if s.trim() == ","
+                ));
+                assert!(matches!(inner_parts[4], StringPart::NewLine));
+                assert!(matches!(
+                    inner_parts[5],
+                    StringPart::Literal(ref s) if s.trim() == "Your travel itinerary for"
+                ));
+                assert!(matches!(
+                    inner_parts[6],
+                    StringPart::Literal(ref s) if s == " "
+                ));
+                assert!(matches!(
+                    inner_parts[7],
+                    StringPart::Interpolation(ref s) if s == "destination"
+                ));
+                assert!(matches!(
+                    inner_parts[8],
+                    StringPart::Literal(ref s) if s.trim() == ":"
+                ));
+                assert!(matches!(inner_parts[9], StringPart::NewLine));
+                assert!(matches!(
+                    inner_parts[10],
+                    StringPart::Literal(ref s) if s.trim() == "Budget: ${budget} USD"
+                ));
+            }
+        } else {
+            panic!("Expected triple-quoted string literal");
+        }
+    }
+
+    #[test]
+    fn test_triple_quote_indentation_preservation() {
+        let input = r#"plan = think("""
+                First line
+                    Indented line
+                        More indented
+                Back to first level
+            """)"#;
+        let mut tokenizer = Tokenizer::new();
+        let tokens = tokenizer.tokenize(input).unwrap();
+
+        if let Token::Literal(Literal::String(parts)) = &tokens
+            .iter()
+            .find(|t| matches!(t.token, Token::Literal(_)))
+            .unwrap()
+            .token
+        {
+            if let StringPart::TripleQuoted(inner_parts) = &parts[0] {
+                // Verify each line preserves its relative indentation
+                let lines: Vec<_> = inner_parts
+                    .iter()
+                    .filter_map(|part| match part {
+                        StringPart::Literal(s) => Some(s.trim_start().to_string()),
+                        _ => None,
+                    })
+                    .collect();
+
+                assert_eq!(lines[0], "First line");
+                assert_eq!(lines[1], "Indented line");
+                assert_eq!(lines[2], "More indented");
+                assert_eq!(lines[3], "Back to first level");
+            }
+        }
+    }
+}
+
 const TRAVEL_PLANNING_DSL: &str = r#"
 world TravelPlanning {
   // 共通の基本ポリシー
