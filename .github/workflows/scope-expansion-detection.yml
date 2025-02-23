@@ -36,15 +36,15 @@ jobs:
                 owner,
                 repo,
                 issue_number: context.issue.number,
-                body: `# ⚠️ 設計ドキュメント参照の確認
+                body: `# ⚠️ Design Document Reference Check
 
-docs/design (Single Source of Truth) への参照が見つかりません。
-実装前に必ず設計ドキュメントを確認してください。
+No reference to docs/design (Single Source of Truth) found.
+Please review design documentation before implementation.
 
-## アクション
-1. docs/design の関連ドキュメントを確認
-2. PRの説明に参照した設計ドキュメントを記載
-3. 設計との整合性を確認`
+## Actions
+1. Review relevant docs/design documents
+2. Add design document references to PR description
+3. Verify consistency with design`
               });
               return;
             }
@@ -94,30 +94,30 @@ docs/design (Single Source of Truth) への参照が見つかりません。
             if (hasExpanded) {
               // Create knowledge base entry
               const knowledgeEntry = {
-                title: `スコープ拡大検知: Issue #${issueNumber}`,
+                title: `Scope Expansion Detected: Issue #${issueNumber}`,
                 description: `
-# スコープ拡大の分析
+# Scope Expansion Analysis
 
-## 元のIssue
+## Original Issue
 ${issue.data.title}
 
-## 拡大指標
-- 変更ファイル数: ${indicators.fileCount} (閾値: ${thresholds.fileCount})
-- 総変更行数: ${indicators.totalChanges} (閾値: ${thresholds.totalChanges})
-- 影響コンポーネント数: ${indicators.componentsAffected} (閾値: ${thresholds.componentsAffected})
+## Expansion Metrics
+- Changed Files: ${indicators.fileCount} (threshold: ${thresholds.fileCount})
+- Total Changes: ${indicators.totalChanges} (threshold: ${thresholds.totalChanges})
+- Affected Components: ${indicators.componentsAffected} (threshold: ${thresholds.componentsAffected})
 
-## 分析
-- 当初のIssueより範囲が拡大しています
-- 複数のコンポーネントに変更が及んでいます
-- 変更量が予想を超えています
+## Analysis
+- Implementation scope has expanded beyond original issue
+- Multiple components are affected
+- Change volume exceeds expectations
 
-## 推奨アクション
-1. 現在の変更をレビュー
-2. タスクの分割検討
-3. 追加Issue作成の検討
+## Recommended Actions
+1. Review current changes
+2. Consider task splitting
+3. Create additional issues if needed
 
-## 影響範囲
-${files.data.map(f => `- ${f.filename}: ${f.changes} 行の変更`).join('\n')}
+## Impact Areas
+${files.data.map(f => `- ${f.filename}: ${f.changes} lines changed`).join('\n')}
                 `,
                 tags: ['scope-expansion', 'complexity-increase', `issue-${issueNumber}`]
               };
@@ -127,23 +127,23 @@ ${files.data.map(f => `- ${f.filename}: ${f.changes} 行の変更`).join('\n')}
                 owner,
                 repo,
                 issue_number: context.issue.number,
-                body: `# 🔍 スコープ拡大検知
+                body: `# 🔍 Scope Expansion Detection
 
-元のIssue #${issueNumber} から、実装範囲が拡大している可能性があります。
+Implementation scope may have expanded beyond Issue #${issueNumber}.
 
-## 分析結果
-- 変更ファイル数: ${indicators.fileCount} ファイル
-- 総変更行数: ${indicators.totalChanges} 行
-- 影響コンポーネント数: ${indicators.componentsAffected}
+## Analysis Results
+- Changed Files: ${indicators.fileCount} files
+- Total Changes: ${indicators.totalChanges} lines
+- Affected Components: ${indicators.componentsAffected}
 
-## 提案
-1. 現在の変更を一時停止
-2. 以下の検討をお願いします：
-   - タスクの分割
-   - 追加Issueの作成
-   - 実装範囲の見直し
+## Recommendations
+1. Pause current changes
+2. Consider:
+   - Splitting tasks
+   - Creating additional issues
+   - Reviewing implementation scope
 
-この分析結果はナレッジベースに記録されました。`
+This analysis has been recorded in the knowledge base.`
               });
               
               // Add label to PR
