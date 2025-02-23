@@ -615,7 +615,7 @@ pub fn parse_literal_expression() -> impl Parser<Token, ast::Expression> {
 
 #[cfg(test)]
 mod tests {
-    use crate::tokenizer::literal::{Literal, StringPart};
+    use crate::tokenizer::literal::{Literal, StringLiteral, StringPart};
     use crate::tokenizer::symbol::Delimiter;
 
     use super::*;
@@ -798,9 +798,9 @@ mod tests {
         let input = &[
             Token::Identifier("Err".to_string()),
             Token::Delimiter(Delimiter::OpenParen),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "error message".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("error message".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::CloseParen),
         ];
         let (pos, expr) = parse_err().parse(input, 0).unwrap();
@@ -873,9 +873,9 @@ mod tests {
             Token::Delimiter(Delimiter::OpenParen),
             Token::Literal(Literal::Integer(42)),
             Token::Delimiter(Delimiter::Comma),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "test".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("test".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::CloseParen),
         ];
         let (pos, expr) = parse_function_call().parse(input, 0).unwrap();
@@ -1315,9 +1315,9 @@ mod tests {
         let input = &[
             Token::Keyword(Keyword::Think),
             Token::Delimiter(Delimiter::OpenParen),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "Find suitable hotels matching criteria".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("Find suitable hotels matching criteria".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::Comma),
             Token::Identifier("location".to_string()),
             Token::Delimiter(Delimiter::CloseParen),
@@ -1361,9 +1361,9 @@ mod tests {
         let input = &[
             Token::Keyword(Keyword::Think),
             Token::Delimiter(Delimiter::OpenParen),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "Find suitable hotels matching criteria".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("Find suitable hotels matching criteria".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::Comma),
             Token::Identifier("check_in".to_string()),
             Token::Delimiter(Delimiter::Colon),
@@ -1373,9 +1373,9 @@ mod tests {
             Token::Delimiter(Delimiter::OpenBrace),
             Token::Identifier("provider".to_string()),
             Token::Delimiter(Delimiter::Colon),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "openai".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(
+                (vec![StringPart::Literal("openai".to_string())]),
+            ))),
             Token::Delimiter(Delimiter::Comma),
             Token::Identifier("search".to_string()),
             Token::Delimiter(Delimiter::Colon),
@@ -1383,18 +1383,18 @@ mod tests {
             Token::Identifier("filters".to_string()),
             Token::Delimiter(Delimiter::Colon),
             Token::Delimiter(Delimiter::OpenBracket),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "hotels".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("hotels".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::CloseBracket),
             // Policy設定
             Token::Delimiter(Delimiter::Comma),
             Token::Identifier("policies".to_string()),
             Token::Delimiter(Delimiter::Colon),
             Token::Delimiter(Delimiter::OpenBracket),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "hotelsPolicy".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("hotelsPolicy".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::CloseBracket),
             Token::Delimiter(Delimiter::CloseBrace),
             Token::Delimiter(Delimiter::CloseBrace),
@@ -1446,15 +1446,15 @@ mod tests {
             Token::Delimiter(Delimiter::OpenBrace),
             Token::Identifier("provider".to_string()),
             Token::Delimiter(Delimiter::Colon),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "openai".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("openai".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::Comma),
             Token::Identifier("model".to_string()),
             Token::Delimiter(Delimiter::Colon),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "gpt-4".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("gpt-4".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::Comma),
             Token::Identifier("temperature".to_string()),
             Token::Delimiter(Delimiter::Colon),
@@ -1467,18 +1467,18 @@ mod tests {
             Token::Identifier("filters".to_string()),
             Token::Delimiter(Delimiter::Colon),
             Token::Delimiter(Delimiter::OpenBracket),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "hotels".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("hotels".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::CloseBracket),
             Token::Delimiter(Delimiter::CloseBrace),
             Token::Delimiter(Delimiter::Comma),
             // key: "value"
             Token::Identifier("key".to_string()),
             Token::Delimiter(Delimiter::Colon),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "value".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("value".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::Comma),
             // value: 42
             Token::Identifier("value".to_string()),
@@ -1634,9 +1634,9 @@ mod tests {
         // テストケース3: 文字列リテラルと識別子
         let tokens = vec![
             Token::Delimiter(Delimiter::OpenParen),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "Find suitable hotels".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("Find suitable hotels".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::Comma),
             Token::Identifier("location".to_string()),
             Token::Delimiter(Delimiter::CloseParen),
@@ -1666,9 +1666,9 @@ mod tests {
             Token::Delimiter(Delimiter::OpenParen),
             Token::Identifier("prompt".to_string()),
             Token::Delimiter(Delimiter::Colon),
-            Token::Literal(Literal::String(vec![StringPart::Literal(
-                "Search query".to_string(),
-            )])),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("Search query".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::CloseParen),
         ];
         let result = parser.parse(&tokens, 0);

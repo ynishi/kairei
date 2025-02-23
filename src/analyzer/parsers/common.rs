@@ -1,5 +1,6 @@
 use super::super::{core::*, prelude::*};
 use crate::ast;
+use crate::tokenizer::literal::StringLiteral;
 use crate::tokenizer::symbol::Operator;
 use crate::tokenizer::{
     keyword::Keyword,
@@ -96,70 +97,33 @@ fn parse_integer() -> impl Parser<Token, ast::Literal> {
 }
 
 fn parse_string() -> impl Parser<Token, ast::Literal> {
-    with_context(
-        choice(vec![
-            Box::new(parse_triple_quoted_string()),
-            Box::new(parse_regular_string()),
-        ]),
-        "string",
-    )
-}
-
-fn parse_triple_quoted_string() -> impl Parser<Token, ast::Literal> {
-    satisfy(|token| match token {
-        Token::Literal(Literal::String(parts)) => {
-            if let Some(StringPart::TripleQuoted(inner_parts)) = parts.first() {
-                let mut result = String::new();
-                let mut at_line_start = true;
-
-                for part in inner_parts {
-                    match part {
-                        StringPart::Literal(s) => {
-                            if at_line_start {
-                                let content = s.trim_start().to_string();
-                                if !content.is_empty() {
-                                    result.push_str(&content);
-                                    at_line_start = false;
-                                }
-                            } else {
-                                result.push_str(s);
-                            }
-                        }
-                        StringPart::NewLine => {
-                            result.push('\n');
-                            at_line_start = true;
-                        }
-                        StringPart::Interpolation(var) => {
-                            result.push_str("${");
-                            result.push_str(var);
-                            result.push('}');
-                            at_line_start = false;
-                        }
-                        _ => return None,
-                    }
-                }
-                Some(ast::Literal::String(result))
-            } else {
-                None
-            }
-        }
-        _ => None,
-    })
+    with_context(parse_regular_string(), "string")
 }
 
 fn parse_regular_string() -> impl Parser<Token, ast::Literal> {
-    satisfy(|token| match token {
-        Token::Literal(Literal::String(parts)) => {
-            if parts.len() == 1 {
-                match &parts[0] {
-                    StringPart::Literal(s) => Some(ast::Literal::String(s.clone())),
-                    _ => None,
-                }
-            } else {
-                None
+    satisfy(|token| {
+        let parts = match token {
+            Token::Literal(Literal::String(StringLiteral::Single(parts))) => Some(parts),
+            Token::Literal(Literal::String(StringLiteral::Triple(parts))) => Some(parts),
+            _ => None,
+        };
+        parts.map(|parts| {
+            match parts.len() {
+                // 0 means empty string
+                0 => ast::Literal::String("".to_string()),
+                // 1 or more means regular string, concat them
+                _ => ast::Literal::String(
+                    parts
+                        .iter()
+                        .map(|part| match part {
+                            StringPart::Literal(s) => s.clone(),
+                            StringPart::Interpolation(w) => format!("${{{}}}", w),
+                            StringPart::NewLine => "\n".to_string(),
+                        })
+                        .collect::<String>(),
+                ),
             }
-        }
-        _ => None,
+        })
     })
 }
 
@@ -422,9 +386,9 @@ mod tests {
 
     #[test]
     fn test_parse_string() {
-        let input = vec![Token::Literal(Literal::String(vec![StringPart::Literal(
-            "test string".to_string(),
-        )]))];
+        let input = vec![Token::Literal(Literal::String(StringLiteral::Single(
+            vec![StringPart::Literal("test string".to_string())],
+        )))];
         let (rest, result) = parse_string().parse(&input, 0).unwrap();
         assert_eq!(rest, 1);
         assert_eq!(result, ast::Literal::String("test string".to_string()));
@@ -572,9 +536,9 @@ mod tests {
     #[test]
     fn test_parse_string_literal() {
         // 単純な文字列リテラル
-        let input = &[Token::Literal(Literal::String(vec![StringPart::Literal(
-            "test string".to_string(),
-        )]))];
+        let input = &[Token::Literal(Literal::String(StringLiteral::Single(
+            vec![StringPart::Literal("test string".to_string())],
+        )))];
 
         let (pos, result) = parse_string().parse(input, 0).unwrap();
         assert_eq!(pos, 1);
@@ -584,27 +548,33 @@ mod tests {
     #[test]
     fn test_parse_string_with_interpolation() {
         // 補間を含む文字列
-        let input = &[Token::Literal(Literal::String(vec![
-            StringPart::Literal("Hello ".to_string()),
-            StringPart::Interpolation("name".to_string()),
-            StringPart::Literal("!".to_string()),
-        ]))];
+        let input = &[Token::Literal(Literal::String(StringLiteral::Single(
+            vec![
+                StringPart::Literal("Hello ".to_string()),
+                StringPart::Interpolation("name".to_string()),
+                StringPart::Literal("!".to_string()),
+            ],
+        )))];
 
-        // 現時点では未サポート
-        assert!(parse_string().parse(input, 0).is_err());
+        let (pos, result) = parse_string().parse(input, 0).unwrap();
+        assert_eq!(pos, 1);
+        assert_eq!(result, ast::Literal::String("Hello ${name}!".to_string()));
     }
 
     #[test]
     fn test_parse_string_with_newline() {
         // 改行を含む文字列
-        let input = &[Token::Literal(Literal::String(vec![
-            StringPart::Literal("line 1".to_string()),
-            StringPart::NewLine,
-            StringPart::Literal("line 2".to_string()),
-        ]))];
+        let input = &[Token::Literal(Literal::String(StringLiteral::Single(
+            vec![
+                StringPart::Literal("line 1".to_string()),
+                StringPart::NewLine,
+                StringPart::Literal("line 2".to_string()),
+            ],
+        )))];
 
-        // 現時点では未サポート
-        assert!(parse_string().parse(input, 0).is_err());
+        let (pos, result) = parse_string().parse(input, 0).unwrap();
+        assert_eq!(pos, 1);
+        assert_eq!(result, ast::Literal::String("line 1\nline 2".to_string()));
     }
 
     #[test]
