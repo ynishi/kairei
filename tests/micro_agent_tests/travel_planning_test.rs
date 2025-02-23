@@ -35,11 +35,11 @@ micro TravelPlanner {
                 request FindAttractions to AttractionRecommender(location: destination, dates: "${start} to ${end}", interests: interests, budget: budget * 0.2)
                 request GetLocalInfo to LocalExpertAgent(location: destination, season: start, specific_questions: "")
             }
-            plan = think("Create a comprehensive travel plan by combining this flight, hotels, attractions and local information:
+            plan = think("""Create a comprehensive travel plan by combining this flight, hotels, attractions and local information:
 
                             Destination: ${destination}
                             Dates: ${start} to ${end}
-                            Total Budget: $${budget}
+                            Total Budget: ${budget}
 
                             Flight Information:
                             ${flights}
@@ -60,7 +60,7 @@ micro TravelPlanner {
                             4. Important logistical notes (check-in/out times, airport transfers)
                             5. Remaining budget for activities and meals
 
-                            Format the response in clear sections with specific dates and times.") with {
+                            Format the response in clear sections with specific dates and times.""") with {
                                 max_tokens: 2000
                             }
             return Ok(plan)
@@ -72,7 +72,7 @@ micro HotelFinder {
     answer {
         // web search for hotels
         on request FindHotels(location: String, start_date: String, end_date: String, budget: Float) {
-            hotels = think("Find suitable hotels matching criteria", location, check_in: start_date, check_out: end_date, budget) with {
+            hotels = think("Find suitable hotels matching criteria", location, check_in: start_date, check_out: end_date, budget") with {
                 search: {
                     filters: ["hotels"]
                     // recent: "24h"
@@ -86,17 +86,17 @@ micro HotelFinder {
 micro FlightFinder {
     answer {
         on request FindFlight(departure_location: String, arrival_location: String, departure_date: String, back_date: String, budget: Float) {
-            flights = think("Provide flight recommendations for:
+            flights = think("""Provide flight recommendations for:
                             Route: ${departure_location} to ${arrival_location}
                             Departure: ${departure_date} (must include this exact date)
                             Back: ${back_date} (must include this exact date)
-                            Budget: $${budget}
+                            Budget: ${budget}
 
                             Please provide:
                             1. Flight options with specific dates (${departure_date} to ${back_date})
                             2. Airlines and routes
                             3. Expected price ranges
-                            4. Booking recommendations")
+                            4. Booking recommendations""")
             return Ok(flights)
         }
     }
@@ -110,7 +110,7 @@ micro AttractionRecommender {
             interests: String,  // 例: "culture,food,nature"
             budget: Float
         ) -> Result<String, Error> {
-            recommendations = think("Recommend tourist attractions and activities in ${location} that match:
+            recommendations = think("""Recommend tourist attractions and activities in ${location} that match:
                 Dates: ${dates}
                 Interests: ${interests}
                 Daily budget: ${budget}
@@ -119,7 +119,7 @@ micro AttractionRecommender {
                 1. Major attractions and landmarks
                 2. Suggested daily itineraries
                 3. Estimated costs
-                4. Travel times between locations")
+                4. Travel times between locations""")
 
             return Ok(recommendations)
         }
@@ -139,7 +139,7 @@ micro LocalExpertAgent {
             season: String,  // 旅行時期
             specific_questions: String  // オプショナル
         ) -> Result<String, Error> {
-            local_info = think("Provide detailed local information for ${location}:
+            local_info = think("""Provide detailed local information for ${location}:
                 Travel season: ${season}
                 Specific questions: ${specific_questions}
 
@@ -150,7 +150,7 @@ micro LocalExpertAgent {
                 4. Safety information
                 5. Local emergency contacts
                 6. Best areas to stay
-                7. Local festivals or events during the period")
+                7. Local festivals or events during the period""")
 
             return Ok(local_info)
         }

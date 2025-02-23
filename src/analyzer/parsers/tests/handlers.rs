@@ -3,7 +3,7 @@ use crate::analyzer::parsers::handlers::{answer::*, observe::*, react::*, *};
 use crate::analyzer::parsers::world::*;
 use crate::analyzer::Parser;
 use crate::ast;
-use crate::tokenizer::literal::StringPart;
+use crate::tokenizer::literal::{StringLiteral, StringPart};
 use crate::tokenizer::symbol::Operator;
 use crate::tokenizer::{keyword::Keyword, literal::Literal, symbol::Delimiter, token::Token};
 
@@ -84,9 +84,9 @@ fn test_parse_answer() {
         Token::Identifier("String".to_string()),
         Token::Delimiter(Delimiter::OpenBrace),
         Token::Keyword(Keyword::Return),
-        Token::Literal(Literal::String(vec![StringPart::Literal(
-            "data".to_string(),
-        )])),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("data".to_string()),
+        ]))),
         Token::Delimiter(Delimiter::CloseBrace),
         // リクエストハンドラー2: 制約付きアクション
         Token::Keyword(Keyword::On),

@@ -256,7 +256,7 @@ pub enum TokenizerError {
 #[cfg(test)]
 mod tests {
 
-    use crate::tokenizer::literal::StringPart;
+    use crate::tokenizer::literal::{StringLiteral, StringPart};
 
     use super::*;
 
@@ -323,7 +323,7 @@ mod tests {
             Token::Keyword(Keyword::Policy)
         ));
         assert!(matches!(important_tokens[4].token,
-            Token::Literal(Literal::String(ref parts))
+            Token::Literal(Literal::String(StringLiteral::Single(ref parts)))
             if parts.len() == 1
             && matches!(parts[0], StringPart::Literal(ref s)
                 if s == "Consider budget constraints and optimize value for money")));
