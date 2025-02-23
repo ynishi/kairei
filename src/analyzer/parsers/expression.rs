@@ -1373,9 +1373,9 @@ mod tests {
             Token::Delimiter(Delimiter::OpenBrace),
             Token::Identifier("provider".to_string()),
             Token::Delimiter(Delimiter::Colon),
-            Token::Literal(Literal::String(StringLiteral::Single(
-                (vec![StringPart::Literal("openai".to_string())]),
-            ))),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("openai".to_string()),
+            ]))),
             Token::Delimiter(Delimiter::Comma),
             Token::Identifier("search".to_string()),
             Token::Delimiter(Delimiter::Colon),
