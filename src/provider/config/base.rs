@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use strum;
 use thiserror::Error;
 
+use crate::provider::config::plugins::ProviderSpecificConfig;
+
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("Missing required field: {0}")]
@@ -23,8 +25,10 @@ pub trait ConfigValidation {
     }
 }
 
-use crate::config::{MemoryConfig, RagConfig, SearchConfig};
-use crate::provider::provider::ProviderType;
+use crate::provider::{
+    config::plugins::{MemoryConfig, RagConfig, SearchConfig},
+    provider::ProviderType,
+};
 use std::collections::HashMap;
 
 /// Represents the type of a plugin in the system.
@@ -78,6 +82,13 @@ impl ConfigValidation for PluginConfig {
                 ));
             }
         }
-        Ok(())
+
+        // Validate plugin-specific configuration
+        match &self.plugin_type {
+            PluginType::Memory(config) => config.validate(),
+            PluginType::Rag(config) => config.validate(),
+            PluginType::Search(config) => config.validate(),
+            PluginType::Unknown(_) => Ok(()),
+        }
     }
 }
