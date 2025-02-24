@@ -5,16 +5,22 @@ use crate::provider::provider::ProviderType;
 #[test]
 fn test_plugin_config_validation() {
     let config = PluginConfig {
-        plugin_type: ProviderType::OpenAIChat,
+        provider_type: ProviderType::SimpleExpert,
         strict: true,
     };
     assert!(config.validate().is_ok());
 
     let invalid_config = PluginConfig {
-        plugin_type: ProviderType::Unknown,
-        strict: false,
+        provider_type: ProviderType::Unknown,
+        strict: true,
     };
     assert!(invalid_config.validate().is_err());
+
+    let non_strict_config = PluginConfig {
+        provider_type: ProviderType::Unknown,
+        strict: false,
+    };
+    assert!(non_strict_config.validate().is_ok());
 }
 
 #[test]

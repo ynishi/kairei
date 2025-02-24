@@ -26,14 +26,14 @@ pub trait ConfigValidation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginConfig {
     #[serde(flatten)]
-    pub plugin_type: ProviderType,
+    pub provider_type: ProviderType,
     #[serde(default)]
     pub strict: bool,
 }
 
 impl ConfigValidation for PluginConfig {
     fn validate(&self) -> Result<(), ConfigError> {
-        if self.plugin_type == ProviderType::Unknown {
+        if self.strict && self.provider_type == ProviderType::Unknown {
             return Err(ConfigError::ValidationError(
                 "Plugin type must be specified".to_string(),
             ));
