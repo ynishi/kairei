@@ -52,15 +52,15 @@ fn test_validation_utilities() {
 #[test]
 fn test_check_required_properties() {
     use serde_json::json;
-    
+
     let config = json!({
         "name": "test",
         "value": 42
     });
-    
+
     // Test valid case
     assert!(check_required_properties(&config, &["name", "value"]).is_ok());
-    
+
     // Test missing property
     assert!(check_required_properties(&config, &["name", "missing"]).is_err());
 }
@@ -68,7 +68,7 @@ fn test_check_required_properties() {
 #[test]
 fn test_check_property_type() {
     use serde_json::json;
-    
+
     let config = json!({
         "string_field": "test",
         "number_field": 42,
@@ -76,14 +76,14 @@ fn test_check_property_type() {
         "object_field": {"key": "value"},
         "array_field": [1, 2, 3]
     });
-    
+
     // Test valid cases
     assert!(check_property_type(&config, "string_field", "string").is_ok());
     assert!(check_property_type(&config, "number_field", "number").is_ok());
     assert!(check_property_type(&config, "boolean_field", "boolean").is_ok());
     assert!(check_property_type(&config, "object_field", "object").is_ok());
     assert!(check_property_type(&config, "array_field", "array").is_ok());
-    
+
     // Test invalid cases
     assert!(check_property_type(&config, "string_field", "number").is_err());
     assert!(check_property_type(&config, "number_field", "string").is_err());
