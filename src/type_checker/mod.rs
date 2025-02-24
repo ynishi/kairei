@@ -19,23 +19,76 @@ pub use scope::TypeScope;
 
 use crate::ast;
 
-/// MicroAgent DSL Type System
+/// KAIREI Type Checker System
 ///
-/// Implements static type checking for the MicroAgent DSL, ensuring
-/// type safety across state definitions, event handlers, and requests.
+/// The type checker serves as a critical validation layer between the Parser and AST phases
+/// in the KAIREI DSL compilation pipeline, ensuring type safety and correctness across all
+/// language constructs.
+///
+/// # Core Components and Responsibilities
+///
+/// ## Type Validation
+/// - Validates type correctness across all DSL elements
+/// - Ensures type safety of state variables and initial values
+/// - Verifies type compatibility in handler signatures
+/// - Validates think block interpolation types
+///
+/// ## Error Collection
+/// - Comprehensive error types with detailed metadata
+/// - Rich error context including locations and suggestions
+/// - Support for both fail-fast and collect-all modes
+/// - Standardized error reporting for plugins
+///
+/// ## Type Resolution
+/// - Hierarchical type scope system for nested contexts
+/// - Smart type inference for literals and expressions
+/// - Generic type parameter validation
+/// - Plugin type extension support
+///
+/// ## Integration Points
+/// - Expression evaluation type checking hooks
+/// - Global error reporting system integration
+/// - Runtime type information provision
+/// - Extensible visitor pattern implementation
+///
+/// # Implementation Architecture
+///
+/// ## Core Components
+/// ```rust
+/// pub struct TypeChecker {
+///     plugins: Vec<Box<dyn PluginVisitor>>,
+///     default_visitor: DefaultVisitor,
+///     context: TypeContext,
+/// }
+///
+/// pub struct TypeContext {
+///     scope: TypeScope,
+///     errors: Vec<TypeCheckError>,
+/// }
+/// ```
+///
+/// ## Plugin System
+/// ```rust
+/// pub trait TypeVisitor {
+///     fn visit_root(&mut self, root: &mut Root, ctx: &mut TypeContext) -> TypeCheckResult<()>;
+///     fn visit_micro_agent(&mut self, agent: &mut MicroAgentDef, ctx: &mut TypeContext) -> TypeCheckResult<()>;
+///     // ... other visit methods
+/// }
+///
+/// pub trait PluginVisitor: TypeVisitor {
+///     fn before_root(&mut self, root: &mut Root, ctx: &mut TypeContext) -> TypeCheckResult<()>;
+///     fn after_root(&mut self, root: &mut Root, ctx: &mut TypeContext) -> TypeCheckResult<()>;
+///     // ... other lifecycle hooks
+/// }
+/// ```
 ///
 /// # Type Categories
 /// - Built-in types (String, Int, Float, etc.)
-/// - Custom types defined in World
-/// - Generic types (Result, Option, List)
+/// - Container types (Result, Option, Array, Map)
+/// - Special types (Duration, Delay)
+/// - Custom user-defined types
 ///
-/// # Type Checking Features
-/// - State variable type validation
-/// - Event parameter type checking
-/// - Request/response signature validation
-/// - Expression type inference
-///
-/// # Example
+/// # Example Usage
 /// ```text
 /// type UserProfile {
 ///     id: String
@@ -49,6 +102,29 @@ use crate::ast;
 ///     }
 /// }
 /// ```
+///
+/// # Development Guidelines
+///
+/// ## Adding New Types
+/// 1. Define type in the type system
+/// 2. Implement necessary validation rules
+/// 3. Add appropriate error handling
+/// 4. Update type inference logic
+/// 5. Add test coverage
+///
+/// ## Creating Type Check Plugins
+/// 1. Implement TypeVisitor trait
+/// 2. Define plugin-specific validation rules
+/// 3. Integrate with error reporting system
+/// 4. Add appropriate lifecycle hooks
+/// 5. Document plugin behavior
+///
+/// ## Error Handling Best Practices
+/// 1. Use appropriate error variants
+/// 2. Provide helpful error messages
+/// 3. Include fix suggestions
+/// 4. Consider error recovery
+/// 5. Maintain error context
 ///
 /// # Type Context
 /// The type checking context maintains:
