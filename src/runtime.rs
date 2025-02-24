@@ -1,3 +1,52 @@
+//! # Runtime Component
+//!
+//! The Runtime component is responsible for managing MicroAgent lifecycle, event handling,
+//! and state management within the MicroAgent Layer.
+//!
+//! ## Architecture
+//!
+//! The Runtime provides:
+//! - Agent lifecycle management (initialization, execution, shutdown)
+//! - Event handling through three types of handlers:
+//!   - Observe: Monitor and respond to system/agent events
+//!   - Answer: Handle explicit requests with responses
+//!   - React: Implement proactive behaviors
+//! - State management via ExecutionContext
+//!
+//! ## Event Processing
+//!
+//! Events are processed asynchronously through the EventBus:
+//! ```ignore
+//! // Example: Handling an event
+//! async fn handle_event(&self, event: &Event) -> RuntimeResult<()> {
+//!     match &event.category() {
+//!         EventCategory::Request { .. } => { /* Handle request */ }
+//!         EventCategory::Agent => { /* Handle normal event */ }
+//!         EventCategory::System => { /* Handle system event */ }
+//!     }
+//! }
+//! ```
+//!
+//! ## State Management
+//!
+//! State is managed through ExecutionContext with read/write access modes:
+//! ```ignore
+//! // Example: Accessing state
+//! async fn state(&self, key: &str) -> Option<expression::Value> {
+//!     self.base_context.get_state(key).await.ok()
+//! }
+//! ```
+//!
+//! ## Error Handling
+//!
+//! The Runtime provides comprehensive error handling through RuntimeError:
+//! - Agent errors
+//! - Event processing errors
+//! - Provider errors
+//! - Evaluation errors
+//!
+//! See the test module for practical examples of Runtime usage.
+
 use crate::agent_registry::AgentError;
 use crate::config::AgentConfig;
 use crate::eval::context::{AgentInfo, AgentType, ExecutionContext, StateAccessMode};
@@ -31,13 +80,60 @@ type ReactHandler = Box<dyn Fn(&Event) -> BoxFuture<'static, RuntimeResult<()>> 
 type LifecycleHandler = Box<dyn Fn() -> BoxFuture<'static, RuntimeResult<()>> + Send + Sync>;
 
 // 並行処理のためのTrait
+/// Runtime agent interface defining core lifecycle and event handling capabilities.
+///
+/// Implementations must handle:
+/// - Agent lifecycle (initialization, execution, shutdown)
+/// - Event processing
+/// - State management
+/// - Error handling
+///
+/// # Example
+/// ```ignore
+/// impl RuntimeAgent for RuntimeAgentData {
+///     async fn run(&self, shutdown_rx: broadcast::Receiver<AgentType>) -> RuntimeResult<()> {
+///         // Initialize state
+///         self.handle_lifecycle_event(&LifecycleEvent::OnInit).await?;
+///         
+///         // Process events until shutdown
+///         while let Some(Ok(message)) = streams.next().await {
+///             match message {
+///                 StreamMessage::Event(event) => self.handle_event(&event).await?,
+///                 StreamMessage::SystemShutdown => break,
+///             }
+///         }
+///         
+///         // Cleanup
+///         self.cleanup().await
+///     }
+/// }
+/// ```
 #[async_trait]
 pub trait RuntimeAgent: Send + Sync {
+    /// Returns the unique name of this agent instance
     fn name(&self) -> String;
+
+    /// Returns the type of this agent (User, World, etc.)
     fn agent_type(&self) -> AgentType;
+
+    /// Returns the current status of this agent
     async fn status(&self) -> LastStatus;
+
+    /// Retrieves a state value by key
     async fn state(&self, key: &str) -> Option<expression::Value>;
+
+    /// Runs the agent's main event processing loop
+    ///
+    /// Handles:
+    /// - Event processing
+    /// - Request handling
+    /// - State management
+    /// - Lifecycle events
     async fn run(&self, shutdown_rx: broadcast::Receiver<AgentType>) -> RuntimeResult<()>;
+
+    /// Initiates agent shutdown
+    ///
+    /// Default implementation performs cleanup
     async fn shutdown(&self) -> RuntimeResult<()> {
         // simply cleanup
         if let Err(e) = self.cleanup().await {
@@ -46,29 +142,79 @@ pub trait RuntimeAgent: Send + Sync {
         }
         Ok(())
     }
+
+    /// Performs cleanup during shutdown
+    ///
+    /// Default implementation triggers OnDestroy lifecycle event
     async fn cleanup(&self) -> RuntimeResult<()> {
         self.handle_lifecycle_event(&LifecycleEvent::OnDestroy)
             .await?;
         Ok(())
     }
+
+    /// Handles agent lifecycle events (OnInit, OnDestroy)
     async fn handle_lifecycle_event(&self, event: &LifecycleEvent) -> RuntimeResult<()>;
 
+    /// Handles runtime errors that occur during agent execution
     async fn handle_runtime_error(&self, error: RuntimeError);
 }
 
-// MicroAgentの実行時表現
+/// Runtime implementation of a MicroAgent.
+///
+/// Manages:
+/// - Event handlers (observe, answer, react)
+/// - Lifecycle events
+/// - State access through ExecutionContext
+/// - Event processing via EventBus
+///
+/// # Handler Types
+/// - Observe: Monitor system and agent events
+/// - Answer: Handle requests and provide responses
+/// - React: Implement proactive behaviors
+///
+/// # State Management
+/// State is managed through ExecutionContext with configurable access modes:
+/// - ReadWrite: Full state access
+/// - ReadOnly: Read-only access for request handlers
+///
+/// # Example
+/// ```ignore
+/// let agent = RuntimeAgentData::new(
+///     &agent_def,
+///     &event_bus,
+///     AgentConfig::default(),
+///     primary_provider,
+///     providers,
+///     policies,
+/// ).await?;
+///
+/// // Start agent processing
+/// agent.run(shutdown_rx).await?;
+/// ```
 pub struct RuntimeAgentData {
+    /// Unique name of this agent instance
     name: String,
+    /// AST definition of the agent's behavior
     ast: MicroAgentDef,
+    /// Handlers for monitoring system and agent events
     observe_handlers: DashMap<String, ObserveHandler>,
+    /// Handlers for processing requests and providing responses
     answer_handlers: DashMap<String, AnswerHandler>,
+    /// Handlers for implementing proactive behaviors
     react_handlers: DashMap<String, ReactHandler>,
+    /// Handlers for agent lifecycle events (init, destroy)
     lifecycle_handlers: DashMap<LifecycleEvent, LifecycleHandler>,
+    /// Expression evaluator for executing handler blocks
     pub evaluator: Arc<Evaluator>,
-    pub base_context: Arc<ExecutionContext>, // 基本コンテキスト
+    /// Base execution context for state management
+    pub base_context: Arc<ExecutionContext>,
+    /// Event bus for asynchronous communication
     event_bus: Arc<EventBus>,
-    private_shutdown_start_tx: broadcast::Sender<()>, // 個別シャットダウン開始用
-    private_shutdown_end_tx: broadcast::Sender<()>,   // 個別シャットダウン完了用
+    /// Channel for initiating individual agent shutdown
+    private_shutdown_start_tx: broadcast::Sender<()>,
+    /// Channel for signaling shutdown completion
+    private_shutdown_end_tx: broadcast::Sender<()>,
+    /// Current agent status
     last_status: RwLock<LastStatus>,
 }
 
@@ -633,35 +779,56 @@ impl RuntimeAgentData {
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
-// ランタイムのエラー
+/// Runtime operation errors.
+///
+/// Covers various failure modes:
+/// - Agent lifecycle errors
+/// - Event processing failures
+/// - Provider interaction errors
+/// - State management issues
+/// - Expression evaluation errors
+///
+/// # Error Categories
+/// - Agent errors: Issues with agent lifecycle and management
+/// - Event errors: Problems with event processing and routing
+/// - Provider errors: External service integration failures
+/// - Evaluation errors: Expression and handler execution failures
+/// - Lifecycle errors: Shutdown and cleanup issues
 #[derive(Error, Debug)]
 pub enum RuntimeError {
+    /// Errors from agent lifecycle operations
     #[error("Agent error: {0}")]
     Agent(#[from] AgentError),
 
+    /// Event processing and routing errors
     #[error("Event error: {0}")]
     Event(#[from] EventError),
 
+    /// Provider integration errors
     #[error("Provider error: {0}")]
     Provider(#[from] ProviderError),
 
+    /// Expression evaluation failures
     #[error("Expression evaluation failed: {0}")]
     EvaluationFailed(String),
 
+    /// Agent shutdown failures
     #[error("Shutdown failed: {agent_name}, {message}")]
     ShutdownFailed { agent_name: String, message: String },
 
+    /// Cleanup operation failures
     #[error("Clean up failed: {agent_name}, {message}")]
     CleanUpFailed { agent_name: String, message: String },
 
-    // eval
+    /// Handler evaluation errors
     #[error("Evaluation error: {0}")]
     Eval(#[from] EvalError),
 
-    // failure value
+    /// Expression evaluation result failures
     #[error("Evaluation result is failure: {0}")]
     EvalFailure(expression::Value),
 
+    /// Handler lookup failures
     #[error("Handler not found for {handler_type}: {name}")]
     HandlerNotFound { handler_type: String, name: String },
 }
