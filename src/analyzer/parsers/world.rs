@@ -63,6 +63,20 @@
 /// - `AgentLeft(agent_id: String)`: When an agent leaves the world
 /// - `ErrorOccurred(message: String)`: When an error occurs in agent execution
 ///
+/// # Policy-Based Control
+/// Policies in World DSL are expressed in natural language and interpreted by the system:
+/// ```text
+/// world TravelPlanningWorld {
+///     policy "Ensure data freshness within 24 hours"
+///     policy "Verify travel availability before confirmation"
+///     policy "Maintain user privacy standards"
+/// }
+/// ```
+/// 
+/// Policies guide agent behavior without imposing strict constraints, allowing for
+/// flexible adaptation to different scenarios while maintaining system guidelines.
+/// The policy validation occurs during transformation and runtime registration phases.
+///
 /// # Event-Driven Synchronization
 /// The World DSL implements event-driven synchronization for real-world integration:
 /// - Tick events serve as external resource synchronization
@@ -123,12 +137,12 @@ pub fn parse_root() -> impl Parser<Token, ast::Root> {
 ///
 /// # Example
 /// ```text
-/// world GameWorld {
+/// world TravelPlanningWorld {
 ///     config {
 ///         tick_interval: Duration = "1s"
 ///     }
 ///     events {
-///         GameStarted
+///         UserRequestedItinerary
 ///     }
 /// }
 /// ```
