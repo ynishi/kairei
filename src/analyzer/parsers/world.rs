@@ -35,7 +35,7 @@
 ///
 /// # Example
 /// ```text
-/// world GameWorld {
+/// world TravelPlanningWorld {
 ///     config {
 ///         tick_interval: Duration = "1s"
 ///         max_agents: Int = 100
@@ -43,13 +43,14 @@
 ///     }
 ///
 ///     events {
-///         PlayerJoined(player_id: String)
-///         GameStarted
+///         UserRequestedItinerary(user_id: String)
+///         TripStarted
+///         UpdateTripping
 ///     }
 ///
 ///     handlers {
-///         on Tick(delta_time: Float) {
-///             emit NextTick(delta_time)
+///         on TripStarted(delta_time: Float) {
+///             emit UpdateTripping
 ///         }
 ///     }
 /// }
