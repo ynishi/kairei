@@ -69,7 +69,7 @@ impl ProviderRegistry {
     #[instrument(level = "debug", skip(self))]
     pub async fn register_providers(&self) -> ProviderResult<()> {
         for (name, config) in self.configs.providers.iter() {
-            self.register_provider(name, config.provider_type.clone())
+            self.register_provider(name, config.provider_type_info.clone())
                 .await?;
         }
         Ok(())
@@ -451,7 +451,7 @@ mod tests {
         let primary_name = names[0].clone();
         for name in names.iter() {
             let config = ProviderConfig {
-                provider_type: ProviderType::Unknown,
+                provider_type_info: ProviderType::Unknown,
                 name: name.to_string(),
                 common_config: CommonConfig {
                     temperature: 0.7,
