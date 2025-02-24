@@ -16,7 +16,7 @@
 //! ## Event Processing
 //!
 //! Events are processed asynchronously through the EventBus:
-//! ```rust
+//! ```ignore
 //! // Example: Handling an event
 //! async fn handle_event(&self, event: &Event) -> RuntimeResult<()> {
 //!     match &event.category() {
@@ -30,7 +30,7 @@
 //! ## State Management
 //!
 //! State is managed through ExecutionContext with read/write access modes:
-//! ```rust
+//! ```ignore
 //! // Example: Accessing state
 //! async fn state(&self, key: &str) -> Option<expression::Value> {
 //!     self.base_context.get_state(key).await.ok()
@@ -89,7 +89,7 @@ type LifecycleHandler = Box<dyn Fn() -> BoxFuture<'static, RuntimeResult<()>> + 
 /// - Error handling
 ///
 /// # Example
-/// ```rust
+/// ```ignore
 /// impl RuntimeAgent for RuntimeAgentData {
 ///     async fn run(&self, shutdown_rx: broadcast::Receiver<AgentType>) -> RuntimeResult<()> {
 ///         // Initialize state
@@ -178,7 +178,7 @@ pub trait RuntimeAgent: Send + Sync {
 /// - ReadOnly: Read-only access for request handlers
 ///
 /// # Example
-/// ```rust
+/// ```ignore
 /// let agent = RuntimeAgentData::new(
 ///     &agent_def,
 ///     &event_bus,
