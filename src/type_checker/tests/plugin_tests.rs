@@ -1,6 +1,8 @@
 use crate::{
     ast::{Expression, Literal, ThinkAttributes},
+    eval::expression::Value,
     type_checker::{
+        plugin_validation::{CommonPluginValidator, PluginValidator},
         visitor::common::PluginVisitor, PluginConfigValidator, TypeChecker, TypeCheckResult,
         TypeContext,
     },
@@ -80,8 +82,10 @@ fn test_plugin_with_think_attributes() {
 
 #[test]
 fn test_plugin_config_validation() {
+    // Test with both TypeChecker and direct validator
+    let validator = CommonPluginValidator;
     let mut type_checker = TypeChecker::new();
-    type_checker.register_plugin(Box::new(PluginConfigValidator));
+    type_checker.register_plugin(Box::new(PluginConfigValidator::default()));
     let mut ctx = TypeContext::new();
 
     // Test valid config
@@ -89,6 +93,17 @@ fn test_plugin_config_validation() {
     valid_config.insert("provider_type".to_string(), Literal::String("test".to_string()));
     valid_config.insert("name".to_string(), Literal::String("test".to_string()));
 
+    // Direct validation should pass
+    let config_map = valid_config
+        .iter()
+        .map(|(k, v)| match v {
+            Literal::String(s) => (k.clone(), Value::String(s.clone())),
+            _ => (k.clone(), Value::String(v.to_string())),
+        })
+        .collect();
+    assert!(validator.validate_basic_structure(&config_map).is_ok());
+
+    // TypeChecker validation should pass
     let expr = Expression::Think {
         args: vec![],
         with_block: Some(ThinkAttributes {
@@ -120,20 +135,34 @@ fn test_plugin_config_validation() {
 
 #[test]
 fn test_plugin_config_validation_error_messages() {
+    // Test with both direct validator and type checker
+    let validator = CommonPluginValidator;
     let mut type_checker = TypeChecker::new();
-    type_checker.register_plugin(Box::new(PluginConfigValidator));
+    type_checker.register_plugin(Box::new(PluginConfigValidator::default()));
     let mut ctx = TypeContext::new();
 
     // Test missing provider_type error
     let mut config = HashMap::new();
-    config.insert("name".to_string(), Literal::String("test".to_string()));
+    config.insert("name".to_string(), Value::String("test".to_string()));
+    
+    // Direct validation
+    let result = validator.validate_basic_structure(&config);
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Missing required field 'provider_type'"));
+
+    // Type checker validation
+    let mut literal_config = HashMap::new();
+    literal_config.insert("name".to_string(), Literal::String("test".to_string()));
     
     let expr = Expression::Think {
         args: vec![],
         with_block: Some(ThinkAttributes {
             plugins: {
                 let mut plugins = HashMap::new();
-                plugins.insert("provider".to_string(), config);
+                plugins.insert("provider".to_string(), literal_config);
                 plugins
             },
             ..Default::default()
@@ -141,19 +170,36 @@ fn test_plugin_config_validation_error_messages() {
     };
     let result = type_checker.visit_expression(&expr, &mut ctx);
     assert!(result.is_err());
-    let err = result.unwrap_err();
-    assert!(err.to_string().contains("Missing required field 'provider_type'"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Missing required field 'provider_type'"));
 
     // Test missing name error
     let mut config = HashMap::new();
-    config.insert("provider_type".to_string(), Literal::String("test".to_string()));
+    config.insert("provider_type".to_string(), Value::String("test".to_string()));
+    
+    // Direct validation
+    let result = validator.validate_basic_structure(&config);
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Missing required field 'name'"));
+
+    // Type checker validation
+    let mut literal_config = HashMap::new();
+    literal_config.insert(
+        "provider_type".to_string(),
+        Literal::String("test".to_string()),
+    );
     
     let expr = Expression::Think {
         args: vec![],
         with_block: Some(ThinkAttributes {
             plugins: {
                 let mut plugins = HashMap::new();
-                plugins.insert("provider".to_string(), config);
+                plugins.insert("provider".to_string(), literal_config);
                 plugins
             },
             ..Default::default()
@@ -161,6 +207,8 @@ fn test_plugin_config_validation_error_messages() {
     };
     let result = type_checker.visit_expression(&expr, &mut ctx);
     assert!(result.is_err());
-    let err = result.unwrap_err();
-    assert!(err.to_string().contains("Missing required field 'name'"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Missing required field 'name'"));
 }
