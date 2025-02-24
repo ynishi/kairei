@@ -10,7 +10,7 @@
 ///
 /// # Type System
 /// The World DSL supports global type definitions that can be used across all MicroAgents:
-/// ```rust
+/// ```text
 /// types {
 ///     type UserProfile {
 ///         id: String
@@ -34,7 +34,7 @@
 /// - `Result<T, E>`: Success/failure results
 ///
 /// # Example
-/// ```rust
+/// ```text
 /// world GameWorld {
 ///     config {
 ///         tick_interval: Duration = "1s"
@@ -101,7 +101,7 @@ pub fn parse_root() -> impl Parser<Token, ast::Root> {
 /// - Global policies
 ///
 /// # Example
-/// ```rust
+/// ```text
 /// world GameWorld {
 ///     config {
 ///         tick_interval: Duration = "1s"
@@ -172,7 +172,7 @@ fn parse_world_keyword() -> impl Parser<Token, Token> {
 /// These are used to guide agent behavior and system operations.
 ///
 /// # Example
-/// ```rust
+/// ```text
 /// policy "Ensure factual accuracy with multiple sources"
 /// policy "Use recent information, prefer within 24 hours"
 /// ```
@@ -202,7 +202,7 @@ fn parse_policy_keyword() -> impl Parser<Token, Token> {
 /// - `event_buffer_size`: Size of the event queue buffer
 ///
 /// # Example
-/// ```rust
+/// ```text
 /// config {
 ///     tick_interval: Duration = "1s"
 ///     max_agents: Int = 100
@@ -252,7 +252,7 @@ pub fn parse_config_item() -> impl Parser<Token, (String, ast::Literal)> {
 /// - `ErrorOccurred(message: String)`
 ///
 /// # Example
-/// ```rust
+/// ```text
 /// events {
 ///     PlayerJoined(player_id: String)
 ///     GameStarted
@@ -294,7 +294,7 @@ fn parse_event() -> impl Parser<Token, ast::CustomEventDef> {
 /// both built-in events and custom events defined in the events block.
 ///
 /// # Example
-/// ```rust
+/// ```text
 /// handlers {
 ///     on Tick(delta_time: Float) {
 ///         emit NextTick(delta_time)
