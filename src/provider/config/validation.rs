@@ -1,7 +1,10 @@
 use super::{
     base::ConfigError,
     error::{ValidationError, ValidationPhase},
-    types::{ProviderCapabilities, ProviderConfigValidator, ProviderDependency, ProviderSpecificConfig, Schema},
+    types::{
+        ProviderCapabilities, ProviderConfigValidator, ProviderDependency, ProviderSpecificConfig,
+        Schema,
+    },
 };
 use serde_json::Value;
 
@@ -108,7 +111,10 @@ impl ProviderConfigValidator for BaseValidator {
         Ok(())
     }
 
-    fn validate_provider_specific(&self, config: &ProviderSpecificConfig) -> Result<(), ValidationError> {
+    fn validate_provider_specific(
+        &self,
+        config: &ProviderSpecificConfig,
+    ) -> Result<(), ValidationError> {
         // Basic provider-specific validation
         if config.config.is_empty() {
             return Err(ValidationError::ProviderSpecific {
@@ -120,7 +126,10 @@ impl ProviderConfigValidator for BaseValidator {
         Ok(())
     }
 
-    fn validate_capabilities(&self, capabilities: &ProviderCapabilities) -> Result<(), ValidationError> {
+    fn validate_capabilities(
+        &self,
+        capabilities: &ProviderCapabilities,
+    ) -> Result<(), ValidationError> {
         // Basic capability validation
         if capabilities.features.is_empty() {
             return Err(ValidationError::Capability {
@@ -132,7 +141,10 @@ impl ProviderConfigValidator for BaseValidator {
         Ok(())
     }
 
-    fn validate_dependencies(&self, dependencies: &[ProviderDependency]) -> Result<(), ValidationError> {
+    fn validate_dependencies(
+        &self,
+        dependencies: &[ProviderDependency],
+    ) -> Result<(), ValidationError> {
         // Basic dependency validation
         for dep in dependencies {
             if dep.version.is_empty() {
