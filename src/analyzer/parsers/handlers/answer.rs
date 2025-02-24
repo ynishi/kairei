@@ -13,6 +13,35 @@ use crate::{
     tokenizer::{keyword::Keyword, symbol::Operator, token::Token},
 };
 
+/// Answer Block Handler Implementation
+///
+/// The answer block defines how an agent responds to explicit requests.
+/// It enforces read-only access to state and provides type-safe responses.
+///
+/// # Features
+/// - Type-safe request handling
+/// - Read-only state access
+/// - Quality constraints specification
+/// - Error handling with Result type
+///
+/// # Example
+/// ```text
+/// answer {
+///     on request GetProfile(user_id: String) -> Result<Profile> {
+///         with {
+///             strictness: 0.8,
+///             stability: 0.9,
+///             latency: 1000
+///         }
+///         // Handler implementation
+///     }
+/// }
+/// ```
+///
+/// # Quality Constraints
+/// - `strictness`: Accuracy requirement (0.0-1.0)
+/// - `stability`: Consistency requirement (0.0-1.0)
+/// - `latency`: Response time limit in milliseconds
 pub fn parse_answer() -> impl Parser<Token, ast::AnswerDef> {
     with_context(
         map(
@@ -28,7 +57,28 @@ pub fn parse_answer() -> impl Parser<Token, ast::AnswerDef> {
     )
 }
 
-// RequestHandler用のパーサー
+/// Request Handler Parser
+///
+/// Parses individual request handlers within an answer block.
+/// Each handler defines a specific request type, parameters, return type,
+/// and optional quality constraints.
+///
+/// # Handler Structure
+/// - Request type (query, action, or custom)
+/// - Parameters with types
+/// - Return type (must be Result)
+/// - Optional quality constraints
+/// - Handler implementation block
+///
+/// # Example
+/// ```text
+/// on request GetData(id: String) -> Result<Data> {
+///     with {
+///         strictness: 0.9
+///     }
+///     // Handler implementation
+/// }
+/// ```
 fn parse_request_handler() -> impl Parser<Token, ast::RequestHandler> {
     with_context(
         map(
@@ -52,6 +102,19 @@ fn parse_request_handler() -> impl Parser<Token, ast::RequestHandler> {
     )
 }
 
+/// Request Type Parser
+///
+/// Parses the type of request being handled. Supports three types:
+/// - Query: For data retrieval operations
+/// - Action: For state-changing operations
+/// - Custom: For user-defined request types
+///
+/// # Examples
+/// ```text
+/// query.GetUserData
+/// action.UpdateProfile
+/// request CustomOperation
+/// ```
 fn parse_request_type() -> impl Parser<Token, ast::RequestType> {
     with_context(
         choice(vec![
@@ -82,6 +145,22 @@ fn parse_request() -> impl Parser<Token, Token> {
     with_context(equal(Token::Keyword(Keyword::Request)), "request keyword")
 }
 
+/// Quality Constraints Parser
+///
+/// Parses quality constraints for request handlers.
+/// These constraints define requirements for:
+/// - Response accuracy (strictness)
+/// - Response consistency (stability)
+/// - Response time (latency)
+///
+/// # Example
+/// ```text
+/// with {
+///     strictness: 0.9,  // 90% accuracy requirement
+///     stability: 0.8,   // 80% consistency requirement
+///     latency: 1000     // 1 second response time limit
+/// }
+/// ```
 fn parse_constraints() -> impl Parser<Token, ast::Constraints> {
     with_context(
         map(

@@ -6,6 +6,34 @@ use crate::{
     tokenizer::{keyword::Keyword, token::Token},
 };
 
+/// Observe Block Handler Implementation
+///
+/// The observe block enables agents to monitor and respond to events
+/// in their environment, including state changes and system events.
+///
+/// # Features
+/// - Event monitoring
+/// - State change detection
+/// - Full state access
+/// - Automatic state change notifications
+///
+/// # Example
+/// ```text
+/// observe {
+///     on StateUpdated.otherAgent.status {
+///         // Handle state change
+///     }
+///
+///     on CustomEvent(param: String) {
+///         // Handle custom event
+///     }
+/// }
+/// ```
+///
+/// # Built-in Events
+/// - `Tick`: System heartbeat event
+/// - `StateUpdated`: State change notifications
+/// - Custom events defined in World
 pub fn parse_observe() -> impl Parser<Token, ast::ObserveDef> {
     with_context(
         map(
@@ -21,6 +49,26 @@ pub fn parse_observe() -> impl Parser<Token, ast::ObserveDef> {
     )
 }
 
+/// Event Handler Parser
+///
+/// Parses individual event handlers within an observe block.
+/// Each handler defines how the agent responds to specific events.
+///
+/// # Handler Structure
+/// - Event type (built-in or custom)
+/// - Optional parameters with types
+/// - Handler implementation block
+///
+/// # Example
+/// ```text
+/// on Tick {
+///     // Handle tick event
+/// }
+///
+/// on CustomEvent(data: EventData) {
+///     // Handle custom event with data
+/// }
+/// ```
 pub fn parse_event_handler() -> impl Parser<Token, ast::EventHandler> {
     with_context(
         map(
@@ -40,6 +88,19 @@ pub fn parse_event_handler() -> impl Parser<Token, ast::EventHandler> {
     )
 }
 
+/// Event Type Parser
+///
+/// Parses the type of event being handled. Supports:
+/// - Tick events (system heartbeat)
+/// - State update events (agent state changes)
+/// - Custom events (defined in World)
+///
+/// # Examples
+/// ```text
+/// Tick
+/// StateUpdated.agentName.stateName
+/// CustomEvent
+/// ```
 fn parse_event_type() -> impl Parser<Token, ast::EventType> {
     with_context(
         choice(vec![
