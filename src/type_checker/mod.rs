@@ -55,6 +55,10 @@ use crate::ast;
 ///
 /// ## Core Components
 /// ```rust
+/// use kairei::type_checker::{TypeScope, TypeCheckError};
+/// use kairei::type_checker::visitor::common::PluginVisitor;
+/// use kairei::type_checker::visitor::DefaultVisitor;
+///
 /// pub struct TypeChecker {
 ///     plugins: Vec<Box<dyn PluginVisitor>>,
 ///     default_visitor: DefaultVisitor,
@@ -69,6 +73,9 @@ use crate::ast;
 ///
 /// ## Plugin System
 /// ```rust
+/// use kairei::ast::{Root, MicroAgentDef};
+/// use kairei::type_checker::{TypeContext, TypeCheckResult};
+///
 /// pub trait TypeVisitor {
 ///     fn visit_root(&mut self, root: &mut Root, ctx: &mut TypeContext) -> TypeCheckResult<()>;
 ///     fn visit_micro_agent(&mut self, agent: &mut MicroAgentDef, ctx: &mut TypeContext) -> TypeCheckResult<()>;
