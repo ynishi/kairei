@@ -5,4 +5,6 @@ mod validation;
 mod tests;
 
 pub use base::{ConfigError, ConfigValidation, PluginConfig};
-pub use validation::{validate_range, validate_required_field, check_required_properties, check_property_type};
+pub use validation::{
+    check_property_type, check_required_properties, validate_range, validate_required_field,
+};
