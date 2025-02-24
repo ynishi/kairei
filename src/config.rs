@@ -228,25 +228,27 @@ impl TryFrom<HashMap<String, Value>> for ProviderConfig {
     type Error = TypeCheckError;
 
     fn try_from(value: HashMap<String, Value>) -> Result<Self, Self::Error> {
-        // Validate required fields
-        let _provider_type = value.get("provider_type").ok_or_else(|| {
-            TypeCheckError::invalid_type_arguments(
-                "Missing required field 'provider_type'".to_string(),
-                Default::default(),
-            )
-        })?;
+        // Use CommonPluginValidator for basic validation
+        let validator = CommonPluginValidator;
+        validator.validate_basic_structure(&value)?;
 
-        let name = value.get("name").ok_or_else(|| {
-            TypeCheckError::invalid_type_arguments(
-                "Missing required field 'name'".to_string(),
-                Default::default(),
-            )
-        })?;
+        // Extract validated fields
+        let provider_type = value
+            .get("provider_type")
+            .and_then(|v| v.as_str())
+            .map(|s| s.parse().unwrap_or_default())
+            .unwrap_or_default();
 
-        // Create default config with validated fields
+        let name = value
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_default();
+
+        // Create config with validated fields
         Ok(Self {
-            provider_type: ProviderType::default(), // TODO: Parse from value
-            name: name.to_string(),
+            provider_type,
+            name,
             common_config: CommonConfig::default(),
             endpoint: EndpointConfig::default(),
             provider_specific: HashMap::new(),
