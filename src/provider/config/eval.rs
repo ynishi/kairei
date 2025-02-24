@@ -67,7 +67,7 @@ impl ProviderConfigValidator for EvalProviderValidator {
         // Validate optional fields if present
         if let Some(common_config) = config.get("common_config") {
             match common_config {
-                Value::String(_) => (),
+                Value::Map(_) => (),
                 _ => return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
                     "common_config must be an object".to_string(),
                     Default::default(),
@@ -113,7 +113,7 @@ mod tests {
     fn test_validate_schema_invalid_provider_specific() {
         let validator = EvalProviderValidator;
         let mut provider_specific = HashMap::new();
-        provider_specific.insert("test".to_string(), Value::Array(vec![]));
+        provider_specific.insert("test".to_string(), Value::List(vec![]));
 
         let config = Config {
             provider_type: Default::default(),
@@ -149,7 +149,7 @@ mod tests {
         config.insert("name".to_string(), Value::String("test".to_string()));
         config.insert(
             "common_config".to_string(),
-            Value::Object(HashMap::new()),
+            Value::Map(HashMap::new()),
         );
 
         assert!(validator.validate_basic_types(&config).is_ok());

@@ -127,7 +127,7 @@ mod tests {
     fn test_validate_basic_types_invalid_provider_type() {
         let validator = CommonValidator;
         let mut config = HashMap::new();
-        config.insert("provider_type".to_string(), Value::Number(42.into()));
+        config.insert("provider_type".to_string(), Value::Integer(42));
         config.insert("name".to_string(), Value::String("test".to_string()));
 
         assert!(validator.validate_basic_types(&config).is_err());
@@ -141,7 +141,7 @@ mod tests {
             "provider_type".to_string(),
             Value::String("test".to_string()),
         );
-        config.insert("name".to_string(), Value::Number(42.into()));
+        config.insert("name".to_string(), Value::Integer(42));
 
         assert!(validator.validate_basic_types(&config).is_err());
     }
