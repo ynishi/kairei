@@ -26,7 +26,10 @@ pub trait ConfigValidation {
 }
 
 use crate::provider::{
-    config::plugins::{MemoryConfig as PluginMemoryConfig, RagConfig as PluginRagConfig, SearchConfig as PluginSearchConfig},
+    config::plugins::{
+        MemoryConfig as PluginMemoryConfig, RagConfig as PluginRagConfig,
+        SearchConfig as PluginSearchConfig,
+    },
     provider::ProviderType,
 };
 use std::collections::HashMap;
