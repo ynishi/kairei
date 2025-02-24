@@ -72,7 +72,7 @@
 ///     policy "Maintain user privacy standards"
 /// }
 /// ```
-/// 
+///
 /// Policies guide agent behavior without imposing strict constraints, allowing for
 /// flexible adaptation to different scenarios while maintaining system guidelines.
 /// The policy validation occurs during transformation and runtime registration phases.
@@ -319,9 +319,9 @@ pub fn parse_config_item() -> impl Parser<Token, (String, ast::Literal)> {
 /// # Example
 /// ```text
 /// events {
-///     PlayerJoined(player_id: String)
-///     GameStarted
-///     PlayerMoved(x: Float, y: Float)
+///     TravellerJoined(user_id: String)
+///     TripStarted
+///     LocationUpdated(latitude: Float, longitude: Float)
 /// }
 /// ```
 pub fn parse_events() -> impl Parser<Token, ast::EventsDef> {
