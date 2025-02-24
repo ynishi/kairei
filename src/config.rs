@@ -191,7 +191,7 @@ impl Default for ProviderConfigs {
 pub struct ProviderConfig {
     // 基本情報
     #[serde(default = "ProviderType::default")]
-    pub provider_type_info: ProviderType,
+    pub provider_type: ProviderType,
 
     #[serde(default = "default_provider_name")]
     pub name: String,
@@ -214,7 +214,7 @@ pub struct ProviderConfig {
 impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
-            provider_type_info: ProviderType::default(),
+            provider_type: ProviderType::default(),
             name: default_provider_name(),
             common_config: CommonConfig::default(),
             endpoint: EndpointConfig::default(),
@@ -229,9 +229,9 @@ impl TryFrom<HashMap<String, Value>> for ProviderConfig {
 
     fn try_from(value: HashMap<String, Value>) -> Result<Self, Self::Error> {
         // Validate required fields
-        let _provider_type = value.get("provider_type_info").ok_or_else(|| {
+        let _provider_type = value.get("provider_type").ok_or_else(|| {
             TypeCheckError::invalid_type_arguments(
-                "Missing required field 'provider_type_info'".to_string(),
+                "Missing required field 'provider_type'".to_string(),
                 Default::default(),
             )
         })?;
@@ -245,7 +245,7 @@ impl TryFrom<HashMap<String, Value>> for ProviderConfig {
 
         // Create default config with validated fields
         Ok(Self {
-            provider_type_info: ProviderType::default(), // TODO: Parse from value
+            provider_type: ProviderType::default(), // TODO: Parse from value
             name: name.to_string(),
             common_config: CommonConfig::default(),
             endpoint: EndpointConfig::default(),
