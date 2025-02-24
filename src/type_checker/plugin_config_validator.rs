@@ -2,8 +2,9 @@ use crate::{
     ast,
     eval::expression::Value,
     type_checker::{
-        plugin_validation::CommonPluginValidator, visitor::common::PluginVisitor, TypeCheckResult,
-        TypeContext,
+        plugin_validation::{CommonPluginValidator, PluginValidator},
+        visitor::common::PluginVisitor,
+        TypeCheckResult, TypeContext,
     },
 };
 use std::collections::HashMap;
