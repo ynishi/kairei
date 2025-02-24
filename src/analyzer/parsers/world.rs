@@ -150,8 +150,13 @@ use crate::{
 };
 use std::collections::HashMap;
 
-/// Parses the root of a KAIREI DSL file, which may contain a World definition
-/// and multiple MicroAgent definitions.
+/// Receives a token stream and produces the root AST node of a KAIREI DSL file.
+/// The parsing flow is:
+/// File -> String -> Token -> (Parser here) -> AST -> (Eval in Runtime)
+///
+/// This parser consumes tokens from the input stream to construct a World definition
+/// and/or multiple MicroAgent definitions. The parser operates directly on tokens,
+/// not on raw text, ensuring proper lexical analysis has already been performed.
 ///
 /// # Returns
 /// A parser that produces an `ast::Root` containing the World and MicroAgent definitions
