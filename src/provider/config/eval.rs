@@ -1,6 +1,6 @@
-use super::{validation::ProviderConfigValidator, types::Config};
-use crate::type_checker::TypeCheckResult;
+use super::{types::Config, validation::ProviderConfigValidator};
 use crate::eval::expression::Value;
+use crate::type_checker::TypeCheckResult;
 use std::collections::HashMap;
 
 pub struct EvalProviderValidator;
@@ -21,10 +21,15 @@ impl ProviderConfigValidator for EvalProviderValidator {
             for (key, value) in &schema.provider_specific {
                 match value {
                     Value::String(_) => (),
-                    _ => return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
-                        format!("Invalid type for provider-specific config key '{}', expected string", key),
-                        Default::default(),
-                    )),
+                    _ => {
+                        return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
+                            format!(
+                            "Invalid type for provider-specific config key '{}', expected string",
+                            key
+                        ),
+                            Default::default(),
+                        ))
+                    }
                 }
             }
         }
@@ -43,10 +48,12 @@ impl ProviderConfigValidator for EvalProviderValidator {
 
         match provider_type {
             Value::String(_) => (),
-            _ => return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
-                "provider_type must be a string".to_string(),
-                Default::default(),
-            )),
+            _ => {
+                return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
+                    "provider_type must be a string".to_string(),
+                    Default::default(),
+                ))
+            }
         }
 
         let name = config.get("name").ok_or_else(|| {
@@ -58,20 +65,24 @@ impl ProviderConfigValidator for EvalProviderValidator {
 
         match name {
             Value::String(_) => (),
-            _ => return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
-                "name must be a string".to_string(),
-                Default::default(),
-            )),
+            _ => {
+                return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
+                    "name must be a string".to_string(),
+                    Default::default(),
+                ))
+            }
         }
 
         // Validate optional fields if present
         if let Some(common_config) = config.get("common_config") {
             match common_config {
                 Value::Map(_) => (),
-                _ => return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
-                    "common_config must be an object".to_string(),
-                    Default::default(),
-                )),
+                _ => {
+                    return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
+                        "common_config must be an object".to_string(),
+                        Default::default(),
+                    ))
+                }
             }
         }
 
@@ -147,10 +158,7 @@ mod tests {
             Value::String("test".to_string()),
         );
         config.insert("name".to_string(), Value::String("test".to_string()));
-        config.insert(
-            "common_config".to_string(),
-            Value::Map(HashMap::new()),
-        );
+        config.insert("common_config".to_string(), Value::Map(HashMap::new()));
 
         assert!(validator.validate_basic_types(&config).is_ok());
     }
@@ -164,7 +172,10 @@ mod tests {
             Value::String("test".to_string()),
         );
         config.insert("name".to_string(), Value::String("test".to_string()));
-        config.insert("common_config".to_string(), Value::String("invalid".to_string()));
+        config.insert(
+            "common_config".to_string(),
+            Value::String("invalid".to_string()),
+        );
 
         assert!(validator.validate_basic_types(&config).is_err());
     }

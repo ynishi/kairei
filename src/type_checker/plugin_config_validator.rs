@@ -1,14 +1,8 @@
 use crate::{
     ast,
     eval::expression::Value,
-    provider::config::{
-        type_check::TypeProviderValidator,
-        validation::ProviderConfigValidator,
-    },
-    type_checker::{
-        visitor::common::PluginVisitor,
-        TypeCheckResult, TypeContext,
-    },
+    provider::config::{type_check::TypeProviderValidator, validation::ProviderConfigValidator},
+    type_checker::{visitor::common::PluginVisitor, TypeCheckResult, TypeContext},
 };
 use std::collections::HashMap;
 

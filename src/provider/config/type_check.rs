@@ -1,6 +1,6 @@
-use super::{validation::ProviderConfigValidator, types::Config};
-use crate::type_checker::TypeCheckResult;
+use super::{types::Config, validation::ProviderConfigValidator};
 use crate::eval::expression::Value;
+use crate::type_checker::TypeCheckResult;
 use std::collections::HashMap;
 
 pub struct TypeProviderValidator;
@@ -30,10 +30,12 @@ impl ProviderConfigValidator for TypeProviderValidator {
 
         match provider_type {
             Value::String(_) => (),
-            _ => return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
-                "provider_type must be a string".to_string(),
-                Default::default(),
-            )),
+            _ => {
+                return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
+                    "provider_type must be a string".to_string(),
+                    Default::default(),
+                ))
+            }
         }
 
         let name = config.get("name").ok_or_else(|| {
@@ -45,10 +47,12 @@ impl ProviderConfigValidator for TypeProviderValidator {
 
         match name {
             Value::String(_) => (),
-            _ => return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
-                "name must be a string".to_string(),
-                Default::default(),
-            )),
+            _ => {
+                return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
+                    "name must be a string".to_string(),
+                    Default::default(),
+                ))
+            }
         }
 
         Ok(())

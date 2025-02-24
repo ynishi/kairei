@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use crate::provider::provider::ProviderType;
 use crate::eval::expression::Value;
+use crate::provider::provider::ProviderType;
 use crate::type_checker::TypeCheckResult;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -23,17 +23,19 @@ impl TryFrom<HashMap<String, Value>> for Config {
     type Error = crate::type_checker::TypeCheckError;
 
     fn try_from(value: HashMap<String, Value>) -> TypeCheckResult<Self> {
-        let provider_type = value.get("provider_type")
+        let provider_type = value
+            .get("provider_type")
             .and_then(|v| match v {
                 Value::String(s) => Some(s.parse().unwrap_or_default()),
-                _ => None
+                _ => None,
             })
             .unwrap_or_default();
 
-        let name = value.get("name")
+        let name = value
+            .get("name")
             .and_then(|v| match v {
                 Value::String(s) => Some(s.to_string()),
-                _ => None
+                _ => None,
             })
             .unwrap_or_default();
 

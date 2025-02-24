@@ -1,6 +1,6 @@
-use crate::type_checker::TypeCheckResult;
 use super::types::Config;
 use crate::eval::expression::Value;
+use crate::type_checker::TypeCheckResult;
 use std::collections::HashMap;
 
 pub trait ProviderConfigValidator {
@@ -34,10 +34,12 @@ impl ProviderConfigValidator for CommonValidator {
 
         match provider_type {
             Value::String(_) => (),
-            _ => return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
-                "provider_type must be a string".to_string(),
-                Default::default(),
-            )),
+            _ => {
+                return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
+                    "provider_type must be a string".to_string(),
+                    Default::default(),
+                ))
+            }
         }
 
         let name = config.get("name").ok_or_else(|| {
@@ -49,10 +51,12 @@ impl ProviderConfigValidator for CommonValidator {
 
         match name {
             Value::String(_) => (),
-            _ => return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
-                "name must be a string".to_string(),
-                Default::default(),
-            )),
+            _ => {
+                return Err(crate::type_checker::TypeCheckError::invalid_type_arguments(
+                    "name must be a string".to_string(),
+                    Default::default(),
+                ))
+            }
         }
 
         Ok(())
