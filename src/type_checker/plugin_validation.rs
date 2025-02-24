@@ -1,15 +1,16 @@
-use std::collections::HashMap;
 use crate::{
     eval::expression::Value,
     type_checker::{TypeCheckError, TypeCheckResult},
 };
+use std::collections::HashMap;
 
 /// Trait for plugin configuration validation
 pub trait PluginValidator {
     /// Validates the basic structure of a plugin configuration
     fn validate_basic_structure(&self, config: &HashMap<String, Value>) -> TypeCheckResult<()>;
-    
+
     /// Validates plugin-specific configuration requirements
+    #[allow(dead_code)]
     fn validate_plugin_specific(&self, config: &HashMap<String, Value>) -> TypeCheckResult<()>;
 }
 
@@ -52,9 +53,12 @@ mod tests {
     fn test_validate_basic_structure_success() {
         let validator = CommonPluginValidator;
         let mut config = HashMap::new();
-        config.insert("provider_type".to_string(), Value::String("test".to_string()));
+        config.insert(
+            "provider_type".to_string(),
+            Value::String("test".to_string()),
+        );
         config.insert("name".to_string(), Value::String("test".to_string()));
-        
+
         assert!(validator.validate_basic_structure(&config).is_ok());
     }
 
@@ -63,7 +67,7 @@ mod tests {
         let validator = CommonPluginValidator;
         let mut config = HashMap::new();
         config.insert("name".to_string(), Value::String("test".to_string()));
-        
+
         assert!(validator.validate_basic_structure(&config).is_err());
     }
 
@@ -71,8 +75,11 @@ mod tests {
     fn test_validate_basic_structure_missing_name() {
         let validator = CommonPluginValidator;
         let mut config = HashMap::new();
-        config.insert("provider_type".to_string(), Value::String("test".to_string()));
-        
+        config.insert(
+            "provider_type".to_string(),
+            Value::String("test".to_string()),
+        );
+
         assert!(validator.validate_basic_structure(&config).is_err());
     }
 }
