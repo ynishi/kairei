@@ -19,7 +19,39 @@ pub use scope::TypeScope;
 
 use crate::ast;
 
-/// Type checking context
+/// MicroAgent DSL Type System
+///
+/// Implements static type checking for the MicroAgent DSL, ensuring
+/// type safety across state definitions, event handlers, and requests.
+///
+/// # Type Categories
+/// - Built-in types (String, Int, Float, etc.)
+/// - Custom types defined in World
+/// - Generic types (Result, Option, List)
+///
+/// # Type Checking Features
+/// - State variable type validation
+/// - Event parameter type checking
+/// - Request/response signature validation
+/// - Expression type inference
+///
+/// # Example
+/// ```text
+/// type UserProfile {
+///     id: String
+///     age: Int
+///     preferences: List<String>
+/// }
+///
+/// micro UserAgent {
+///     state {
+///         profile: UserProfile
+///     }
+/// }
+/// ```
+///
+/// # Type Context
+/// The type checking context maintains:
 #[derive(Clone)]
 pub struct TypeContext {
     pub scope: TypeScope,
@@ -62,7 +94,20 @@ impl TypeContext {
     }
 }
 
-/// Run type checker on AST
+/// Run Type Checker
+///
+/// Performs comprehensive type checking on the AST, validating:
+/// - State variable declarations
+/// - Event handler signatures
+/// - Request/response types
+/// - Expression type correctness
+///
+/// # Type Validation Process
+/// 1. Validate type definitions
+/// 2. Check state variable types
+/// 3. Verify event handler signatures
+/// 4. Validate expression types
+/// 5. Ensure request/response type safety
 pub fn run_type_checker(root: &mut ast::Root) -> TypeCheckResult<()> {
     let mut checker = TypeChecker::new();
     checker.check_types(root)
