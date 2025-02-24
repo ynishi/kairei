@@ -1,12 +1,24 @@
 use crate::{
     ast,
-    config::ProviderConfig,
     eval::expression::Value,
-    type_checker::{visitor::common::PluginVisitor, TypeCheckResult, TypeContext},
+    type_checker::{
+        plugin_validation::CommonPluginValidator, visitor::common::PluginVisitor, TypeCheckResult,
+        TypeContext,
+    },
 };
 use std::collections::HashMap;
 
-pub struct PluginConfigValidator;
+pub struct PluginConfigValidator {
+    validator: CommonPluginValidator,
+}
+
+impl Default for PluginConfigValidator {
+    fn default() -> Self {
+        Self {
+            validator: CommonPluginValidator,
+        }
+    }
+}
 
 impl PluginVisitor for PluginConfigValidator {
     fn before_expression(
@@ -27,7 +39,7 @@ impl PluginVisitor for PluginConfigValidator {
                         _ => (k.clone(), Value::String(v.to_string())),
                     })
                     .collect();
-                ProviderConfig::try_from(config_map)?;
+                self.validator.validate_basic_structure(&config_map)?;
             }
         }
         Ok(())

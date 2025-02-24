@@ -2,6 +2,7 @@ pub mod checker;
 mod error;
 mod init;
 mod plugin_config_validator;
+mod plugin_validation;
 pub mod plugin_interface;
 pub mod scope;
 pub mod visitor;
@@ -15,6 +16,7 @@ pub use error::{TypeCheckError, TypeCheckResult};
 pub use init::create_type_checker;
 pub use plugin_config_validator::PluginConfigValidator;
 pub use plugin_interface::TypeCheckerPlugin;
+pub use plugin_validation::CommonPluginValidator;
 pub use scope::TypeScope;
 
 use crate::ast;
