@@ -107,6 +107,15 @@
 /// }
 /// ```
 ///
+/// # Block Architecture
+/// The World DSL separates concerns into distinct block types:
+/// - observe: Monitors and responds to environment changes
+/// - answer: Handles explicit requests with read-only state access
+/// - react: Implements proactive behaviors with full state access
+///
+/// This separation ensures clear responsibility boundaries and appropriate
+/// state access patterns for each type of operation.
+///
 /// # Event-Driven Synchronization
 /// The World DSL implements event-driven synchronization for real-world integration:
 /// - Tick events serve as external resource synchronization
