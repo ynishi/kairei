@@ -1,5 +1,5 @@
-use serde_json::Value;
 use super::base::ConfigError;
+use serde_json::Value;
 
 pub fn validate_required_field<T>(field: &Option<T>, field_name: &str) -> Result<(), ConfigError> {
     field
@@ -24,7 +24,7 @@ where
 /// Validates that all required properties exist in the config
 pub fn check_required_properties(config: &Value, props: &[&str]) -> Result<(), ConfigError> {
     for prop in props {
-        if !config.get(prop).is_some() {
+        if config.get(prop).is_none() {
             return Err(ConfigError::MissingField(prop.to_string()));
         }
     }
@@ -32,22 +32,32 @@ pub fn check_required_properties(config: &Value, props: &[&str]) -> Result<(), C
 }
 
 /// Validates that a property has the expected type
-pub fn check_property_type(config: &Value, prop: &str, expected_type: &str) -> Result<(), ConfigError> {
-    let value = config.get(prop).ok_or_else(|| ConfigError::MissingField(prop.to_string()))?;
-    
+pub fn check_property_type(
+    config: &Value,
+    prop: &str,
+    expected_type: &str,
+) -> Result<(), ConfigError> {
+    let value = config
+        .get(prop)
+        .ok_or_else(|| ConfigError::MissingField(prop.to_string()))?;
+
     let type_matches = match expected_type {
         "string" => value.is_string(),
         "number" => value.is_number(),
         "boolean" => value.is_boolean(),
         "object" => value.is_object(),
         "array" => value.is_array(),
-        _ => false
+        _ => false,
     };
 
     if !type_matches {
         return Err(ConfigError::InvalidValue {
             field: prop.to_string(),
-            message: format!("Expected type '{}' but found '{}'", expected_type, get_value_type(value)),
+            message: format!(
+                "Expected type '{}' but found '{}'",
+                expected_type,
+                get_value_type(value)
+            ),
         });
     }
     Ok(())
