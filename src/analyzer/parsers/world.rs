@@ -62,6 +62,26 @@
 /// - `AgentJoined(agent_id: String)`: When an agent joins the world
 /// - `AgentLeft(agent_id: String)`: When an agent leaves the world
 /// - `ErrorOccurred(message: String)`: When an error occurs in agent execution
+///
+/// # Event-Driven Synchronization
+/// The World DSL implements event-driven synchronization for real-world integration:
+/// - Tick events serve as external resource synchronization
+/// - Enables unified timeline across agents without specialized mechanisms
+/// - Focuses on real-world event processing rather than frame-based updates
+/// - Allows agents to share a unified timeline for coordinated operations
+///
+/// Example:
+/// ```text
+/// world TravelPlanningWorld {
+///     handlers {
+///         on Tick(delta_time: Float) {
+///             // Synchronize with external resources
+///             emit UpdateExternalState
+///         }
+///     }
+/// }
+/// ```
+///
 use uuid::Uuid;
 
 use super::{
