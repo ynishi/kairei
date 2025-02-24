@@ -1,10 +1,10 @@
 //! # Runtime Component
-//! 
+//!
 //! The Runtime component is responsible for managing MicroAgent lifecycle, event handling,
 //! and state management within the MicroAgent Layer.
 //!
 //! ## Architecture
-//! 
+//!
 //! The Runtime provides:
 //! - Agent lifecycle management (initialization, execution, shutdown)
 //! - Event handling through three types of handlers:
