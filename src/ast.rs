@@ -17,7 +17,58 @@ impl Root {
     }
 }
 
-// MicroAgentのトップレベル構造
+/// MicroAgent DSL Core Definition
+///
+/// The MicroAgent DSL provides a structured way to define autonomous agents that can:
+/// - Maintain internal state
+/// - Observe and react to events
+/// - Handle requests with type-safe responses
+/// - Integrate with LLM capabilities
+///
+/// # Core Components
+/// - `state`: Define agent's internal state variables
+/// - `observe`: Monitor and respond to environment changes
+/// - `answer`: Handle explicit requests with type-safe responses
+/// - `react`: Implement proactive behaviors
+///
+/// # Example
+/// ```text
+/// micro CounterAgent {
+///     state {
+///         count: Int = 0
+///     }
+///
+///     observe {
+///         on Tick {
+///             self.count += 1
+///         }
+///     }
+///
+///     answer {
+///         on request GetCount() -> Result<Int> {
+///             Ok(self.count)
+///         }
+///     }
+/// }
+/// ```
+///
+/// # State Management
+/// State variables are strongly typed and can be:
+/// - Read in any block type
+/// - Modified in observe and react blocks
+/// - Read-only in answer blocks
+///
+/// # Event Handling
+/// The DSL supports different types of event handlers:
+/// - `observe`: For monitoring state changes and system events
+/// - `answer`: For handling explicit requests with responses
+/// - `react`: For implementing autonomous behaviors
+///
+/// # Type Safety
+/// The DSL enforces type safety through:
+/// - Strong typing of state variables
+/// - Type-checked event parameters
+/// - Validated request/response signatures
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MicroAgentDef {
     pub name: String,
@@ -36,7 +87,25 @@ pub struct LifecycleDef {
     pub on_destroy: Option<HandlerBlock>,
 }
 
-// 状態定義
+/// State Definition Block
+///
+/// Defines the internal state variables of a MicroAgent.
+/// Each state variable has a name, type, and optional initial value.
+///
+/// # Example
+/// ```text
+/// state {
+///     counter: Int = 0
+///     name: String = "agent"
+///     data: CustomType
+/// }
+/// ```
+///
+/// State variables are:
+/// - Strongly typed
+/// - Accessible from all handler blocks
+/// - Mutable in observe and react blocks
+/// - Read-only in answer blocks
 #[derive(Debug, Clone, PartialEq)]
 pub struct StateDef {
     pub variables: HashMap<String, StateVarDef>,
@@ -49,19 +118,82 @@ pub struct StateVarDef {
     pub initial_value: Option<Expression>,
 }
 
-// イベント観察定義
+/// Observe Block Definition
+///
+/// Defines handlers for monitoring and responding to events in the environment.
+/// Handlers in this block can modify agent state and emit new events.
+///
+/// # Example
+/// ```text
+/// observe {
+///     on Tick {
+///         self.counter += 1
+///     }
+///
+///     on StateUpdated.otherAgent.status {
+///         // React to other agent's state change
+///     }
+/// }
+/// ```
+///
+/// Observe handlers:
+/// - Can modify agent state
+/// - Can emit new events
+/// - Cannot return values
+/// - Are triggered by system or custom events
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObserveDef {
     pub handlers: Vec<EventHandler>,
 }
 
-// リクエスト応答定義
+/// Answer Block Definition
+///
+/// Defines handlers for responding to explicit requests from other agents.
+/// These handlers provide type-safe responses and have read-only access to state.
+///
+/// # Example
+/// ```text
+/// answer {
+///     on request GetStatus() -> Result<Status> {
+///         with {
+///             strictness: 0.9,
+///             stability: 0.8
+///         }
+///         Ok(self.status)
+///     }
+/// }
+/// ```
+///
+/// Answer handlers:
+/// - Have read-only access to state
+/// - Must return a Result type
+/// - Can specify quality constraints
+/// - Support error handling
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnswerDef {
     pub handlers: Vec<RequestHandler>,
 }
 
-// システムへの反応定義
+/// React Block Definition
+///
+/// Defines handlers for implementing proactive behaviors in response to events.
+/// These handlers can modify state and initiate interactions with other agents.
+///
+/// # Example
+/// ```text
+/// react {
+///     on NewData(data: Data) {
+///         self.process_data = data
+///         emit DataProcessed(self.process_data)
+///     }
+/// }
+/// ```
+///
+/// React handlers:
+/// - Can modify agent state
+/// - Can emit events and make requests
+/// - Support complex event processing
+/// - Enable autonomous behavior
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReactDef {
     pub handlers: Vec<EventHandler>,
@@ -297,7 +429,31 @@ pub struct Constraints {
     pub latency: Option<u32>,
 }
 
-// 型情報
+/// Type Information for the MicroAgent DSL
+///
+/// Represents the type system that ensures type safety across the DSL.
+/// Supports basic types, generic types, and custom type definitions.
+///
+/// # Type Categories
+/// - Simple types (Int, String, etc.)
+/// - Generic types (Result, Option, Array)
+/// - Custom types with fields
+/// - Map types for key-value structures
+///
+/// # Example
+/// ```text
+/// type UserProfile {
+///     id: String
+///     data: Map<String, Any>
+///     settings: Option<Settings>
+/// }
+/// ```
+///
+/// The type system ensures:
+/// - Type safety in state definitions
+/// - Parameter type checking
+/// - Return type validation
+/// - Generic type handling
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeInfo {
     Simple(String), // 基本型 (Int, String等)
@@ -475,7 +631,39 @@ impl StateAccessPath {
     }
 }
 
-// 式
+/// Expression Types in the MicroAgent DSL
+///
+/// Defines all possible expressions that can appear in agent code.
+/// Includes state access, function calls, think blocks, and requests.
+///
+/// # Expression Categories
+/// - Literals and variables
+/// - State access expressions
+/// - Function calls
+/// - Think blocks for LLM integration
+/// - Request expressions
+/// - Await expressions for async operations
+/// - Binary operations
+///
+/// # Examples
+/// ```text
+/// // State access
+/// self.counter
+///
+/// // Think block
+/// think("Analyze data") with {
+///     model: "gpt-4"
+/// }
+///
+/// // Request
+/// request otherAgent.GetStatus()
+/// ```
+///
+/// Expressions support:
+/// - Type inference
+/// - Async/await operations
+/// - Error handling with Result
+/// - LLM integration through think blocks
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Literal(Literal),
