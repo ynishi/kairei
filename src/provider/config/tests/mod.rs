@@ -1,26 +1,40 @@
 use super::*;
+use crate::config::{MemoryConfig, RagConfig, SearchConfig};
 use crate::provider::config::base::PluginType;
 use crate::provider::config::validation::{validate_range, validate_required_field};
+use crate::provider::provider::ProviderType;
+use std::collections::HashMap;
 
 #[test]
 fn test_plugin_config_validation() {
-    // Test strict mode with known type
+    // Test strict mode with known types
     let config = PluginConfig {
-        plugin_type: PluginType::Memory,
+        provider_type: ProviderType::SimpleExpert,
+        plugin_type: PluginType::Memory(MemoryConfig::default()),
         strict: true,
     };
     assert!(config.validate().is_ok());
 
-    // Test strict mode with Unknown type
-    let invalid_config = PluginConfig {
-        plugin_type: PluginType::Unknown,
+    // Test strict mode with Unknown provider type
+    let invalid_provider_config = PluginConfig {
+        provider_type: ProviderType::Unknown,
+        plugin_type: PluginType::Memory(MemoryConfig::default()),
         strict: true,
     };
-    assert!(invalid_config.validate().is_err());
+    assert!(invalid_provider_config.validate().is_err());
 
-    // Test non-strict mode with Unknown type
+    // Test strict mode with Unknown plugin type
+    let invalid_plugin_config = PluginConfig {
+        provider_type: ProviderType::SimpleExpert,
+        plugin_type: PluginType::Unknown(HashMap::new()),
+        strict: true,
+    };
+    assert!(invalid_plugin_config.validate().is_err());
+
+    // Test non-strict mode with Unknown types
     let non_strict_config = PluginConfig {
-        plugin_type: PluginType::Unknown,
+        provider_type: ProviderType::Unknown,
+        plugin_type: PluginType::Unknown(HashMap::new()),
         strict: false,
     };
     assert!(non_strict_config.validate().is_ok());
@@ -38,10 +52,12 @@ fn test_validation_utilities() {
 #[test]
 fn test_plugin_type_serialization() {
     let config = PluginConfig {
-        plugin_type: PluginType::Memory,
+        provider_type: ProviderType::SimpleExpert,
+        plugin_type: PluginType::Memory(MemoryConfig::default()),
         strict: true,
     };
     let json = serde_json::to_string(&config).unwrap();
     let deserialized: PluginConfig = serde_json::from_str(&json).unwrap();
-    assert_eq!(deserialized.plugin_type, PluginType::Memory);
+    assert!(matches!(deserialized.plugin_type, PluginType::Memory(_)));
+    assert_eq!(deserialized.provider_type, ProviderType::SimpleExpert);
 }
