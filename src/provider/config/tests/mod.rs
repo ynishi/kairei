@@ -1,5 +1,5 @@
 use super::*;
-use crate::config::{MemoryConfig, RagConfig, SearchConfig};
+use crate::config::MemoryConfig;
 use crate::provider::config::base::PluginType;
 use crate::provider::config::validation::{validate_range, validate_required_field};
 use crate::provider::provider::ProviderType;
