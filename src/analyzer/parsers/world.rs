@@ -365,8 +365,8 @@ fn parse_event() -> impl Parser<Token, ast::CustomEventDef> {
 ///         emit NextTick(delta_time)
 ///     }
 ///     
-///     on PlayerJoined(player_id: String) {
-///         // Handle player joining
+///     on TravellerJoined(user_id: String) {
+///         // Handle traveller joining
 ///     }
 /// }
 /// ```
