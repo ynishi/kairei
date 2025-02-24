@@ -1,8 +1,11 @@
 use crate::{
     ast,
     eval::expression::Value,
+    provider::config::{
+        type_check::TypeProviderValidator,
+        validation::ProviderConfigValidator,
+    },
     type_checker::{
-        plugin_validation::{CommonPluginValidator, PluginValidator},
         visitor::common::PluginVisitor,
         TypeCheckResult, TypeContext,
     },
@@ -10,13 +13,13 @@ use crate::{
 use std::collections::HashMap;
 
 pub struct PluginConfigValidator {
-    validator: CommonPluginValidator,
+    validator: TypeProviderValidator,
 }
 
 impl Default for PluginConfigValidator {
     fn default() -> Self {
         Self {
-            validator: CommonPluginValidator,
+            validator: TypeProviderValidator,
         }
     }
 }
@@ -40,7 +43,7 @@ impl PluginVisitor for PluginConfigValidator {
                         _ => (k.clone(), Value::String(v.to_string())),
                     })
                     .collect();
-                self.validator.validate_basic_structure(&config_map)?;
+                self.validator.validate_basic_types(&config_map)?;
             }
         }
         Ok(())

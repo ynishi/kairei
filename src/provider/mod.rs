@@ -12,3 +12,4 @@ pub mod provider;
 pub mod providers;
 pub mod request;
 pub mod types;
+pub mod config;

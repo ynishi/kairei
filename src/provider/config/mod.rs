@@ -1,7 +1,7 @@
-mod types;
-mod validation;
-mod type_check;
-mod eval;
+pub mod types;
+pub mod validation;
+pub mod type_check;
+pub mod eval;
 
 pub use types::*;
 pub use validation::*;
