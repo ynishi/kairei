@@ -2,6 +2,7 @@ pub mod provider_registry;
 pub mod provider_secret;
 
 pub mod capability;
+pub mod config;
 pub mod generator;
 pub mod llm;
 pub mod llms;
