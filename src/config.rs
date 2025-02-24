@@ -541,7 +541,7 @@ fn default_metrics_tick_interval() -> usize {
 }
 
 // Duration型のシリアライズ/デシリアライズヘルパー
-mod duration_ms {
+pub mod duration_ms {
     use serde::{Deserialize, Deserializer, Serializer};
     use std::time::Duration;
 
