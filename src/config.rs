@@ -2,8 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Duration};
 
 use crate::{
-    expression::Value, provider::provider::ProviderType, type_checker::TypeCheckError, Error,
-    InternalResult,
+    expression::Value,
+    provider::provider::ProviderType,
+    type_checker::{CommonPluginValidator, PluginValidator, TypeCheckError},
+    Error, InternalResult,
 };
 use std::convert::TryFrom;
 
@@ -235,14 +237,18 @@ impl TryFrom<HashMap<String, Value>> for ProviderConfig {
         // Extract validated fields
         let provider_type = value
             .get("provider_type")
-            .and_then(|v| v.as_str())
-            .map(|s| s.parse().unwrap_or_default())
+            .map(|v| match v {
+                Value::String(s) => s.parse().unwrap_or_default(),
+                _ => ProviderType::default(),
+            })
             .unwrap_or_default();
 
         let name = value
             .get("name")
-            .and_then(|v| v.as_str())
-            .map(String::from)
+            .map(|v| match v {
+                Value::String(s) => s.to_string(),
+                _ => String::default(),
+            })
             .unwrap_or_default();
 
         // Create config with validated fields
