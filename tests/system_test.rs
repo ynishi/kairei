@@ -25,7 +25,7 @@ pub fn setup_non_api_config() -> (SystemConfig, SecretConfig) {
                 default_name.to_string(),
                 ProviderConfig {
                     name: default_name.to_string(),
-                    provider_type_info: ProviderType::SimpleExpert,
+                    provider_type: ProviderType::SimpleExpert,
                     ..Default::default()
                 },
             );

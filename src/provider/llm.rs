@@ -69,7 +69,7 @@ mod tests {
                 provider_specific.insert("Hello".to_string(), json!("World"));
                 provider_specific
             },
-            provider_type_info: ProviderType::SimpleExpert,
+            provider_type: ProviderType::SimpleExpert,
             endpoint: EndpointConfig::default(),
             plugin_configs: HashMap::new(),
         };
