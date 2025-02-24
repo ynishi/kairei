@@ -77,6 +77,36 @@
 /// flexible adaptation to different scenarios while maintaining system guidelines.
 /// The policy validation occurs during transformation and runtime registration phases.
 ///
+/// # State Management
+/// The World DSL implements a controlled state access pattern:
+/// - observe/react blocks: Read-write access for state updates
+/// - answer blocks: Read-only access for request handling
+/// - Automatic state change notifications
+/// - Pure data structure design for AST representation
+///
+/// Example:
+/// ```text
+/// world TravelPlanningWorld {
+///     state {
+///         bookings: Map<String, Booking>
+///         availability: AvailabilityStatus
+///     }
+///
+///     observe {
+///         on AvailabilityChanged(status: AvailabilityStatus) {
+///             self.availability = status  // Read-write access
+///             emit StateUpdated("availability")  // Automatic notification
+///         }
+///     }
+///
+///     answer {
+///         on request GetAvailability() -> Result<AvailabilityStatus> {
+///             Ok(self.availability)  // Read-only access
+///         }
+///     }
+/// }
+/// ```
+///
 /// # Event-Driven Synchronization
 /// The World DSL implements event-driven synchronization for real-world integration:
 /// - Tick events serve as external resource synchronization
