@@ -39,8 +39,13 @@ use serde::{Deserialize, Serialize};
 ///
 /// ## Implementation Example
 ///
-/// ```rust,no_run
-/// use kairei::provider::{Provider, ProviderContext, ProviderRequest, ProviderResponse};
+/// ```rust,ignore
+/// use kairei::provider::provider::Provider;
+/// use kairei::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
+/// use kairei::provider::types::ProviderResult;
+/// use kairei::provider::capability::Capabilities;
+/// use kairei::config::ProviderConfig;
+/// use kairei::provider::provider::ProviderSecret;
 /// use async_trait::async_trait;
 ///
 /// struct MyProvider {
@@ -56,10 +61,12 @@ use serde::{Deserialize, Serialize};
 ///         request: &ProviderRequest,
 ///     ) -> ProviderResult<ProviderResponse> {
 ///         // Process the request and return a response
+///         unimplemented!()
 ///     }
 ///
 ///     async fn capabilities(&self) -> Capabilities {
 ///         // Return the provider's capabilities
+///         unimplemented!()
 ///     }
 ///
 ///     fn name(&self) -> &str {
@@ -72,6 +79,7 @@ use serde::{Deserialize, Serialize};
 ///         secret: &ProviderSecret,
 ///     ) -> ProviderResult<()> {
 ///         // Initialize the provider with the given configuration
+///         unimplemented!()
 ///     }
 /// }
 /// ```
