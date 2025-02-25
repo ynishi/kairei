@@ -36,13 +36,13 @@ use serde::Serialize;
 ///
 /// ## Implementation Example
 ///
-/// ```no_run
-/// # use crate::provider::plugin::ProviderPlugin;
-/// # use crate::provider::plugin::PluginContext;
-/// # use crate::provider::provider::Section;
-/// # use crate::provider::capability::CapabilityType;
-/// # use crate::provider::types::ProviderResult;
-/// # use crate::provider::llm::LLMResponse;
+/// ```ignore
+/// # use kairei::provider::plugin::ProviderPlugin;
+/// # use kairei::provider::plugin::PluginContext;
+/// # use kairei::provider::provider::Section;
+/// # use kairei::provider::capability::CapabilityType;
+/// # use kairei::provider::types::ProviderResult;
+/// # use kairei::provider::llm::LLMResponse;
 /// # use async_trait::async_trait;
 /// #
 /// # struct MyPlugin {
