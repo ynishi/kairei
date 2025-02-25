@@ -1,3 +1,33 @@
+//! # Core Token Types and Tokenizer Implementation
+//!
+//! This module defines the fundamental token types and the main tokenizer implementation
+//! for the KAIREI DSL.
+//!
+//! ## Token Structure
+//!
+//! The token system consists of:
+//!
+//! * [`Token`]: The core token enum representing different token types
+//! * [`TokenSpan`]: A token with position information for error reporting
+//! * [`Tokenizer`]: The main tokenizer implementation
+//!
+//! ## Design Rationale
+//!
+//! The tokenizer is designed to:
+//!
+//! * Provide detailed position information for error reporting
+//! * Support incremental tokenization for large inputs
+//! * Preserve formatting information for accurate source reconstruction
+//! * Enable efficient error recovery during parsing
+//!
+//! ## Error Handling
+//!
+//! The [`TokenizerError`] type provides detailed error information, including:
+//!
+//! * Error message with context
+//! * Position information (line, column, start/end)
+//! * Found text for better error diagnostics
+
 use std::fmt;
 
 use nom::{
@@ -18,22 +48,31 @@ use super::{
     whitespace::{parse_newline, parse_whitespace},
 };
 
+/// Represents a token in the KAIREI DSL.
+///
+/// Tokens are the smallest units of meaning in the language, categorized into
+/// keywords, identifiers, symbols, literals, and formatting elements.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    // Keywords
+    /// Language keywords like `micro`, `world`, `state`, etc.
     Keyword(Keyword),
-    // Identifiers
+    /// User-defined identifiers for variables, functions, etc.
     Identifier(String),
-    // Symbols
+    /// Operators like `+`, `-`, `==`, etc.
     Operator(Operator),
+    /// Delimiters like `{`, `}`, `,`, etc.
     Delimiter(Delimiter),
-    // Literals
+    /// Literal values like strings, numbers, booleans.
     Literal(Literal),
-    // Formatting
+    /// Whitespace (spaces and tabs).
     Whitespace(String),
+    /// Line breaks.
     Newline,
+    /// Comments and documentation.
     Comment {
+        /// The content of the comment.
         content: String,
+        /// The type of comment (line, block, documentation).
         comment_type: CommentType,
     },
 }
@@ -69,34 +108,59 @@ impl fmt::Display for Token {
 }
 
 impl Token {
+    /// Returns true if the token is whitespace.
+    ///
+    /// Used to filter out whitespace tokens when only semantic tokens are needed.
     pub fn is_whitespace(&self) -> bool {
         matches!(self, Token::Whitespace(_))
     }
 
+    /// Returns true if the token is a comment.
+    ///
+    /// Used to filter out comment tokens when only semantic tokens are needed.
     pub fn is_comment(&self) -> bool {
         matches!(self, Token::Comment { .. })
     }
 
+    /// Returns true if the token is a newline.
+    ///
+    /// Used to filter out newline tokens when only semantic tokens are needed.
     pub fn is_newline(&self) -> bool {
         matches!(self, Token::Newline)
     }
 }
 
+/// Represents the different types of comments in the KAIREI DSL.
+///
+/// Comments are preserved during tokenization to enable documentation generation
+/// and source code formatting.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommentType {
-    Line,               // //
-    Block,              // /* */
-    DocumentationLine,  // ///
-    DocumentationBlock, // /** */
+    /// Line comment (`//`).
+    Line,
+    /// Block comment (`/* */`).
+    Block,
+    /// Documentation line comment (`///`).
+    DocumentationLine,
+    /// Documentation block comment (`/** */`).
+    DocumentationBlock,
 }
 
+/// The main tokenizer for the KAIREI DSL.
+///
+/// The tokenizer transforms raw text into a stream of tokens with position information,
+/// enabling accurate error reporting and source code reconstruction.
 #[derive(Debug, Clone)]
 pub struct Tokenizer {
+    /// Current position in the input string.
     current_position: usize,
+    /// Current line number (1-based).
     current_line: usize,
+    /// Current column number (1-based).
     current_column: usize,
 }
 
+/// Default implementation for Tokenizer that calls new().
 impl Default for Tokenizer {
     fn default() -> Self {
         Self::new()
@@ -104,6 +168,7 @@ impl Default for Tokenizer {
 }
 
 impl Tokenizer {
+    /// Creates a new Tokenizer with initial position at the start of the input.
     pub fn new() -> Self {
         Self {
             current_position: 0,
@@ -112,6 +177,28 @@ impl Tokenizer {
         }
     }
 
+    /// Tokenizes the input string into a sequence of tokens with position information.
+    ///
+    /// This is the main entry point for the tokenizer. It processes the input string
+    /// character by character, recognizing tokens and tracking position information.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - The input string to tokenize
+    ///
+    /// # Returns
+    ///
+    /// * `TokenizerResult<Vec<TokenSpan>>` - A result containing either a vector of token spans
+    ///   or a TokenizerError if tokenization fails
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kairei::tokenizer::token::{Tokenizer, Token};
+    /// let mut tokenizer = Tokenizer::new();
+    /// let input = "micro Agent { state { count: Int = 0 } }";
+    /// let tokens = tokenizer.tokenize(input).unwrap();
+    /// ```
     #[tracing::instrument(level = "debug", skip(input))]
     pub fn tokenize(&mut self, input: &str) -> TokenizerResult<Vec<TokenSpan>> {
         let mut tokens = Vec::new();
@@ -181,6 +268,14 @@ impl Tokenizer {
         Ok(tokens)
     }
 
+    /// Updates the current position, line, and column based on the consumed text.
+    ///
+    /// This method is called after each token is recognized to update the position
+    /// information for the next token.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text that was consumed by the last token
     fn update_position(&mut self, text: &str) {
         for c in text.chars() {
             self.current_position += c.len_utf8();
@@ -194,20 +289,37 @@ impl Tokenizer {
     }
 }
 
+/// A token with position information for error reporting and source mapping.
+///
+/// TokenSpan combines a token with its position in the source code, enabling
+/// precise error reporting and source reconstruction.
 #[derive(Debug, Clone)]
 pub struct TokenSpan {
+    /// The token itself.
     pub token: Token,
+    /// Start position in the input string (byte offset).
     pub start: usize,
+    /// End position in the input string (byte offset).
     pub end: usize,
+    /// Line number where the token starts (1-based).
     pub line: usize,
+    /// Column number where the token starts (1-based).
     pub column: usize,
 }
 
+/// Represents a span of text in the source code.
+///
+/// Used for error reporting and source mapping to provide precise location
+/// information for syntax errors.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Span {
+    /// Start position in the input string (byte offset).
     pub start: usize,
+    /// End position in the input string (byte offset).
     pub end: usize,
+    /// Line number where the span starts (1-based).
     pub line: usize,
+    /// Column number where the span starts (1-based).
     pub column: usize,
 }
 
@@ -221,6 +333,11 @@ impl std::fmt::Display for Span {
     }
 }
 
+/// Parses an identifier or keyword from the input string.
+///
+/// An identifier starts with a letter or underscore, followed by zero or more
+/// letters, digits, or underscores. If the parsed identifier matches a keyword,
+/// a Keyword token is returned instead.
 #[tracing::instrument(level = "debug", skip(input))]
 fn parse_identifier(input: &str) -> ParserResult<Token> {
     let (input, id) = context(
@@ -239,16 +356,27 @@ fn parse_identifier(input: &str) -> ParserResult<Token> {
     Ok((input, Token::Identifier(id.to_string())))
 }
 
+/// Type alias for parser results using nom's IResult with VerboseError.
 pub type ParserResult<'a, T> = IResult<&'a str, T, VerboseError<&'a str>>;
 
+/// Type alias for tokenizer results that may contain TokenizerError.
 pub type TokenizerResult<'a, T> = Result<T, TokenizerError>;
 
+/// Represents errors that can occur during tokenization.
+///
+/// TokenizerError provides detailed information about syntax errors,
+/// including the error message, the text that caused the error, and
+/// the exact position in the source code.
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum TokenizerError {
+    /// Error that occurs during parsing when invalid syntax is encountered.
     #[error("Parse error: {message} at position {span}")]
     ParseError {
+        /// Detailed error message describing the syntax error.
         message: String,
+        /// The text that was found at the error location.
         found: String,
+        /// The position information for the error.
         span: Span,
     },
 }
