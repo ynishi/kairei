@@ -48,6 +48,7 @@
 //! ```
 
 mod base;
+mod errors;
 mod plugins;
 mod providers;
 mod validation;
@@ -56,6 +57,10 @@ mod validation;
 mod tests;
 
 pub use base::{ConfigError, ConfigValidation, PluginConfig, PluginType};
+pub use errors::{
+    ErrorContext, ErrorSeverity, ProviderConfigError, ProviderError, SchemaError, SourceLocation,
+    ValidationError,
+};
 pub use plugins::{
     BasePluginConfig, MemoryConfig, ProviderSpecificConfig, RagConfig, SearchConfig,
 };
