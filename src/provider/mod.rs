@@ -20,15 +20,26 @@
 //!
 //! ## Usage Example
 //!
-//! ```rust,no_run
-//! use kairei::provider::{Provider, ProviderPlugin, ProviderContext, ProviderRequest};
+//! ```rust,ignore
+//! use kairei::provider::provider::Provider;
+//! use kairei::provider::plugin::ProviderPlugin;
+//! use kairei::provider::request::{ProviderContext, ProviderRequest};
+//! use kairei::config::ProviderConfig;
+//! use kairei::provider::provider::ProviderSecret;
+//! 
+//! async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Configure and initialize a provider
+//!     let mut provider = MyProvider::new();
+//!     let config = ProviderConfig::default();
+//!     let secret = ProviderSecret::default();
+//!     provider.initialize(&config, &secret).await?;
 //!
-//! // Configure and initialize a provider
-//! let mut provider = MyProvider::new();
-//! provider.initialize(&config, &secret).await?;
-//!
-//! // Execute a request
-//! let response = provider.execute(&context, &request).await?;
+//!     // Execute a request
+//!     let context = ProviderContext::default();
+//!     let request = ProviderRequest::default();
+//!     let response = provider.execute(&context, &request).await?;
+//!     Ok(())
+//! }
 //! ```
 
 pub mod provider_registry;

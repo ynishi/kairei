@@ -36,8 +36,13 @@ use serde::Serialize;
 ///
 /// ## Implementation Example
 ///
-/// ```rust,no_run
-/// use kairei::provider::{ProviderPlugin, PluginContext, Section, CapabilityType};
+/// ```rust,ignore
+/// use kairei::provider::plugin::ProviderPlugin;
+/// use kairei::provider::plugin::PluginContext;
+/// use kairei::provider::provider::Section;
+/// use kairei::provider::capability::CapabilityType;
+/// use kairei::provider::types::ProviderResult;
+/// use kairei::provider::llm::LLMResponse;
 /// use async_trait::async_trait;
 ///
 /// struct MyPlugin {
