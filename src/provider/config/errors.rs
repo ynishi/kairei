@@ -9,7 +9,7 @@ use crate::provider::config::base::ConfigError;
 use thiserror::Error;
 
 /// Represents the location in source code where an error occurred
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SourceLocation {
     /// File path where the error occurred
     pub file: Option<String>,
@@ -105,6 +105,14 @@ pub struct ErrorContext {
     pub error_code: Option<String>,
 }
 
+impl std::fmt::Display for ErrorContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error context: {}", self.location)
+    }
+}
+
+impl std::error::Error for ErrorContext {}
+
 impl ErrorContext {
     /// Creates a new error context with the given field name
     pub fn new_with_field(field: impl Into<String>) -> Self {
@@ -143,7 +151,7 @@ impl ErrorContext {
 #[derive(Debug, Error)]
 pub enum SchemaError {
     /// A required field is missing
-    #[error("Missing required field{}", format_location(.context.location))]
+    #[error("Missing required field{}", format_location(&.context.location))]
     MissingField {
         /// Context for the error
         #[source]
@@ -151,7 +159,7 @@ pub enum SchemaError {
     },
 
     /// A field has an invalid type
-    #[error("Invalid type{}: expected {expected}, found {actual}", format_location(.context.location))]
+    #[error("Invalid type{}: expected {expected}, found {actual}", format_location(&.context.location))]
     InvalidType {
         /// Expected type
         expected: String,
@@ -163,7 +171,7 @@ pub enum SchemaError {
     },
 
     /// The structure of the configuration is invalid
-    #[error("Invalid structure{}: {message}", format_location(.context.location))]
+    #[error("Invalid structure{}: {message}", format_location(&.context.location))]
     InvalidStructure {
         /// Error message
         message: String,
@@ -207,7 +215,7 @@ impl SchemaError {
 #[derive(Debug, Error)]
 pub enum ValidationError {
     /// A field has an invalid value
-    #[error("Invalid value{}: {message}", format_location(.context.location))]
+    #[error("Invalid value{}: {message}", format_location(&.context.location))]
     InvalidValue {
         /// Error message
         message: String,
@@ -217,7 +225,7 @@ pub enum ValidationError {
     },
 
     /// A constraint was violated
-    #[error("Constraint violation{}: {message}", format_location(.context.location))]
+    #[error("Constraint violation{}: {message}", format_location(&.context.location))]
     ConstraintViolation {
         /// Error message
         message: String,
@@ -227,7 +235,7 @@ pub enum ValidationError {
     },
 
     /// A dependency was not satisfied
-    #[error("Dependency error{}: {message}", format_location(.context.location))]
+    #[error("Dependency error{}: {message}", format_location(&.context.location))]
     DependencyError {
         /// Error message
         message: String,
@@ -267,7 +275,7 @@ impl ValidationError {
 #[derive(Debug, Error)]
 pub enum ProviderError {
     /// Error during provider initialization
-    #[error("Provider initialization error{}: {message}", format_location(.context.location))]
+    #[error("Provider initialization error{}: {message}", format_location(&.context.location))]
     Initialization {
         /// Error message
         message: String,
@@ -277,7 +285,7 @@ pub enum ProviderError {
     },
 
     /// Error related to provider capabilities
-    #[error("Provider capability error{}: {message}", format_location(.context.location))]
+    #[error("Provider capability error{}: {message}", format_location(&.context.location))]
     Capability {
         /// Error message
         message: String,
@@ -287,7 +295,7 @@ pub enum ProviderError {
     },
 
     /// Error in provider configuration
-    #[error("Provider configuration error{}: {message}", format_location(.context.location))]
+    #[error("Provider configuration error{}: {message}", format_location(&.context.location))]
     Configuration {
         /// Error message
         message: String,
