@@ -39,49 +39,45 @@ use serde::{Deserialize, Serialize};
 ///
 /// ## Implementation Example
 ///
-/// ```rust,ignore
-/// use kairei::provider::provider::Provider;
-/// use kairei::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
-/// use kairei::provider::types::ProviderResult;
-/// use kairei::provider::capability::Capabilities;
-/// use kairei::config::ProviderConfig;
-/// use kairei::provider::provider::ProviderSecret;
-/// use async_trait::async_trait;
-///
-/// struct MyProvider {
-///     name: String,
-///     // Provider-specific fields
-/// }
-///
-/// #[async_trait]
-/// impl Provider for MyProvider {
-///     async fn execute(
-///         &self,
-///         context: &ProviderContext,
-///         request: &ProviderRequest,
-///     ) -> ProviderResult<ProviderResponse> {
-///         // Process the request and return a response
-///         unimplemented!()
-///     }
-///
-///     async fn capabilities(&self) -> Capabilities {
-///         // Return the provider's capabilities
-///         unimplemented!()
-///     }
-///
-///     fn name(&self) -> &str {
-///         &self.name
-///     }
-///
-///     async fn initialize(
-///         &mut self,
-///         config: &ProviderConfig,
-///         secret: &ProviderSecret,
-///     ) -> ProviderResult<()> {
-///         // Initialize the provider with the given configuration
-///         unimplemented!()
-///     }
-/// }
+/// ```
+/// # use kairei::provider::provider::Provider;
+/// # use kairei::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
+/// # use kairei::provider::types::ProviderResult;
+/// # use kairei::provider::capability::Capabilities;
+/// # use kairei::config::ProviderConfig;
+/// # use kairei::provider::provider::ProviderSecret;
+/// # use async_trait::async_trait;
+/// #
+/// # struct MyProvider {
+/// #     name: String,
+/// # }
+/// #
+/// # #[async_trait]
+/// # impl Provider for MyProvider {
+/// #     async fn execute(
+/// #         &self,
+/// #         context: &ProviderContext,
+/// #         request: &ProviderRequest,
+/// #     ) -> ProviderResult<ProviderResponse> {
+/// #         unimplemented!()
+/// #     }
+/// #
+/// #     async fn capabilities(&self) -> Capabilities {
+/// #         unimplemented!()
+/// #     }
+/// #
+/// #     fn name(&self) -> &str {
+/// #         &self.name
+/// #     }
+/// #
+/// #     async fn initialize(
+/// #         &mut self,
+/// #         config: &ProviderConfig,
+/// #         secret: &ProviderSecret,
+/// #     ) -> ProviderResult<()> {
+/// #         unimplemented!()
+/// #     }
+/// # }
 /// ```
 #[async_trait]
 pub trait Provider: Send + Sync {

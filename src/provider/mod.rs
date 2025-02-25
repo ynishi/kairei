@@ -20,13 +20,42 @@
 //!
 //! ## Usage Example
 //!
-//! ```rust,ignore
-//! use kairei::provider::provider::Provider;
-//! use kairei::provider::plugin::ProviderPlugin;
-//! use kairei::provider::request::{ProviderContext, ProviderRequest};
-//! use kairei::config::ProviderConfig;
-//! use kairei::provider::provider::ProviderSecret;
-//! 
+//! ```
+//! # use kairei::provider::provider::Provider;
+//! # use kairei::provider::plugin::ProviderPlugin;
+//! # use kairei::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
+//! # use kairei::config::ProviderConfig;
+//! # use kairei::provider::provider::ProviderSecret;
+//! # use kairei::provider::types::ProviderResult;
+//! # use async_trait::async_trait;
+//! # 
+//! # struct MyProvider;
+//! # impl MyProvider {
+//! #     fn new() -> Self { Self }
+//! # }
+//! # 
+//! # #[async_trait]
+//! # impl Provider for MyProvider {
+//! #     async fn execute(
+//! #         &self,
+//! #         _context: &ProviderContext,
+//! #         _request: &ProviderRequest,
+//! #     ) -> ProviderResult<ProviderResponse> {
+//! #         unimplemented!()
+//! #     }
+//! #     async fn capabilities(&self) -> kairei::provider::capability::Capabilities {
+//! #         unimplemented!()
+//! #     }
+//! #     fn name(&self) -> &str { "MyProvider" }
+//! #     async fn initialize(
+//! #         &mut self,
+//! #         _config: &ProviderConfig,
+//! #         _secret: &ProviderSecret,
+//! #     ) -> ProviderResult<()> {
+//! #         unimplemented!()
+//! #     }
+//! # }
+//! # 
 //! async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Configure and initialize a provider
 //!     let mut provider = MyProvider::new();
