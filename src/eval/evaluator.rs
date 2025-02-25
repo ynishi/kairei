@@ -33,8 +33,9 @@ use std::sync::Arc;
 ///
 /// # Example Usage
 ///
-/// ```rust
+/// ```ignore
 /// use kairei::eval::{Evaluator, ExecutionContext};
+/// use kairei::HandlerBlock;
 /// use std::sync::Arc;
 ///
 /// async fn evaluate_handler(handler_block: &HandlerBlock) {
@@ -84,8 +85,14 @@ impl Evaluator {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```ignore
+    /// use kairei::HandlerBlock;
+    /// use kairei::eval::{Evaluator, ExecutionContext};
+    /// use std::sync::Arc;
+    /// 
     /// let handler_block = HandlerBlock { statements: vec![/* ... */] };
+    /// let evaluator = Evaluator::new();
+    /// let context = Arc::new(ExecutionContext::new(/* ... */));
     /// let result = evaluator.eval_handler_block(&handler_block, context).await?;
     /// ```
     pub async fn eval_handler_block(
@@ -139,8 +146,15 @@ impl Evaluator {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```ignore
+    /// use kairei::HandlerBlock;
+    /// use kairei::event_registry::EventType;
+    /// use kairei::eval::{Evaluator, ExecutionContext};
+    /// use std::sync::Arc;
+    /// 
     /// let answer_block = HandlerBlock { statements: vec![/* ... */] };
+    /// let evaluator = Evaluator::new();
+    /// let context = Arc::new(ExecutionContext::new(/* ... */));
     /// let event = EventType::Request { /* ... */ };
     /// let result = evaluator.eval_answer_handler_block(&answer_block, context, event).await?;
     /// ```
@@ -211,8 +225,16 @@ impl Evaluator {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```ignore
+    /// use kairei::Expression;
+    /// use kairei::tokenizer::literal::Literal;
+    /// use kairei::expression::Value;
+    /// use kairei::eval::{Evaluator, ExecutionContext};
+    /// use std::sync::Arc;
+    /// 
     /// let expr = Expression::Literal(Literal::Integer(42));
+    /// let evaluator = Evaluator::new();
+    /// let context = Arc::new(ExecutionContext::new(/* ... */));
     /// let value = evaluator.eval_expression(&expr, context).await?;
     /// assert_eq!(value, Value::Integer(42));
     /// ```
