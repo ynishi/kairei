@@ -20,13 +20,14 @@
 //!
 //! ## Usage Example
 //!
-//! ```
-//! # use kairei::provider::provider::Provider;
-//! # use kairei::provider::plugin::ProviderPlugin;
-//! # use kairei::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
-//! # use kairei::config::ProviderConfig;
-//! # use kairei::provider::provider::ProviderSecret;
-//! # use kairei::provider::types::ProviderResult;
+//! ```no_run
+//! # use crate::provider::provider::Provider;
+//! # use crate::provider::plugin::ProviderPlugin;
+//! # use crate::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
+//! # use crate::config::ProviderConfig;
+//! # use crate::provider::provider::ProviderSecret;
+//! # use crate::provider::types::ProviderResult;
+//! # use crate::provider::capability::Capabilities;
 //! # use async_trait::async_trait;
 //! # 
 //! # struct MyProvider;
@@ -43,7 +44,7 @@
 //! #     ) -> ProviderResult<ProviderResponse> {
 //! #         unimplemented!()
 //! #     }
-//! #     async fn capabilities(&self) -> kairei::provider::capability::Capabilities {
+//! #     async fn capabilities(&self) -> Capabilities {
 //! #         unimplemented!()
 //! #     }
 //! #     fn name(&self) -> &str { "MyProvider" }
