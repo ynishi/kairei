@@ -15,33 +15,170 @@ use async_trait::async_trait;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
+/// # Provider Interface
+///
+/// The `Provider` trait defines the core contract for LLM providers in KAIREI.
+/// It serves as the primary integration point for different language models
+/// and AI services, abstracting their specific implementations behind a
+/// consistent interface.
+///
+/// ## Lifecycle
+///
+/// Providers follow a defined lifecycle:
+/// 1. Creation - Provider instance is created
+/// 2. Initialization - Provider is configured and validated
+/// 3. Execution - Provider processes requests
+/// 4. Shutdown - Provider releases resources
+///
+/// ## Capabilities
+///
+/// Each provider declares its capabilities, allowing the system to:
+/// - Match provider capabilities with request requirements
+/// - Enable plugins that require specific capabilities
+/// - Optimize request routing based on provider strengths
+///
+/// ## Implementation Example
+///
+/// ```rust,no_run
+/// use kairei::provider::{Provider, ProviderContext, ProviderRequest, ProviderResponse};
+/// use async_trait::async_trait;
+///
+/// struct MyProvider {
+///     name: String,
+///     // Provider-specific fields
+/// }
+///
+/// #[async_trait]
+/// impl Provider for MyProvider {
+///     async fn execute(
+///         &self,
+///         context: &ProviderContext,
+///         request: &ProviderRequest,
+///     ) -> ProviderResult<ProviderResponse> {
+///         // Process the request and return a response
+///     }
+///
+///     async fn capabilities(&self) -> Capabilities {
+///         // Return the provider's capabilities
+///     }
+///
+///     fn name(&self) -> &str {
+///         &self.name
+///     }
+///
+///     async fn initialize(
+///         &mut self,
+///         config: &ProviderConfig,
+///         secret: &ProviderSecret,
+///     ) -> ProviderResult<()> {
+///         // Initialize the provider with the given configuration
+///     }
+/// }
+/// ```
 #[async_trait]
 pub trait Provider: Send + Sync {
+    /// Executes a request and returns a response.
+    ///
+    /// This is the core method of the Provider interface, responsible for processing
+    /// requests and generating responses. The implementation should handle:
+    ///
+    /// - Request validation
+    /// - Provider-specific processing
+    /// - Error handling and recovery
+    /// - Response generation
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - The execution context containing environment information
+    /// * `request` - The request to be processed
+    ///
+    /// # Returns
+    ///
+    /// A `ProviderResult` containing either a `ProviderResponse` or an error
     async fn execute(
         &self,
         context: &ProviderContext,
         request: &ProviderRequest,
     ) -> ProviderResult<ProviderResponse>;
+
+    /// Returns the provider's capabilities.
+    ///
+    /// This method allows the provider to declare what capabilities it supports,
+    /// enabling the system to match requests with appropriate providers and
+    /// to enable plugins that require specific capabilities.
+    ///
+    /// # Returns
+    ///
+    /// A `Capabilities` object describing the provider's supported features
     async fn capabilities(&self) -> Capabilities;
 
+    /// Returns the provider's name.
+    ///
+    /// The name is used for identification, logging, and debugging purposes.
+    ///
+    /// # Returns
+    ///
+    /// A string slice containing the provider's name
     fn name(&self) -> &str;
 
-    // validate the provider configuration
+    /// Initializes the provider with the given configuration.
+    ///
+    /// This method is called during provider registration to:
+    /// - Validate the configuration
+    /// - Set up connections to external services
+    /// - Initialize internal state
+    /// - Prepare the provider for request processing
+    ///
+    /// # Parameters
+    ///
+    /// * `config` - The provider configuration
+    /// * `secret` - The provider secrets (API keys, etc.)
+    ///
+    /// # Returns
+    ///
+    /// A `ProviderResult` indicating success or failure
     async fn initialize(
         &mut self,
         config: &ProviderConfig,
         secret: &ProviderSecret,
     ) -> ProviderResult<()>;
 
+    /// Shuts down the provider and releases resources.
+    ///
+    /// This method is called during system shutdown to allow the provider
+    /// to clean up resources and perform any necessary finalization.
+    ///
+    /// # Returns
+    ///
+    /// A `ProviderResult` indicating success or failure
     async fn shutdown(&self) -> ProviderResult<()> {
         Ok(())
     }
 
+    /// Performs a health check on the provider.
+    ///
+    /// This method is called periodically to verify that the provider
+    /// is functioning correctly and is ready to process requests.
+    ///
+    /// # Returns
+    ///
+    /// A `ProviderResult` indicating the provider's health status
     async fn health_check(&self) -> ProviderResult<()> {
         Ok(())
     }
 }
 
+/// # Section
+///
+/// A `Section` represents a part of a prompt or response in the provider system.
+/// Sections are used to build structured prompts and to organize responses
+/// from language models.
+///
+/// ## Fields
+///
+/// * `content` - The text content of the section
+/// * `priority` - The priority of the section (used for ordering)
+/// * `metadata` - Additional information about the section
 #[derive(Debug, Default)]
 pub struct Section {
     pub content: String,
@@ -50,6 +187,15 @@ pub struct Section {
 }
 
 impl Section {
+    /// Creates a new section with the given content.
+    ///
+    /// # Parameters
+    ///
+    /// * `content` - The text content of the section
+    ///
+    /// # Returns
+    ///
+    /// A new `Section` with default priority and metadata
     pub fn new(content: &str) -> Self {
         Self {
             content: content.to_string(),
@@ -64,6 +210,15 @@ impl fmt::Display for Section {
     }
 }
 
+/// # Section Metadata
+///
+/// `SectionMetadata` provides additional information about a section,
+/// such as its source and creation timestamp.
+///
+/// ## Fields
+///
+/// * `source` - The source of the section (e.g., plugin name)
+/// * `timestamp` - When the section was created
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SectionMetadata {
     pub source: String,
@@ -71,6 +226,15 @@ pub struct SectionMetadata {
 }
 
 impl SectionMetadata {
+    /// Creates new metadata with the given source.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - The source of the section
+    ///
+    /// # Returns
+    ///
+    /// A new `SectionMetadata` with the current timestamp
     pub fn new(source: &str) -> Self {
         Self {
             source: source.to_string(),
@@ -85,6 +249,10 @@ impl fmt::Display for SectionMetadata {
     }
 }
 
+/// # Provider Type
+///
+/// `ProviderType` enumerates the different types of providers supported by the system.
+/// This is used for provider identification, configuration, and capability matching.
 #[derive(
     Debug,
     Clone,
@@ -110,6 +278,16 @@ impl From<ProviderType> for String {
     }
 }
 
+/// # Provider Secret
+///
+/// `ProviderSecret` manages sensitive authentication information for providers,
+/// such as API keys and other credentials.
+///
+/// ## Security Considerations
+///
+/// - API keys and other secrets are stored using `SecretString` to prevent accidental exposure
+/// - Secrets are not logged or serialized in plain text
+/// - Additional authentication parameters can be stored in the `additional_auth` map
 #[derive(Clone, Default)]
 pub struct ProviderSecret {
     pub api_key: SecretString,
