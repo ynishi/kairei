@@ -39,13 +39,13 @@ use serde::{Deserialize, Serialize};
 ///
 /// ## Implementation Example
 ///
-/// ```no_run
-/// # use crate::provider::provider::Provider;
-/// # use crate::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
-/// # use crate::provider::types::ProviderResult;
-/// # use crate::provider::capability::Capabilities;
-/// # use crate::config::ProviderConfig;
-/// # use crate::provider::provider::ProviderSecret;
+/// ```ignore
+/// # use kairei::provider::provider::Provider;
+/// # use kairei::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
+/// # use kairei::provider::types::ProviderResult;
+/// # use kairei::provider::capability::Capabilities;
+/// # use kairei::config::ProviderConfig;
+/// # use kairei::provider::provider::ProviderSecret;
 /// # use async_trait::async_trait;
 /// #
 /// # struct MyProvider {
