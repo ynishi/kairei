@@ -9,17 +9,85 @@ use crate::{
 };
 use std::sync::Arc;
 
+/// Top-level evaluator for the KAIREI DSL execution pipeline
+///
+/// The Evaluator is responsible for executing KAIREI DSL code at runtime,
+/// serving as the primary entry point for the evaluation system. It orchestrates
+/// the evaluation of handler blocks, answer handler blocks, and expressions,
+/// delegating to specialized evaluators for specific language constructs.
+///
+/// # Responsibilities
+///
+/// - Evaluating handler blocks for event processing
+/// - Evaluating answer handler blocks for request/response patterns
+/// - Evaluating expressions for value computation
+/// - Managing evaluation context and error handling
+///
+/// # Architecture
+///
+/// The Evaluator works with several key components:
+///
+/// - `StatementEvaluator`: Handles statement evaluation and control flow
+/// - `ExecutionContext`: Manages runtime state and environment
+/// - `ExpressionEvaluator`: Evaluates expressions (via StatementEvaluator)
+///
+/// # Example Usage
+///
+/// ```rust
+/// use kairei::eval::{Evaluator, ExecutionContext};
+/// use std::sync::Arc;
+///
+/// async fn evaluate_handler(handler_block: &HandlerBlock) {
+///     let evaluator = Evaluator::new();
+///     let context = Arc::new(ExecutionContext::new(/* ... */));
+///     
+///     let result = evaluator.eval_handler_block(handler_block, context).await;
+///     // Process result...
+/// }
+/// ```
 #[derive(Default)]
 pub struct Evaluator {
     statement_evaluator: StatementEvaluator,
 }
 
 impl Evaluator {
+    /// Creates a new Evaluator instance with default configuration
+    ///
+    /// This initializes a new Evaluator with a default StatementEvaluator,
+    /// which in turn contains a default ExpressionEvaluator.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Top level entry point for MicroAgent Evaluator
+    /// Evaluates a handler block in the given execution context
+    ///
+    /// This is the primary entry point for evaluating event handler blocks in the KAIREI
+    /// DSL. It processes the statements within the handler block sequentially and
+    /// manages error handling and context updates.
+    ///
+    /// # Parameters
+    ///
+    /// - `block`: The handler block to evaluate
+    /// - `context`: The execution context containing runtime state
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(StatementResult)`: The result of the evaluation
+    /// - `Err(EvalError)`: If an unrecoverable error occurs during evaluation
+    ///
+    /// # Error Handling
+    ///
+    /// This method handles errors by:
+    /// 1. Converting evaluation errors to context failures
+    /// 2. Emitting failure events through the context
+    /// 3. Returning a Unit value to allow execution to continue
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let handler_block = HandlerBlock { statements: vec![/* ... */] };
+    /// let result = evaluator.eval_handler_block(&handler_block, context).await?;
+    /// ```
     pub async fn eval_handler_block(
         &self,
         block: &HandlerBlock,
@@ -43,6 +111,39 @@ impl Evaluator {
         }
     }
 
+    /// Evaluates an answer handler block and sends the response
+    ///
+    /// This method is specifically designed for request-response patterns in the KAIREI
+    /// system. It evaluates the handler block and automatically sends the appropriate
+    /// response based on the evaluation result.
+    ///
+    /// # Parameters
+    ///
+    /// - `block`: The answer handler block to evaluate
+    /// - `context`: The execution context containing runtime state
+    /// - `event`: The event type that triggered this handler
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(StatementResult)`: The result of the evaluation (typically Unit)
+    /// - `Err(EvalError)`: If an unrecoverable error occurs during evaluation
+    ///
+    /// # Response Handling
+    ///
+    /// The method handles different evaluation results:
+    /// - `Return(Value::Ok(v))`: Sends a success response with the inner value
+    /// - `Return(Value::Err(e))`: Sends a failure response with the error
+    /// - `Return(Value::Error(e))`: Returns an unhandled exception error
+    /// - `Value::Unit`: Sends a success response with Unit value
+    /// - Other results: Returns an unexpected result error
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let answer_block = HandlerBlock { statements: vec![/* ... */] };
+    /// let event = EventType::Request { /* ... */ };
+    /// let result = evaluator.eval_answer_handler_block(&answer_block, context, event).await?;
+    /// ```
     pub async fn eval_answer_handler_block(
         &self,
         block: &HandlerBlock,
@@ -58,7 +159,7 @@ impl Evaluator {
                 let response = match value {
                     Value::Ok(inner) => Ok(*inner),
                     Value::Err(inner) => Err(RuntimeError::EvalFailure(*inner)),
-                    // Exceptionの場合はエラーを返す
+                    // Exception case returns an error
                     Value::Error(e) => {
                         return Err(EvalError::Eval(format!("Unhandled exception: {:?}", e)));
                     }
@@ -81,7 +182,7 @@ impl Evaluator {
                     .await
                     .map_err(|e| EvalError::SendResponseFailed(format!("error: {}", e)))?;
             }
-            // その他の場合はエラーを返す
+            // Other cases return an error
             Ok(s) => {
                 return Err(EvalError::Eval(format!(
                     "Unexpected statement result: {:?}",
@@ -92,6 +193,29 @@ impl Evaluator {
         Ok(StatementResult::Value(Value::Unit))
     }
 
+    /// Evaluates an expression and returns its value
+    ///
+    /// This method provides a direct way to evaluate expressions without the context
+    /// of a handler block. It delegates to the StatementEvaluator's expression
+    /// evaluation functionality.
+    ///
+    /// # Parameters
+    ///
+    /// - `expression`: The expression to evaluate
+    /// - `context`: The execution context containing runtime state
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Value)`: The evaluated value of the expression
+    /// - `Err(EvalError)`: If an error occurs during evaluation
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let expr = Expression::Literal(Literal::Integer(42));
+    /// let value = evaluator.eval_expression(&expr, context).await?;
+    /// assert_eq!(value, Value::Integer(42));
+    /// ```
     pub async fn eval_expression(
         &self,
         expression: &Expression,
