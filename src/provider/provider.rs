@@ -39,13 +39,13 @@ use serde::{Deserialize, Serialize};
 ///
 /// ## Implementation Example
 ///
-/// ```
-/// # use kairei::provider::provider::Provider;
-/// # use kairei::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
-/// # use kairei::provider::types::ProviderResult;
-/// # use kairei::provider::capability::Capabilities;
-/// # use kairei::config::ProviderConfig;
-/// # use kairei::provider::provider::ProviderSecret;
+/// ```no_run
+/// # use crate::provider::provider::Provider;
+/// # use crate::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
+/// # use crate::provider::types::ProviderResult;
+/// # use crate::provider::capability::Capabilities;
+/// # use crate::config::ProviderConfig;
+/// # use crate::provider::provider::ProviderSecret;
 /// # use async_trait::async_trait;
 /// #
 /// # struct MyProvider {
@@ -56,8 +56,8 @@ use serde::{Deserialize, Serialize};
 /// # impl Provider for MyProvider {
 /// #     async fn execute(
 /// #         &self,
-/// #         context: &ProviderContext,
-/// #         request: &ProviderRequest,
+/// #         _context: &ProviderContext,
+/// #         _request: &ProviderRequest,
 /// #     ) -> ProviderResult<ProviderResponse> {
 /// #         unimplemented!()
 /// #     }
@@ -72,8 +72,8 @@ use serde::{Deserialize, Serialize};
 /// #
 /// #     async fn initialize(
 /// #         &mut self,
-/// #         config: &ProviderConfig,
-/// #         secret: &ProviderSecret,
+/// #         _config: &ProviderConfig,
+/// #         _secret: &ProviderSecret,
 /// #     ) -> ProviderResult<()> {
 /// #         unimplemented!()
 /// #     }

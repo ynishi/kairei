@@ -36,13 +36,13 @@ use serde::Serialize;
 ///
 /// ## Implementation Example
 ///
-/// ```
-/// # use kairei::provider::plugin::ProviderPlugin;
-/// # use kairei::provider::plugin::PluginContext;
-/// # use kairei::provider::provider::Section;
-/// # use kairei::provider::capability::CapabilityType;
-/// # use kairei::provider::types::ProviderResult;
-/// # use kairei::provider::llm::LLMResponse;
+/// ```no_run
+/// # use crate::provider::plugin::ProviderPlugin;
+/// # use crate::provider::plugin::PluginContext;
+/// # use crate::provider::provider::Section;
+/// # use crate::provider::capability::CapabilityType;
+/// # use crate::provider::types::ProviderResult;
+/// # use crate::provider::llm::LLMResponse;
 /// # use async_trait::async_trait;
 /// #
 /// # struct MyPlugin {
@@ -67,8 +67,8 @@ use serde::Serialize;
 /// #
 /// #     async fn process_response<'a>(
 /// #         &self,
-/// #         context: &PluginContext<'a>,
-/// #         response: &LLMResponse,
+/// #         _context: &PluginContext<'a>,
+/// #         _response: &LLMResponse,
 /// #     ) -> ProviderResult<()> {
 /// #         // Process the LLM response
 /// #         // For example, update memory with new information
