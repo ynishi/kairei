@@ -16,19 +16,19 @@
 //!
 //! String literals support interpolation using the `${variable}` syntax:
 //!
-//! ```
-//! "Hello, ${name}!"
+//! ```no_run
+//! let example = "Hello, ${name}!";
 //! ```
 //!
 //! ## Triple-Quoted Strings
 //!
 //! Triple-quoted strings (`"""`) preserve formatting and can span multiple lines:
 //!
-//! ```
-//! """
+//! ```no_run
+//! let example = """
 //! This is a multi-line string
 //! with preserved formatting.
-//! """
+//! """;
 //! ```
 //!
 //! ## Parsing Strategy
@@ -151,7 +151,7 @@ const TRIPLE_QUOTE: &str = "\"\"\"";
 /// let input = "\"\"\"Hello ${name}\nWelcome!\"\"\"";
 /// let (rest, literal) = parse_triple_quote_string(input).unwrap();
 /// ```
-fn parse_triple_quote_string(input: &str) -> ParserResult<Literal> {
+pub fn parse_triple_quote_string(input: &str) -> ParserResult<Literal> {
     // Parse the opening triple quote, content, and closing triple quote
     let (remaining, (_, content, _)) = context(
         "triple quote string",
@@ -203,7 +203,7 @@ fn parse_triple_quote_string(input: &str) -> ParserResult<Literal> {
 /// let (rest, literal) = parse_single_quote_string(input).unwrap();
 /// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_single_quote_string(input: &str) -> ParserResult<Literal> {
+pub fn parse_single_quote_string(input: &str) -> ParserResult<Literal> {
     context(
         "single quote string",
         map(
@@ -241,7 +241,7 @@ fn parse_single_quote_string(input: &str) -> ParserResult<Literal> {
 /// assert_eq!(rest, " rest");
 /// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_interpolation(input: &str) -> ParserResult<StringPart> {
+pub fn parse_interpolation(input: &str) -> ParserResult<StringPart> {
     context(
         "string interpolation",
         map(
@@ -324,7 +324,7 @@ fn parse_string_literal_part(input: &str) -> ParserResult<StringPart> {
 /// assert_eq!(rest, "");
 /// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_float_literal(input: &str) -> ParserResult<Literal> {
+pub fn parse_float_literal(input: &str) -> ParserResult<Literal> {
     context(
         "float literal",
         map_res(
@@ -357,7 +357,7 @@ fn parse_float_literal(input: &str) -> ParserResult<Literal> {
 /// assert_eq!(rest, "");
 /// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_integer_literal(input: &str) -> ParserResult<Literal> {
+pub fn parse_integer_literal(input: &str) -> ParserResult<Literal> {
     context(
         "integer literal",
         map_res(recognize(pair(opt(char('-')), digit1)), |s: &str| {
@@ -389,7 +389,7 @@ fn parse_integer_literal(input: &str) -> ParserResult<Literal> {
 /// assert_eq!(rest, "");
 /// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_boolean_literal(input: &str) -> ParserResult<Literal> {
+pub fn parse_boolean_literal(input: &str) -> ParserResult<Literal> {
     context(
         "boolean literal",
         alt((
