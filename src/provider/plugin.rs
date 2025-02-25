@@ -36,45 +36,45 @@ use serde::Serialize;
 ///
 /// ## Implementation Example
 ///
-/// ```rust,ignore
-/// use kairei::provider::plugin::ProviderPlugin;
-/// use kairei::provider::plugin::PluginContext;
-/// use kairei::provider::provider::Section;
-/// use kairei::provider::capability::CapabilityType;
-/// use kairei::provider::types::ProviderResult;
-/// use kairei::provider::llm::LLMResponse;
-/// use async_trait::async_trait;
-///
-/// struct MyPlugin {
-///     // Plugin-specific fields
-/// }
-///
-/// #[async_trait]
-/// impl ProviderPlugin for MyPlugin {
-///     fn priority(&self) -> i32 {
-///         10 // Higher priority plugins run first
-///     }
-///
-///     fn capability(&self) -> CapabilityType {
-///         CapabilityType::Memory // This plugin provides memory capability
-///     }
-///
-///     async fn generate_section<'a>(&self, context: &PluginContext<'a>) -> ProviderResult<Section> {
-///         // Generate a section for the prompt
-///         let section = Section::new("Remember previous context: ...");
-///         Ok(section)
-///     }
-///
-///     async fn process_response<'a>(
-///         &self,
-///         context: &PluginContext<'a>,
-///         response: &LLMResponse,
-///     ) -> ProviderResult<()> {
-///         // Process the LLM response
-///         // For example, update memory with new information
-///         Ok(())
-///     }
-/// }
+/// ```
+/// # use kairei::provider::plugin::ProviderPlugin;
+/// # use kairei::provider::plugin::PluginContext;
+/// # use kairei::provider::provider::Section;
+/// # use kairei::provider::capability::CapabilityType;
+/// # use kairei::provider::types::ProviderResult;
+/// # use kairei::provider::llm::LLMResponse;
+/// # use async_trait::async_trait;
+/// #
+/// # struct MyPlugin {
+/// #     // Plugin-specific fields
+/// # }
+/// #
+/// # #[async_trait]
+/// # impl ProviderPlugin for MyPlugin {
+/// #     fn priority(&self) -> i32 {
+/// #         10 // Higher priority plugins run first
+/// #     }
+/// #
+/// #     fn capability(&self) -> CapabilityType {
+/// #         CapabilityType::Memory // This plugin provides memory capability
+/// #     }
+/// #
+/// #     async fn generate_section<'a>(&self, context: &PluginContext<'a>) -> ProviderResult<Section> {
+/// #         // Generate a section for the prompt
+/// #         let section = Section::new("Remember previous context: ...");
+/// #         Ok(section)
+/// #     }
+/// #
+/// #     async fn process_response<'a>(
+/// #         &self,
+/// #         context: &PluginContext<'a>,
+/// #         response: &LLMResponse,
+/// #     ) -> ProviderResult<()> {
+/// #         // Process the LLM response
+/// #         // For example, update memory with new information
+/// #         Ok(())
+/// #     }
+/// # }
 /// ```
 #[async_trait]
 #[mockall::automock]
