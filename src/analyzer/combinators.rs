@@ -1,16 +1,36 @@
+//! # Parser Combinators
+//!
+//! This module implements the core parser combinators that form the building blocks
+//! of KAIREI's parsing system. These combinators allow for the composition of simple
+//! parsers into more complex ones.
+//!
+//! ## Combinator Types
+//!
+//! * **Basic Combinators**: Simple parsers like `Equal`, `Expected`, `Identity`
+//! * **Sequential Combinators**: Parsers that operate in sequence like `Sequence`, `Preceded`, `Delimited`
+//! * **Alternative Combinators**: Parsers that provide choices like `Choice`
+//! * **Repetition Combinators**: Parsers that handle repetition like `Many`, `Many1`, `SeparatedList`
+//! * **Transformation Combinators**: Parsers that transform outputs like `Map`, `AsUnit`
+//! * **Error Handling Combinators**: Parsers that provide context like `WithContext`
+
 use super::core::ParseError;
 use super::core::ParseResult;
 use super::core::Parser;
 use std::fmt;
 use std::marker::PhantomData;
 
-// Expected: 入力値を変換し、その結果が value と一致する場合のみ成功し、value を返す
+/// Expected: Succeeds only if the input matches the expected value after transformation
+///
+/// This parser runs the inner parser and then checks if the result equals the expected value.
+/// It succeeds only if both the inner parser succeeds and the parsed value equals the expected value.
 #[derive(Clone)]
 pub struct Expected<P, I, O>
 where
     P: Parser<I, O>,
 {
+    /// The inner parser to run
     parser: P,
+    /// The expected value to match against
     value: O,
     _phantom: PhantomData<I>,
 }
@@ -19,6 +39,12 @@ impl<P, I, O> Expected<P, I, O>
 where
     P: Parser<I, O>,
 {
+    /// Creates a new Expected parser
+    ///
+    /// # Arguments
+    ///
+    /// * `parser` - The parser to run
+    /// * `value` - The expected value to match against
     pub fn new(parser: P, value: O) -> Self {
         Self {
             parser,
@@ -46,12 +72,22 @@ where
     }
 }
 
+/// Equal: Matches a specific value in the input
+///
+/// This parser succeeds if the current input token equals the specified value.
+/// It consumes one token from the input on success.
 #[derive(Clone)]
 pub struct Equal<I> {
+    /// The value to match against
     value: I,
 }
 
 impl<I> Equal<I> {
+    /// Creates a new Equal parser
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value to match
     pub fn new(value: I) -> Self {
         Self { value }
     }
@@ -77,13 +113,17 @@ impl<I: Clone + PartialEq + fmt::Display> Parser<I, I> for Equal<I> {
     }
 }
 
-// Identity: 入力を消費してそのまま返す
+/// Identity: Consumes and returns the current input token
+///
+/// This parser simply consumes one token from the input and returns it.
+/// It's a basic building block for more complex parsers.
 #[derive(Clone)]
 pub struct Identity<I> {
     _phantom: PhantomData<I>,
 }
 
 impl<I> Identity<I> {
+    /// Creates a new Identity parser
     pub fn new() -> Self {
         Self {
             _phantom: PhantomData,
@@ -176,11 +216,22 @@ where
     }
 }
 
+/// Choice: Tries multiple parsers and succeeds with the first successful one
+///
+/// This parser tries each of its child parsers in order and returns the result of
+/// the first one that succeeds. If all parsers fail, it returns a NoAlternative error.
+/// This implements the logical OR operation for parsers.
 pub struct Choice<I, O> {
+    /// The list of parsers to try
     parsers: Vec<Box<dyn Parser<I, O>>>,
 }
 
 impl<I, O> Choice<I, O> {
+    /// Creates a new Choice parser
+    ///
+    /// # Arguments
+    ///
+    /// * `parsers` - A vector of boxed parsers to try in order
     pub fn new(parsers: Vec<Box<dyn Parser<I, O>>>) -> Self {
         Self { parsers }
     }
@@ -226,11 +277,22 @@ where
     }
 }
 
+/// Sequence: Applies multiple parsers in sequence
+///
+/// This parser applies each of its child parsers in order and collects
+/// their results into a vector. It succeeds only if all parsers succeed.
+/// This implements the logical AND operation for parsers.
 pub struct Sequence<I, O> {
+    /// The list of parsers to apply in sequence
     parsers: Vec<Box<dyn Parser<I, O>>>,
 }
 
 impl<I, O> Sequence<I, O> {
+    /// Creates a new Sequence parser
+    ///
+    /// # Arguments
+    ///
+    /// * `parsers` - A vector of boxed parsers to apply in sequence
     pub fn new(parsers: Vec<Box<dyn Parser<I, O>>>) -> Self {
         Self { parsers }
     }
@@ -249,14 +311,26 @@ impl<I, O: Clone> Parser<I, Vec<O>> for Sequence<I, O> {
     }
 }
 
+/// Map: Transforms the output of a parser using a function
+///
+/// This parser applies a transformation function to the result of another parser.
+/// It's a key component for building complex parsers that produce structured data.
 #[derive(Clone)]
 pub struct Map<P, F, A, B> {
+    /// The parser whose output will be transformed
     parser: P,
+    /// The transformation function
     f: F,
     _phantom: PhantomData<(A, B)>,
 }
 
 impl<P, F, A, B> Map<P, F, A, B> {
+    /// Creates a new Map parser
+    ///
+    /// # Arguments
+    ///
+    /// * `parser` - The parser whose output will be transformed
+    /// * `f` - The transformation function to apply to the parser's output
     pub fn new(parser: P, f: F) -> Self {
         Self {
             parser,
@@ -303,13 +377,24 @@ where
     }
 }
 
+/// Many: Applies a parser zero or more times
+///
+/// This parser repeatedly applies the inner parser until it fails,
+/// collecting all successful results into a vector. It always succeeds,
+/// even if the inner parser never succeeds (returning an empty vector).
 #[derive(Clone)]
 pub struct Many<P, I, O> {
+    /// The parser to apply repeatedly
     parser: P,
     _phantom: PhantomData<(I, O)>,
 }
 
 impl<P, I, O> Many<P, I, O> {
+    /// Creates a new Many parser
+    ///
+    /// # Arguments
+    ///
+    /// * `parser` - The parser to apply repeatedly
     pub fn new(parser: P) -> Self {
         Self {
             parser,
@@ -335,13 +420,23 @@ where
     }
 }
 
+/// Many1: Applies a parser one or more times
+///
+/// Similar to Many, but requires the inner parser to succeed at least once.
+/// It fails if the inner parser fails on the first attempt.
 #[derive(Clone)]
 pub struct Many1<P, I, O> {
+    /// The parser to apply repeatedly
     parser: P,
     _phantom: PhantomData<(I, O)>,
 }
 
 impl<P, I, O> Many1<P, I, O> {
+    /// Creates a new Many1 parser
+    ///
+    /// # Arguments
+    ///
+    /// * `parser` - The parser to apply repeatedly
     pub fn new(parser: P) -> Self {
         Self {
             parser,
@@ -368,13 +463,27 @@ where
     }
 }
 
+/// SeparatedList: Parses a list of items separated by a delimiter
+///
+/// This parser handles common list patterns like comma-separated values.
+/// It applies the item parser to parse elements and the separator parser
+/// between elements. It can handle empty lists, single items, and lists
+/// with trailing separators.
 pub struct SeparatedList<P, S, I, O> {
+    /// Parser for list items
     item_parser: P,
+    /// Parser for the separator between items
     separator_parser: S,
     _phantom: PhantomData<(I, O)>,
 }
 
 impl<P, S, I, O> SeparatedList<P, S, I, O> {
+    /// Creates a new SeparatedList parser
+    ///
+    /// # Arguments
+    ///
+    /// * `item_parser` - Parser for list items
+    /// * `separator_parser` - Parser for the separator between items
     pub fn new(item_parser: P, separator_parser: S) -> Self {
         Self {
             item_parser,
@@ -646,15 +755,31 @@ where
     }
 }
 
+/// Delimited: Parses content between left and right delimiters
+///
+/// This parser handles common patterns like parenthesized expressions,
+/// quoted strings, or bracketed lists. It applies the left delimiter parser,
+/// then the content parser, then the right delimiter parser, returning only
+/// the content parser's result.
 #[derive(Clone)]
 pub struct Delimited<L, P, R, I, O> {
+    /// Parser for the left delimiter
     left: L,
+    /// Parser for the content between delimiters
     parser: P,
+    /// Parser for the right delimiter
     right: R,
     _phantom: PhantomData<(I, O)>,
 }
 
 impl<L, P, R, I, O> Delimited<L, P, R, I, O> {
+    /// Creates a new Delimited parser
+    ///
+    /// # Arguments
+    ///
+    /// * `left` - Parser for the left delimiter
+    /// * `parser` - Parser for the content between delimiters
+    /// * `right` - Parser for the right delimiter
     pub fn new(left: L, parser: P, right: R) -> Self {
         Self {
             left,
