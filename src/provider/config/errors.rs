@@ -48,14 +48,14 @@ impl std::fmt::Display for SourceLocation {
         if let Some(field) = &self.field {
             write!(f, "in field '{}'", field)?;
         }
-        
+
         if let (Some(file), Some(line)) = (&self.file, &self.line) {
             write!(f, " at {}:{}", file, line)?;
             if let Some(column) = &self.column {
                 write!(f, ":{}", column)?;
             }
         }
-        
+
         Ok(())
     }
 }
