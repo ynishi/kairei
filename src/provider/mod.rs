@@ -29,12 +29,12 @@
 //! # use crate::provider::types::ProviderResult;
 //! # use crate::provider::capability::Capabilities;
 //! # use async_trait::async_trait;
-//! # 
+//! #
 //! # struct MyProvider;
 //! # impl MyProvider {
 //! #     fn new() -> Self { Self }
 //! # }
-//! # 
+//! #
 //! # #[async_trait]
 //! # impl Provider for MyProvider {
 //! #     async fn execute(
@@ -56,7 +56,7 @@
 //! #         unimplemented!()
 //! #     }
 //! # }
-//! # 
+//! #
 //! async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Configure and initialize a provider
 //!     let mut provider = MyProvider::new();
