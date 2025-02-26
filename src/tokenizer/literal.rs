@@ -24,7 +24,7 @@
 //!
 //! Triple-quoted strings (`"""`) preserve formatting and can span multiple lines:
 //!
-//! ```no_run
+//! ```ignore
 //! let example = """
 //! This is a multi-line string
 //! with preserved formatting.
@@ -114,6 +114,8 @@ pub enum Literal {
 ///
 /// * `ParserResult<Literal>` - A result containing either the parsed literal and remaining input,
 ///   or an error if parsing fails
+///
+/// Note: This is a private function used internally by the tokenizer.
 #[tracing::instrument(level = "debug", skip(input))]
 fn parse_string_literal(input: &str) -> ParserResult<Literal> {
     context(
@@ -268,6 +270,8 @@ pub fn parse_interpolation(input: &str) -> ParserResult<StringPart> {
 ///
 /// * `ParserResult<StringPart>` - A result containing either the parsed string part and remaining input,
 ///   or an error if parsing fails
+///
+/// Note: This is a private function used internally by the tokenizer.
 #[tracing::instrument(level = "debug", skip(input))]
 fn parse_newline(input: &str) -> ParserResult<StringPart> {
     context(
@@ -289,6 +293,8 @@ fn parse_newline(input: &str) -> ParserResult<StringPart> {
 ///
 /// * `ParserResult<StringPart>` - A result containing either the parsed string part and remaining input,
 ///   or an error if parsing fails
+///
+/// Note: This is a private function used internally by the tokenizer.
 #[tracing::instrument(level = "debug", skip(input))]
 fn parse_string_literal_part(input: &str) -> ParserResult<StringPart> {
     context(
