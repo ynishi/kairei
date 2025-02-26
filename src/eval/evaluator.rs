@@ -89,7 +89,7 @@ impl Evaluator {
     /// use kairei::HandlerBlock;
     /// use kairei::eval::{Evaluator, ExecutionContext};
     /// use std::sync::Arc;
-    /// 
+    ///
     /// let handler_block = HandlerBlock { statements: vec![/* ... */] };
     /// let evaluator = Evaluator::new();
     /// let context = Arc::new(ExecutionContext::new(/* ... */));
@@ -151,7 +151,7 @@ impl Evaluator {
     /// use kairei::event_registry::EventType;
     /// use kairei::eval::{Evaluator, ExecutionContext};
     /// use std::sync::Arc;
-    /// 
+    ///
     /// let answer_block = HandlerBlock { statements: vec![/* ... */] };
     /// let evaluator = Evaluator::new();
     /// let context = Arc::new(ExecutionContext::new(/* ... */));
@@ -231,7 +231,7 @@ impl Evaluator {
     /// use kairei::expression::Value;
     /// use kairei::eval::{Evaluator, ExecutionContext};
     /// use std::sync::Arc;
-    /// 
+    ///
     /// let expr = Expression::Literal(Literal::Integer(42));
     /// let evaluator = Evaluator::new();
     /// let context = Arc::new(ExecutionContext::new(/* ... */));
