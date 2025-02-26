@@ -49,6 +49,7 @@
 
 mod base;
 mod errors;
+mod formatters;
 mod plugins;
 mod providers;
 mod validation;
@@ -63,6 +64,7 @@ pub use errors::{
     ErrorContext, ErrorSeverity, ProviderConfigError, ProviderError, SchemaError, SourceLocation,
     ValidationError,
 };
+pub use formatters::{DefaultErrorFormatter, ErrorFormatter, FormatOptions};
 pub use plugins::{
     BasePluginConfig, MemoryConfig, ProviderSpecificConfig, RagConfig, SearchConfig,
 };
