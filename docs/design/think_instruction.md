@@ -126,7 +126,7 @@ KAIREI provides several strategies for handling `think` instruction errors:
            recent: "24h",
            filter: "financial"
        }
-   } on fail {
+   } onFail {
        retry: {
            max_attempts: 3,
            delay: "exponential"
@@ -273,7 +273,7 @@ think("Analyze market data") with {
         recent: "24h",
         filter: "financial"
     }
-} on fail {
+} onFail {
     retry: {
         max_attempts: 3,
         delay: "exponential"
