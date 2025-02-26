@@ -39,7 +39,50 @@
 //! - Runtime validation ([`runtime`])
 //! - Error handling ([`error`])
 //!
-//! ## Module Organization
+//! ## DSL Processing Pipeline
+//!
+//! KAIREI implements a comprehensive DSL processing pipeline:
+//!
+//! ```text
+//! Source Code → Tokenizer → Preprocessor → Parser → Type Checker → Evaluator
+//! ```
+//!
+//! ### Stage 1: Tokenization (Lexical Analysis)
+//!
+//! The [`tokenizer`] module transforms raw source code into a stream of tokens.
+//! It identifies keywords, identifiers, literals, and other basic elements.
+//!
+//! ### Stage 2: Preprocessing
+//!
+//! The [`preprocessor`] module normalizes the token stream, removing comments
+//! and unnecessary whitespace to prepare for parsing.
+//!
+//! ### Stage 3: Parsing (Syntactic Analysis)
+//!
+//! The [`analyzer`] module transforms the token stream into an Abstract Syntax Tree (AST).
+//! It uses a parser combinator pattern to construct a hierarchical representation of the code.
+//!
+//! ### Stage 4: Type Checking (Semantic Analysis)
+//!
+//! The [`type_checker`] module validates the AST for type correctness and semantic rules.
+//! It ensures that the code follows the DSL's semantic constraints.
+//!
+//! ### Stage 5: Evaluation (Execution)
+//!
+//! The [`eval`] module executes the validated AST at runtime, converting the code
+//! into actual behavior within the KAIREI ecosystem.
+//!
+//! ## AST Registry and Coordination
+//!
+//! The [`ast_registry`] module coordinates the overall parse flow, acting as the bridge
+//! between different stages of the pipeline. It provides a unified interface for
+//! transforming source code into executable AST structures.
+//!
+//! ## Runtime and Event System
+//!
+//! The [`runtime`] and [`event`] modules execute the AST in an event-driven environment,
+//! orchestrating agent interactions through asynchronous events and message passing.
+
 pub mod agent_registry;
 pub mod analyzer;
 pub mod ast;
