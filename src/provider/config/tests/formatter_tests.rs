@@ -1,10 +1,7 @@
 //! Tests for the error formatter.
 
 use crate::provider::config::{
-    errors::{
-        ErrorContext, ErrorSeverity, ProviderConfigError, ProviderError, SchemaError, SourceLocation,
-        ValidationError,
-    },
+    errors::{ErrorContext, ProviderConfigError, ProviderError, SchemaError, ValidationError},
     formatters::{DefaultErrorFormatter, ErrorFormatter, FormatOptions},
 };
 
@@ -101,12 +98,12 @@ fn test_default_formatter_with_documentation() {
     let formatter = DefaultErrorFormatter::default();
     let mut context = ErrorContext::new_with_field("test_field");
     context = context.with_documentation("See documentation at: https://example.com/docs");
-    
+
     let error = SchemaError::InvalidStructure {
         message: "Invalid structure".to_string(),
         context,
     };
-    
+
     let options = FormatOptions {
         include_error_codes: false,
         include_suggestions: false,
@@ -125,11 +122,9 @@ fn test_default_formatter_with_suggestion() {
     let formatter = DefaultErrorFormatter::default();
     let mut context = ErrorContext::new_with_field("test_field");
     context = context.with_suggestion("Try adding the required field");
-    
-    let error = SchemaError::MissingField {
-        context,
-    };
-    
+
+    let error = SchemaError::MissingField { context };
+
     let options = FormatOptions {
         include_error_codes: false,
         include_suggestions: true,
@@ -147,25 +142,25 @@ fn test_default_formatter_with_suggestion() {
 fn test_format_error() {
     let formatter = DefaultErrorFormatter::default();
     let options = FormatOptions::default();
-    
+
     // Test Schema error
     let schema_error = SchemaError::missing_field("test_field");
     let provider_config_error = ProviderConfigError::Schema(schema_error);
     let formatted = formatter.format_error(&provider_config_error, &options);
     assert!(formatted.contains("Schema Error"));
-    
+
     // Test Validation error
     let validation_error = ValidationError::invalid_value("test_field", "Value must be positive");
     let provider_config_error = ProviderConfigError::Validation(validation_error);
     let formatted = formatter.format_error(&provider_config_error, &options);
     assert!(formatted.contains("Validation Error"));
-    
+
     // Test Provider error
     let provider_error = ProviderError::capability("test_field", "Missing required capability");
     let provider_config_error = ProviderConfigError::Provider(provider_error);
     let formatted = formatter.format_error(&provider_config_error, &options);
     assert!(formatted.contains("Provider Error"));
-    
+
     // Test Generic error
     let provider_config_error = ProviderConfigError::Generic("Generic error message".to_string());
     let formatted = formatter.format_error(&provider_config_error, &options);

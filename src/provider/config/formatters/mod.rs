@@ -4,9 +4,8 @@
 //! allowing for rich error messages with context, suggestions, and documentation references.
 
 use crate::provider::config::errors::{
-    ErrorContext, ProviderConfigError, ProviderError, SchemaError, ValidationError,
+    ProviderConfigError, ProviderError, SchemaError, ValidationError,
 };
-use std::fmt::Write;
 
 mod default;
 
@@ -29,13 +28,13 @@ pub struct FormatOptions {
 pub trait ErrorFormatter {
     /// Format a provider configuration error
     fn format_error(&self, error: &ProviderConfigError, options: &FormatOptions) -> String;
-    
+
     /// Format a schema error
     fn format_schema_error(&self, error: &SchemaError, options: &FormatOptions) -> String;
-    
+
     /// Format a validation error
     fn format_validation_error(&self, error: &ValidationError, options: &FormatOptions) -> String;
-    
+
     /// Format a provider error
     fn format_provider_error(&self, error: &ProviderError, options: &FormatOptions) -> String;
 }

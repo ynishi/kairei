@@ -5,7 +5,7 @@
 
 use super::{ErrorFormatter, FormatOptions};
 use crate::provider::config::errors::{
-    ErrorContext, ProviderConfigError, ProviderError, SchemaError, ValidationError,
+    ProviderConfigError, ProviderError, SchemaError, ValidationError,
 };
 use std::fmt::Write;
 
@@ -23,10 +23,10 @@ impl ErrorFormatter for DefaultErrorFormatter {
             ProviderConfigError::Legacy(e) => format!("{}", e),
         }
     }
-    
+
     fn format_schema_error(&self, error: &SchemaError, options: &FormatOptions) -> String {
         let mut output = String::new();
-        
+
         // Add error code if enabled
         if options.include_error_codes {
             let error_code = match error {
@@ -34,21 +34,21 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 SchemaError::InvalidType { .. } => "SCHEMA_0002",
                 SchemaError::InvalidStructure { .. } => "SCHEMA_0003",
             };
-            
+
             if options.use_color {
                 write!(output, "\x1b[90m[{}]\x1b[0m ", error_code).unwrap();
             } else {
                 write!(output, "[{}] ", error_code).unwrap();
             }
         }
-        
+
         // Add error message
         if options.use_color {
             write!(output, "\x1b[31mSchema Error:\x1b[0m {}", error).unwrap();
         } else {
             write!(output, "Schema Error: {}", error).unwrap();
         }
-        
+
         // Add documentation reference if available and enabled
         if options.include_documentation {
             if let Some(doc) = self.get_documentation_for_schema_error(error) {
@@ -59,7 +59,7 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 }
             }
         }
-        
+
         // Add suggestion if available and enabled
         if options.include_suggestions {
             if let Some(suggestion) = self.get_suggestion_for_schema_error(error) {
@@ -70,13 +70,13 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 }
             }
         }
-        
+
         output
     }
-    
+
     fn format_validation_error(&self, error: &ValidationError, options: &FormatOptions) -> String {
         let mut output = String::new();
-        
+
         // Add error code if enabled
         if options.include_error_codes {
             let error_code = match error {
@@ -84,21 +84,21 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 ValidationError::ConstraintViolation { .. } => "VALIDATION_0002",
                 ValidationError::DependencyError { .. } => "VALIDATION_0003",
             };
-            
+
             if options.use_color {
                 write!(output, "\x1b[90m[{}]\x1b[0m ", error_code).unwrap();
             } else {
                 write!(output, "[{}] ", error_code).unwrap();
             }
         }
-        
+
         // Add error message
         if options.use_color {
             write!(output, "\x1b[31mValidation Error:\x1b[0m {}", error).unwrap();
         } else {
             write!(output, "Validation Error: {}", error).unwrap();
         }
-        
+
         // Add documentation reference if available and enabled
         if options.include_documentation {
             if let Some(doc) = self.get_documentation_for_validation_error(error) {
@@ -109,7 +109,7 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 }
             }
         }
-        
+
         // Add suggestion if available and enabled
         if options.include_suggestions {
             if let Some(suggestion) = self.get_suggestion_for_validation_error(error) {
@@ -120,13 +120,13 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 }
             }
         }
-        
+
         output
     }
-    
+
     fn format_provider_error(&self, error: &ProviderError, options: &FormatOptions) -> String {
         let mut output = String::new();
-        
+
         // Add error code if enabled
         if options.include_error_codes {
             let error_code = match error {
@@ -134,21 +134,21 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 ProviderError::Capability { .. } => "PROVIDER_0002",
                 ProviderError::Configuration { .. } => "PROVIDER_0003",
             };
-            
+
             if options.use_color {
                 write!(output, "\x1b[90m[{}]\x1b[0m ", error_code).unwrap();
             } else {
                 write!(output, "[{}] ", error_code).unwrap();
             }
         }
-        
+
         // Add error message
         if options.use_color {
             write!(output, "\x1b[31mProvider Error:\x1b[0m {}", error).unwrap();
         } else {
             write!(output, "Provider Error: {}", error).unwrap();
         }
-        
+
         // Add documentation reference if available and enabled
         if options.include_documentation {
             if let Some(doc) = self.get_documentation_for_provider_error(error) {
@@ -159,7 +159,7 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 }
             }
         }
-        
+
         // Add suggestion if available and enabled
         if options.include_suggestions {
             if let Some(suggestion) = self.get_suggestion_for_provider_error(error) {
@@ -170,7 +170,7 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 }
             }
         }
-        
+
         output
     }
 }
@@ -184,7 +184,7 @@ impl DefaultErrorFormatter {
             SchemaError::InvalidStructure { context, .. } => context.documentation.clone(),
         }
     }
-    
+
     /// Get documentation reference for a validation error
     fn get_documentation_for_validation_error(&self, error: &ValidationError) -> Option<String> {
         match error {
@@ -193,7 +193,7 @@ impl DefaultErrorFormatter {
             ValidationError::DependencyError { context, .. } => context.documentation.clone(),
         }
     }
-    
+
     /// Get documentation reference for a provider error
     fn get_documentation_for_provider_error(&self, error: &ProviderError) -> Option<String> {
         match error {
@@ -202,26 +202,32 @@ impl DefaultErrorFormatter {
             ProviderError::Configuration { context, .. } => context.documentation.clone(),
         }
     }
-    
+
     /// Get suggestion for a schema error
     fn get_suggestion_for_schema_error(&self, error: &SchemaError) -> Option<String> {
         match error {
-            SchemaError::MissingField { context } => {
-                context.suggestion.clone().or_else(|| {
-                    let field = context.location.field.as_ref()?;
-                    Some(format!("Add the required '{}' field to your configuration", field))
-                })
-            },
-            SchemaError::InvalidType { context, expected, actual } => {
-                context.suggestion.clone().or_else(|| {
-                    let field = context.location.field.as_ref()?;
-                    Some(format!("Change the type of '{}' from {} to {}", field, actual, expected))
-                })
-            },
+            SchemaError::MissingField { context } => context.suggestion.clone().or_else(|| {
+                let field = context.location.field.as_ref()?;
+                Some(format!(
+                    "Add the required '{}' field to your configuration",
+                    field
+                ))
+            }),
+            SchemaError::InvalidType {
+                context,
+                expected,
+                actual,
+            } => context.suggestion.clone().or_else(|| {
+                let field = context.location.field.as_ref()?;
+                Some(format!(
+                    "Change the type of '{}' from {} to {}",
+                    field, actual, expected
+                ))
+            }),
             SchemaError::InvalidStructure { context, .. } => context.suggestion.clone(),
         }
     }
-    
+
     /// Get suggestion for a validation error
     fn get_suggestion_for_validation_error(&self, error: &ValidationError) -> Option<String> {
         match error {
@@ -230,7 +236,7 @@ impl DefaultErrorFormatter {
             ValidationError::DependencyError { context, .. } => context.suggestion.clone(),
         }
     }
-    
+
     /// Get suggestion for a provider error
     fn get_suggestion_for_provider_error(&self, error: &ProviderError) -> Option<String> {
         match error {
