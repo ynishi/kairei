@@ -1,7 +1,7 @@
 //! Tests for the provider configuration validation framework.
 
 use crate::provider::config::{
-    CollectingValidator, ErrorCollector, EvaluatorValidator, ProviderConfigValidator,
+    CollectingValidator, EvaluatorValidator, ProviderConfigValidator,
     TypeCheckerValidator,
 };
 use serde_json::json;
