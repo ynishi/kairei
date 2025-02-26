@@ -1,4 +1,4 @@
-.PHONY: build run test clippy fmt
+.PHONY: build run test clippy fmt doc doc_check doc_open clean_doc all
 
 test:
 	cargo test
@@ -17,8 +17,22 @@ fmt:
 	cargo clippy -- -D warnings
 	cargo fmt
 
+doc:
+	cargo doc --no-deps
+
+doc_check:
+	RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo doc --no-deps --document-private-items --all-features
+
+doc_open:
+	cargo doc --no-deps --open
+
+clean_doc:
+	rm -rf target/doc
+
 dev:
 	RUST_LOG=kairei=debug cargo run --bin kairei
 
 build:
 	cargo build
+
+all: fmt test doc
