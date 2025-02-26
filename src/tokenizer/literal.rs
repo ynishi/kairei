@@ -1,3 +1,45 @@
+//! # Literal Token Handling
+//!
+//! This module provides functionality for parsing literal tokens in the KAIREI DSL,
+//! including strings, numbers, and boolean values.
+//!
+//! ## Literal Types
+//!
+//! The following literal types are supported:
+//!
+//! * **String Literals**: Both single-quoted (`"text"`) and triple-quoted (`"""text"""`)
+//! * **Numeric Literals**: Integers (`42`) and floating-point numbers (`3.14`)
+//! * **Boolean Literals**: `true` and `false`
+//! * **Null Literal**: `null`
+//!
+//! ## String Interpolation
+//!
+//! String literals support interpolation using the `${variable}` syntax:
+//!
+//! ```no_run
+//! let example = "Hello, ${name}!";
+//! ```
+//!
+//! ## Triple-Quoted Strings
+//!
+//! Triple-quoted strings (`"""`) preserve formatting and can span multiple lines:
+//!
+//! ```ignore
+//! let example = """
+//! This is a multi-line string
+//! with preserved formatting.
+//! """;
+//! ```
+//!
+//! ## Parsing Strategy
+//!
+//! Literals are parsed using specialized parsers for each type:
+//!
+//! * `parse_string_literal`: Handles both single and triple-quoted strings
+//! * [`parse_float_literal`]: Parses floating-point numbers
+//! * [`parse_integer_literal`]: Parses integer numbers
+//! * [`parse_boolean_literal`]: Parses boolean values
+
 use nom::{
     branch::alt,
     bytes::{
@@ -13,6 +55,10 @@ use nom::{
 
 use super::token::{ParserResult, Token};
 
+/// Represents a part of a string literal.
+///
+/// String literals in KAIREI can contain regular text, interpolated variables,
+/// and newlines, each represented by a different variant of this enum.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringPart {
     /// A literal string segment without any interpolation or special formatting
@@ -23,6 +69,11 @@ pub enum StringPart {
     NewLine,
 }
 
+/// Represents a string literal in the KAIREI DSL.
+///
+/// KAIREI supports two types of string literals:
+/// - Single-quoted strings with interpolation support
+/// - Triple-quoted strings with preserved formatting and multi-line support
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringLiteral {
     /// Single-quoted string with interpolation support
@@ -31,15 +82,40 @@ pub enum StringLiteral {
     Triple(Vec<StringPart>),
 }
 
+/// Represents a literal value in the KAIREI DSL.
+///
+/// Literals are constant values that appear directly in the source code,
+/// such as strings, numbers, booleans, and null.
 #[derive(Debug, Clone, PartialEq, strum::Display)]
 pub enum Literal {
+    /// String literal, either single-quoted or triple-quoted
     String(StringLiteral),
+    /// Integer numeric literal
     Integer(i64),
+    /// Floating-point numeric literal
     Float(f64),
+    /// Boolean literal (`true` or `false`)
     Boolean(bool),
+    /// Null literal
     Null,
 }
 
+/// Parses a string literal from the input string.
+///
+/// This function attempts to parse either a triple-quoted string or a single-quoted string.
+/// Triple-quoted strings are tried first to ensure correct parsing of strings that start with
+/// triple quotes.
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<Literal>` - A result containing either the parsed literal and remaining input,
+///   or an error if parsing fails
+///
+/// Note: This is a private function used internally by the tokenizer.
 #[tracing::instrument(level = "debug", skip(input))]
 fn parse_string_literal(input: &str) -> ParserResult<Literal> {
     context(
@@ -53,15 +129,38 @@ fn parse_string_literal(input: &str) -> ParserResult<Literal> {
     )(input)
 }
 
+/// Constant for the triple quote delimiter used in multi-line strings.
 const TRIPLE_QUOTE: &str = "\"\"\"";
-fn parse_triple_quote_string(input: &str) -> ParserResult<Literal> {
-    // 開始のトリプルクォート、内容、終了のトリプルクォートをパース
+
+/// Parses a triple-quoted string from the input string.
+///
+/// Triple-quoted strings are delimited by `"""` and can span multiple lines.
+/// They preserve formatting and support variable interpolation.
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<Literal>` - A result containing either the parsed literal and remaining input,
+///   or an error if parsing fails
+///
+/// # Examples
+///
+/// ```
+/// # use kairei::tokenizer::literal::{parse_triple_quote_string, StringLiteral, StringPart, Literal};
+/// let input = "\"\"\"Hello ${name}\nWelcome!\"\"\"";
+/// let (rest, literal) = parse_triple_quote_string(input).unwrap();
+/// ```
+pub fn parse_triple_quote_string(input: &str) -> ParserResult<Literal> {
+    // Parse the opening triple quote, content, and closing triple quote
     let (remaining, (_, content, _)) = context(
         "triple quote string",
         tuple((
-            tag(TRIPLE_QUOTE),        // 開始の"""
-            take_until(TRIPLE_QUOTE), // """まで全ての文字を取得
-            tag(TRIPLE_QUOTE),        // 終了の"""
+            tag(TRIPLE_QUOTE),        // Opening """
+            take_until(TRIPLE_QUOTE), // Get all characters until """
+            tag(TRIPLE_QUOTE),        // Closing """
         )),
     )(input)?;
     println!("content: {}", content);
@@ -84,8 +183,29 @@ fn parse_triple_quote_string(input: &str) -> ParserResult<Literal> {
     Ok((remaining, Literal::String(lit)))
 }
 
+/// Parses a single-quoted string from the input string.
+///
+/// Single-quoted strings are delimited by double quotes (`"`) and support variable interpolation.
+/// They cannot span multiple lines unless the newline is part of an interpolated variable.
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<Literal>` - A result containing either the parsed literal and remaining input,
+///   or an error if parsing fails
+///
+/// # Examples
+///
+/// ```
+/// # use kairei::tokenizer::literal::{parse_single_quote_string, StringLiteral, StringPart, Literal};
+/// let input = "\"Hello ${name}!\"";
+/// let (rest, literal) = parse_single_quote_string(input).unwrap();
+/// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_single_quote_string(input: &str) -> ParserResult<Literal> {
+pub fn parse_single_quote_string(input: &str) -> ParserResult<Literal> {
     context(
         "single quote string",
         map(
@@ -99,8 +219,31 @@ fn parse_single_quote_string(input: &str) -> ParserResult<Literal> {
     )(input)
 }
 
+/// Parses a string interpolation from the input string.
+///
+/// String interpolations are delimited by `${` and `}` and contain a variable name
+/// that will be replaced with its value at runtime.
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<StringPart>` - A result containing either the parsed string part and remaining input,
+///   or an error if parsing fails
+///
+/// # Examples
+///
+/// ```
+/// # use kairei::tokenizer::literal::{parse_interpolation, StringPart};
+/// let input = "${name} rest";
+/// let (rest, part) = parse_interpolation(input).unwrap();
+/// assert_eq!(part, StringPart::Interpolation("name".to_string()));
+/// assert_eq!(rest, " rest");
+/// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_interpolation(input: &str) -> ParserResult<StringPart> {
+pub fn parse_interpolation(input: &str) -> ParserResult<StringPart> {
     context(
         "string interpolation",
         map(
@@ -114,6 +257,21 @@ fn parse_interpolation(input: &str) -> ParserResult<StringPart> {
     )(input)
 }
 
+/// Parses a newline character from the input string.
+///
+/// This function recognizes both Unix-style (`\n`) and Windows-style (`\r\n`)
+/// line endings and converts them into a NewLine string part.
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<StringPart>` - A result containing either the parsed string part and remaining input,
+///   or an error if parsing fails
+///
+/// Note: This is a private function used internally by the tokenizer.
 #[tracing::instrument(level = "debug", skip(input))]
 fn parse_newline(input: &str) -> ParserResult<StringPart> {
     context(
@@ -121,6 +279,22 @@ fn parse_newline(input: &str) -> ParserResult<StringPart> {
         map(alt((tag("\r\n"), tag("\n"))), |_| StringPart::NewLine),
     )(input)
 }
+
+/// Parses a literal string part from the input string.
+///
+/// A literal string part is a sequence of characters that doesn't contain
+/// interpolation markers, newlines, or string delimiters.
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<StringPart>` - A result containing either the parsed string part and remaining input,
+///   or an error if parsing fails
+///
+/// Note: This is a private function used internally by the tokenizer.
 #[tracing::instrument(level = "debug", skip(input))]
 fn parse_string_literal_part(input: &str) -> ParserResult<StringPart> {
     context(
@@ -132,8 +306,31 @@ fn parse_string_literal_part(input: &str) -> ParserResult<StringPart> {
     )(input)
 }
 
+/// Parses a floating-point number from the input string.
+///
+/// Floating-point numbers consist of an optional negative sign,
+/// one or more digits, a decimal point, and one or more digits after the decimal point.
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<Literal>` - A result containing either the parsed literal and remaining input,
+///   or an error if parsing fails
+///
+/// # Examples
+///
+/// ```
+/// # use kairei::tokenizer::literal::{parse_float_literal, Literal};
+/// let input = "3.14159";
+/// let (rest, literal) = parse_float_literal(input).unwrap();
+/// assert_eq!(literal, Literal::Float(3.14159));
+/// assert_eq!(rest, "");
+/// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_float_literal(input: &str) -> ParserResult<Literal> {
+pub fn parse_float_literal(input: &str) -> ParserResult<Literal> {
     context(
         "float literal",
         map_res(
@@ -143,8 +340,30 @@ fn parse_float_literal(input: &str) -> ParserResult<Literal> {
     )(input)
 }
 
+/// Parses an integer number from the input string.
+///
+/// Integer numbers consist of an optional negative sign followed by one or more digits.
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<Literal>` - A result containing either the parsed literal and remaining input,
+///   or an error if parsing fails
+///
+/// # Examples
+///
+/// ```
+/// # use kairei::tokenizer::literal::{parse_integer_literal, Literal};
+/// let input = "42";
+/// let (rest, literal) = parse_integer_literal(input).unwrap();
+/// assert_eq!(literal, Literal::Integer(42));
+/// assert_eq!(rest, "");
+/// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_integer_literal(input: &str) -> ParserResult<Literal> {
+pub fn parse_integer_literal(input: &str) -> ParserResult<Literal> {
     context(
         "integer literal",
         map_res(recognize(pair(opt(char('-')), digit1)), |s: &str| {
@@ -153,8 +372,30 @@ fn parse_integer_literal(input: &str) -> ParserResult<Literal> {
     )(input)
 }
 
+/// Parses a boolean value from the input string.
+///
+/// Boolean values are either `true` or `false`.
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<Literal>` - A result containing either the parsed literal and remaining input,
+///   or an error if parsing fails
+///
+/// # Examples
+///
+/// ```
+/// # use kairei::tokenizer::literal::{parse_boolean_literal, Literal};
+/// let input = "true";
+/// let (rest, literal) = parse_boolean_literal(input).unwrap();
+/// assert_eq!(literal, Literal::Boolean(true));
+/// assert_eq!(rest, "");
+/// ```
 #[tracing::instrument(level = "debug", skip(input))]
-fn parse_boolean_literal(input: &str) -> ParserResult<Literal> {
+pub fn parse_boolean_literal(input: &str) -> ParserResult<Literal> {
     context(
         "boolean literal",
         alt((
@@ -164,6 +405,33 @@ fn parse_boolean_literal(input: &str) -> ParserResult<Literal> {
     )(input)
 }
 
+/// Parses any type of literal from the input string.
+///
+/// This function attempts to match one of the supported literal types:
+/// - String literals (both single and triple-quoted)
+/// - Floating-point numbers
+/// - Integer numbers
+/// - Boolean values
+///
+/// # Arguments
+///
+/// * `input` - The input string to parse
+///
+/// # Returns
+///
+/// * `ParserResult<Token>` - A result containing either the parsed token and remaining input,
+///   or an error if parsing fails
+///
+/// # Examples
+///
+/// ```
+/// # use kairei::tokenizer::literal::parse_literal;
+/// # use kairei::tokenizer::token::Token;
+/// # use kairei::tokenizer::literal::{Literal, StringLiteral, StringPart};
+/// let input = "\"Hello, world!\"";
+/// let (rest, token) = parse_literal(input).unwrap();
+/// assert_eq!(rest, "");
+/// ```
 #[tracing::instrument(level = "debug", skip(input))]
 pub fn parse_literal(input: &str) -> ParserResult<Token> {
     context(
