@@ -35,7 +35,7 @@
 //!
 //! Literals are parsed using specialized parsers for each type:
 //!
-//! * [`parse_string_literal`]: Handles both single and triple-quoted strings
+//! * `parse_string_literal`: Handles both single and triple-quoted strings
 //! * [`parse_float_literal`]: Parses floating-point numbers
 //! * [`parse_integer_literal`]: Parses integer numbers
 //! * [`parse_boolean_literal`]: Parses boolean values
