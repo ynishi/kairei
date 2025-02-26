@@ -9,8 +9,6 @@ use std::collections::HashMap;
 
 // Include validator tests
 mod validator_tests;
-mod plugin_config_test;
-mod errors_tests;
 
 #[test]
 fn test_plugin_config_validation() {

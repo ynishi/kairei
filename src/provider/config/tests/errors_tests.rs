@@ -1,5 +1,6 @@
 use crate::provider::config::{
-    ConfigError, ErrorContext, ErrorSeverity, ProviderConfigError, ProviderError, SchemaError, SourceLocation, ValidationError
+    ErrorContext, ErrorSeverity, ProviderConfigError, ProviderError, SchemaError, SourceLocation,
+    ValidationError,
 };
 
 #[test]
