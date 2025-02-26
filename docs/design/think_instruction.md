@@ -233,7 +233,7 @@ micro NewsAnalyst {
     answer {
         on request MarketReport(industry: String) -> Result<Report> {
             // Parallel news and analysis retrieval
-            let [news, stats, trends] = await [
+            (news, stats, trends) = await {
                 think("Find latest news about ${industry}") with {
                     search: { filter: "news" }
                 },
@@ -243,7 +243,7 @@ micro NewsAnalyst {
                 think("Identify emerging trends in ${industry}") with {
                     search: { recent: "7d" }
                 }
-            ];
+            };
 
             // Integrate results
             think("Create comprehensive market report", {
