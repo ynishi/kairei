@@ -1,4 +1,4 @@
-use crate::provider::config::plugins::{MemoryConfig, RagConfig, SearchConfig};
+use crate::provider::config::{plugins::{MemoryConfig, RagConfig, SearchConfig}, ProviderSpecificConfig};
 use super::super::providers::{OpenAIApiConfig, OpenAIRagConfig};
 use crate::provider::config::base::ConfigError;
 use std::time::Duration;
