@@ -338,6 +338,8 @@ impl std::fmt::Display for Span {
 /// An identifier starts with a letter or underscore, followed by zero or more
 /// letters, digits, or underscores. If the parsed identifier matches a keyword,
 /// a Keyword token is returned instead.
+///
+/// Note: This is a private function used internally by the tokenizer.
 #[tracing::instrument(level = "debug", skip(input))]
 fn parse_identifier(input: &str) -> ParserResult<Token> {
     let (input, id) = context(
