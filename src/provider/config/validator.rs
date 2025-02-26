@@ -4,7 +4,7 @@
 //! including the ProviderConfigValidator trait and its implementations.
 
 use crate::provider::config::errors::{
-    ErrorContext, ProviderConfigError, SchemaError, ValidationError, ProviderError
+    ErrorContext, ProviderConfigError, ProviderError, SchemaError, ValidationError,
 };
 use std::collections::HashMap;
 
@@ -18,31 +18,46 @@ pub trait ProviderConfigValidator {
     ///
     /// This method checks that the configuration has the correct structure,
     /// including required fields and field types.
-    fn validate_schema(&self, config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderConfigError>;
+    fn validate_schema(
+        &self,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError>;
 
     /// Validates provider-specific aspects of a configuration.
     ///
     /// This method checks that the configuration is valid for the specific
     /// provider it is intended for.
-    fn validate_provider_specific(&self, config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderConfigError>;
+    fn validate_provider_specific(
+        &self,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError>;
 
     /// Validates that the configuration is compatible with the required capabilities.
     ///
     /// This method checks that the configuration supports the capabilities
     /// required by the system.
-    fn validate_capabilities(&self, config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderConfigError>;
+    fn validate_capabilities(
+        &self,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError>;
 
     /// Validates that the configuration's dependencies are satisfied.
     ///
     /// This method checks that any dependencies required by the configuration
     /// are available and compatible.
-    fn validate_dependencies(&self, config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderConfigError>;
+    fn validate_dependencies(
+        &self,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError>;
 
     /// Validates a provider configuration.
     ///
     /// This method combines all validation methods to perform a complete
     /// validation of the configuration.
-    fn validate(&self, config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderConfigError> {
+    fn validate(
+        &self,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError> {
         self.validate_schema(config)?;
         self.validate_provider_specific(config)?;
         self.validate_capabilities(config)?;

@@ -72,5 +72,6 @@ pub use validation::{
 };
 pub use validator::{CollectingValidator, ErrorCollector, ProviderConfigValidator};
 pub use validators::{
-    EvaluatorValidator, TypeCheckerValidator, create_evaluator_validator, create_type_checker_validator,
+    create_evaluator_validator, create_type_checker_validator, EvaluatorValidator,
+    TypeCheckerValidator,
 };

@@ -3,11 +3,11 @@
 //! This module provides validators for provider configurations,
 //! including type checker and evaluator validators.
 
-mod type_checker;
 mod evaluator;
+mod type_checker;
 
-pub use type_checker::TypeCheckerValidator;
 pub use evaluator::EvaluatorValidator;
+pub use type_checker::TypeCheckerValidator;
 
 /// Creates a type checker validator.
 pub fn create_type_checker_validator() -> TypeCheckerValidator {

@@ -4,9 +4,9 @@
 //! for provider configurations.
 
 use crate::provider::config::{
-    errors::{ErrorContext, ProviderConfigError, ValidationError, ProviderError},
-    validator::ProviderConfigValidator,
+    errors::{ErrorContext, ProviderConfigError, ProviderError, ValidationError},
     validation::validate_range,
+    validator::ProviderConfigValidator,
 };
 use std::collections::HashMap;
 
@@ -15,12 +15,18 @@ use std::collections::HashMap;
 pub struct EvaluatorValidator;
 
 impl ProviderConfigValidator for EvaluatorValidator {
-    fn validate_schema(&self, _config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderConfigError> {
+    fn validate_schema(
+        &self,
+        _config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError> {
         // Evaluator doesn't perform schema validation
         Ok(())
     }
 
-    fn validate_provider_specific(&self, config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderConfigError> {
+    fn validate_provider_specific(
+        &self,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError> {
         // Validate provider-specific aspects
         if let Some(serde_json::Value::String(plugin_type)) = config.get("type") {
             match plugin_type.as_str() {
@@ -31,7 +37,8 @@ impl ProviderConfigValidator for EvaluatorValidator {
                                 return Err(ValidationError::invalid_value(
                                     "ttl",
                                     "TTL must be greater than 0",
-                                ).into());
+                                )
+                                .into());
                             }
                         }
                     }
@@ -43,7 +50,8 @@ impl ProviderConfigValidator for EvaluatorValidator {
                                 return Err(ValidationError::invalid_value(
                                     "chunk_size",
                                     "Chunk size must be greater than 0",
-                                ).into());
+                                )
+                                .into());
                             }
                         }
                     }
@@ -54,30 +62,36 @@ impl ProviderConfigValidator for EvaluatorValidator {
                                 return Err(ValidationError::invalid_value(
                                     "max_tokens",
                                     "Max tokens must be greater than 0",
-                                ).into());
+                                )
+                                .into());
                             }
                         }
                     }
 
-                    if let Some(serde_json::Value::Number(similarity_threshold)) = config.get("similarity_threshold") {
+                    if let Some(serde_json::Value::Number(similarity_threshold)) =
+                        config.get("similarity_threshold")
+                    {
                         if let Some(similarity_threshold) = similarity_threshold.as_f64() {
                             if similarity_threshold < 0.0 || similarity_threshold > 1.0 {
                                 return Err(ValidationError::invalid_value(
                                     "similarity_threshold",
                                     "Similarity threshold must be between 0.0 and 1.0",
-                                ).into());
+                                )
+                                .into());
                             }
                         }
                     }
                 }
                 "search" => {
-                    if let Some(serde_json::Value::Number(max_results)) = config.get("max_results") {
+                    if let Some(serde_json::Value::Number(max_results)) = config.get("max_results")
+                    {
                         if let Some(max_results) = max_results.as_u64() {
                             if max_results == 0 {
                                 return Err(ValidationError::invalid_value(
                                     "max_results",
                                     "Max results must be greater than 0",
-                                ).into());
+                                )
+                                .into());
                             }
                         }
                     }
@@ -89,61 +103,76 @@ impl ProviderConfigValidator for EvaluatorValidator {
         Ok(())
     }
 
-    fn validate_capabilities(&self, config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderConfigError> {
+    fn validate_capabilities(
+        &self,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError> {
         // Validate capabilities
         if let Some(serde_json::Value::String(plugin_type)) = config.get("type") {
             match plugin_type.as_str() {
                 "memory" => {
                     // Memory plugin requires memory capability
-                    if let Some(serde_json::Value::Object(capabilities)) = config.get("capabilities") {
+                    if let Some(serde_json::Value::Object(capabilities)) =
+                        config.get("capabilities")
+                    {
                         if let Some(serde_json::Value::Bool(memory)) = capabilities.get("memory") {
                             if !memory {
                                 return Err(ProviderError::capability(
                                     "capabilities.memory",
                                     "Memory plugin requires memory capability",
-                                ).into());
+                                )
+                                .into());
                             }
                         } else {
                             return Err(ProviderError::capability(
                                 "capabilities.memory",
                                 "Memory plugin requires memory capability",
-                            ).into());
+                            )
+                            .into());
                         }
                     }
                 }
                 "rag" => {
                     // RAG plugin requires rag capability
-                    if let Some(serde_json::Value::Object(capabilities)) = config.get("capabilities") {
+                    if let Some(serde_json::Value::Object(capabilities)) =
+                        config.get("capabilities")
+                    {
                         if let Some(serde_json::Value::Bool(rag)) = capabilities.get("rag") {
                             if !rag {
                                 return Err(ProviderError::capability(
                                     "capabilities.rag",
                                     "RAG plugin requires rag capability",
-                                ).into());
+                                )
+                                .into());
                             }
                         } else {
                             return Err(ProviderError::capability(
                                 "capabilities.rag",
                                 "RAG plugin requires rag capability",
-                            ).into());
+                            )
+                            .into());
                         }
                     }
                 }
                 "search" => {
                     // Search plugin requires search capability
-                    if let Some(serde_json::Value::Object(capabilities)) = config.get("capabilities") {
+                    if let Some(serde_json::Value::Object(capabilities)) =
+                        config.get("capabilities")
+                    {
                         if let Some(serde_json::Value::Bool(search)) = capabilities.get("search") {
                             if !search {
                                 return Err(ProviderError::capability(
                                     "capabilities.search",
                                     "Search plugin requires search capability",
-                                ).into());
+                                )
+                                .into());
                             }
                         } else {
                             return Err(ProviderError::capability(
                                 "capabilities.search",
                                 "Search plugin requires search capability",
-                            ).into());
+                            )
+                            .into());
                         }
                     }
                 }
@@ -154,7 +183,10 @@ impl ProviderConfigValidator for EvaluatorValidator {
         Ok(())
     }
 
-    fn validate_dependencies(&self, config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderConfigError> {
+    fn validate_dependencies(
+        &self,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError> {
         // Validate dependencies
         if let Some(serde_json::Value::Array(dependencies)) = config.get("dependencies") {
             for (i, dependency) in dependencies.iter().enumerate() {
@@ -164,14 +196,16 @@ impl ProviderConfigValidator for EvaluatorValidator {
                         return Err(ValidationError::dependency_error(
                             format!("dependencies[{}].name", i),
                             "Dependency name is required",
-                        ).into());
+                        )
+                        .into());
                     }
 
                     if !dep.contains_key("version") {
                         return Err(ValidationError::dependency_error(
                             format!("dependencies[{}].version", i),
                             "Dependency version is required",
-                        ).into());
+                        )
+                        .into());
                     }
 
                     // Check version format
@@ -180,7 +214,8 @@ impl ProviderConfigValidator for EvaluatorValidator {
                             return Err(ValidationError::dependency_error(
                                 format!("dependencies[{}].version", i),
                                 "Dependency version must be in format x.y.z",
-                            ).into());
+                            )
+                            .into());
                         }
                     }
                 }
@@ -202,8 +237,9 @@ mod tests {
         let config = serde_json::from_value(json!({
             "type": "memory",
             "ttl": 3600
-        })).unwrap();
-        
+        }))
+        .unwrap();
+
         assert!(validator.validate_provider_specific(&config).is_ok());
     }
 
@@ -213,8 +249,9 @@ mod tests {
         let config = serde_json::from_value(json!({
             "type": "memory",
             "ttl": 0 // Invalid: must be > 0
-        })).unwrap();
-        
+        }))
+        .unwrap();
+
         assert!(validator.validate_provider_specific(&config).is_err());
     }
 
@@ -226,8 +263,9 @@ mod tests {
             "capabilities": {
                 "rag": true
             }
-        })).unwrap();
-        
+        }))
+        .unwrap();
+
         assert!(validator.validate_capabilities(&config).is_ok());
     }
 
@@ -239,8 +277,9 @@ mod tests {
             "capabilities": {
                 "rag": false // Invalid: rag capability required
             }
-        })).unwrap();
-        
+        }))
+        .unwrap();
+
         assert!(validator.validate_capabilities(&config).is_err());
     }
 
@@ -254,8 +293,9 @@ mod tests {
                     "version": "1.0.0"
                 }
             ]
-        })).unwrap();
-        
+        }))
+        .unwrap();
+
         assert!(validator.validate_dependencies(&config).is_ok());
     }
 
@@ -269,8 +309,9 @@ mod tests {
                     "version": "1" // Invalid: must be in format x.y.z
                 }
             ]
-        })).unwrap();
-        
+        }))
+        .unwrap();
+
         assert!(validator.validate_dependencies(&config).is_err());
     }
 }
