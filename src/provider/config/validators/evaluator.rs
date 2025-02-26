@@ -4,8 +4,7 @@
 //! for provider configurations.
 
 use crate::provider::config::{
-    errors::{ErrorContext, ProviderConfigError, ProviderError, ValidationError},
-    validation::validate_range,
+    errors::{ProviderConfigError, ProviderError, ValidationError},
     validator::ProviderConfigValidator,
 };
 use std::collections::HashMap;
@@ -34,11 +33,10 @@ impl ProviderConfigValidator for EvaluatorValidator {
                     if let Some(serde_json::Value::Number(ttl)) = config.get("ttl") {
                         if let Some(ttl) = ttl.as_u64() {
                             if ttl == 0 {
-                                return Err(ValidationError::invalid_value(
+                                return Err(ProviderConfigError::Validation(Box::new(ValidationError::invalid_value(
                                     "ttl",
                                     "TTL must be greater than 0",
-                                )
-                                .into());
+                                ))));
                             }
                         }
                     }
@@ -47,11 +45,10 @@ impl ProviderConfigValidator for EvaluatorValidator {
                     if let Some(serde_json::Value::Number(chunk_size)) = config.get("chunk_size") {
                         if let Some(chunk_size) = chunk_size.as_u64() {
                             if chunk_size == 0 {
-                                return Err(ValidationError::invalid_value(
+                                return Err(ProviderConfigError::Validation(Box::new(ValidationError::invalid_value(
                                     "chunk_size",
                                     "Chunk size must be greater than 0",
-                                )
-                                .into());
+                                ))));
                             }
                         }
                     }
@@ -59,11 +56,10 @@ impl ProviderConfigValidator for EvaluatorValidator {
                     if let Some(serde_json::Value::Number(max_tokens)) = config.get("max_tokens") {
                         if let Some(max_tokens) = max_tokens.as_u64() {
                             if max_tokens == 0 {
-                                return Err(ValidationError::invalid_value(
+                                return Err(ProviderConfigError::Validation(Box::new(ValidationError::invalid_value(
                                     "max_tokens",
-                                    "Max tokens must be greater than 0",
-                                )
-                                .into());
+                                    "Max tokens must be greater than 0"
+                                ))));
                             }
                         }
                     }
@@ -72,12 +68,11 @@ impl ProviderConfigValidator for EvaluatorValidator {
                         config.get("similarity_threshold")
                     {
                         if let Some(similarity_threshold) = similarity_threshold.as_f64() {
-                            if similarity_threshold < 0.0 || similarity_threshold > 1.0 {
-                                return Err(ValidationError::invalid_value(
+                            if !(0.0..=1.0).contains(&similarity_threshold) {
+                                return Err(ProviderConfigError::Validation(Box::new(ValidationError::invalid_value(
                                     "similarity_threshold",
-                                    "Similarity threshold must be between 0.0 and 1.0",
-                                )
-                                .into());
+                                    "Similarity threshold must be between 0.0 and 1.0"
+                                ))));
                             }
                         }
                     }
@@ -87,11 +82,10 @@ impl ProviderConfigValidator for EvaluatorValidator {
                     {
                         if let Some(max_results) = max_results.as_u64() {
                             if max_results == 0 {
-                                return Err(ValidationError::invalid_value(
+                                return Err(ProviderConfigError::Validation(Box::new(ValidationError::invalid_value(
                                     "max_results",
-                                    "Max results must be greater than 0",
-                                )
-                                .into());
+                                    "Max results must be greater than 0"
+                                ))));
                             }
                         }
                     }
@@ -117,18 +111,16 @@ impl ProviderConfigValidator for EvaluatorValidator {
                     {
                         if let Some(serde_json::Value::Bool(memory)) = capabilities.get("memory") {
                             if !memory {
-                                return Err(ProviderError::capability(
+                                return Err(ProviderConfigError::Provider(Box::new(ProviderError::capability(
                                     "capabilities.memory",
-                                    "Memory plugin requires memory capability",
-                                )
-                                .into());
+                                    "Memory plugin requires memory capability"
+                                ))));
                             }
                         } else {
-                            return Err(ProviderError::capability(
+                            return Err(ProviderConfigError::Provider(Box::new(ProviderError::capability(
                                 "capabilities.memory",
-                                "Memory plugin requires memory capability",
-                            )
-                            .into());
+                                "Memory plugin requires memory capability"
+                            ))));
                         }
                     }
                 }
@@ -139,18 +131,16 @@ impl ProviderConfigValidator for EvaluatorValidator {
                     {
                         if let Some(serde_json::Value::Bool(rag)) = capabilities.get("rag") {
                             if !rag {
-                                return Err(ProviderError::capability(
+                                return Err(ProviderConfigError::Provider(Box::new(ProviderError::capability(
                                     "capabilities.rag",
-                                    "RAG plugin requires rag capability",
-                                )
-                                .into());
+                                    "RAG plugin requires rag capability"
+                                ))));
                             }
                         } else {
-                            return Err(ProviderError::capability(
+                            return Err(ProviderConfigError::Provider(Box::new(ProviderError::capability(
                                 "capabilities.rag",
-                                "RAG plugin requires rag capability",
-                            )
-                            .into());
+                                "RAG plugin requires rag capability"
+                            ))));
                         }
                     }
                 }
@@ -161,18 +151,16 @@ impl ProviderConfigValidator for EvaluatorValidator {
                     {
                         if let Some(serde_json::Value::Bool(search)) = capabilities.get("search") {
                             if !search {
-                                return Err(ProviderError::capability(
+                                return Err(ProviderConfigError::Provider(Box::new(ProviderError::capability(
                                     "capabilities.search",
-                                    "Search plugin requires search capability",
-                                )
-                                .into());
+                                    "Search plugin requires search capability"
+                                ))));
                             }
                         } else {
-                            return Err(ProviderError::capability(
+                            return Err(ProviderConfigError::Provider(Box::new(ProviderError::capability(
                                 "capabilities.search",
-                                "Search plugin requires search capability",
-                            )
-                            .into());
+                                "Search plugin requires search capability"
+                            ))));
                         }
                     }
                 }
@@ -193,29 +181,26 @@ impl ProviderConfigValidator for EvaluatorValidator {
                 if let serde_json::Value::Object(dep) = dependency {
                     // Check required fields
                     if !dep.contains_key("name") {
-                        return Err(ValidationError::dependency_error(
+                        return Err(ProviderConfigError::Validation(Box::new(ValidationError::dependency_error(
                             format!("dependencies[{}].name", i),
-                            "Dependency name is required",
-                        )
-                        .into());
+                            "Dependency name is required"
+                        ))));
                     }
 
                     if !dep.contains_key("version") {
-                        return Err(ValidationError::dependency_error(
+                        return Err(ProviderConfigError::Validation(Box::new(ValidationError::dependency_error(
                             format!("dependencies[{}].version", i),
-                            "Dependency version is required",
-                        )
-                        .into());
+                            "Dependency version is required"
+                        ))));
                     }
 
                     // Check version format
                     if let Some(serde_json::Value::String(version)) = dep.get("version") {
                         if !version.contains('.') {
-                            return Err(ValidationError::dependency_error(
+                            return Err(ProviderConfigError::Validation(Box::new(ValidationError::dependency_error(
                                 format!("dependencies[{}].version", i),
-                                "Dependency version must be in format x.y.z",
-                            )
-                            .into());
+                                "Dependency version must be in format x.y.z"
+                            ))));
                         }
                     }
                 }
@@ -233,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_validate_provider_specific_valid_memory() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "type": "memory",
             "ttl": 3600
@@ -245,7 +230,7 @@ mod tests {
 
     #[test]
     fn test_validate_provider_specific_invalid_memory() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "type": "memory",
             "ttl": 0 // Invalid: must be > 0
@@ -257,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_validate_capabilities_valid_rag() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "type": "rag",
             "capabilities": {
@@ -271,7 +256,7 @@ mod tests {
 
     #[test]
     fn test_validate_capabilities_invalid_rag() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "type": "rag",
             "capabilities": {
@@ -285,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_validate_dependencies_valid() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "dependencies": [
                 {
@@ -301,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_validate_dependencies_invalid() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "dependencies": [
                 {
