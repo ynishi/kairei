@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::provider::config::plugins::ProviderSpecificConfig;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum ConfigError {
     #[error("Missing required field: {0}")]
     MissingField(String),

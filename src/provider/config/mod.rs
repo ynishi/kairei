@@ -52,6 +52,8 @@ mod errors;
 mod plugins;
 mod providers;
 mod validation;
+mod validator;
+mod validators;
 
 #[cfg(test)]
 mod tests;
@@ -67,4 +69,9 @@ pub use plugins::{
 pub use providers::{OpenAIApiConfig, OpenAIMemoryConfig, OpenAIRagConfig, OpenAISearchConfig};
 pub use validation::{
     check_property_type, check_required_properties, validate_range, validate_required_field,
+};
+pub use validator::{CollectingValidator, ErrorCollector, ProviderConfigValidator};
+pub use validators::{
+    create_evaluator_validator, create_type_checker_validator, EvaluatorValidator,
+    TypeCheckerValidator,
 };
