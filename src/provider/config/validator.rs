@@ -3,9 +3,7 @@
 //! This module defines the validation framework for provider configurations,
 //! including the ProviderConfigValidator trait and its implementations.
 
-use crate::provider::config::errors::{
-    ErrorContext, ProviderConfigError, ProviderError, SchemaError, ValidationError,
-};
+use crate::provider::config::errors::ProviderConfigError;
 use std::collections::HashMap;
 
 /// Trait for validating provider configurations.
@@ -18,6 +16,7 @@ pub trait ProviderConfigValidator {
     ///
     /// This method checks that the configuration has the correct structure,
     /// including required fields and field types.
+    #[allow(clippy::result_large_err)]
     fn validate_schema(
         &self,
         config: &HashMap<String, serde_json::Value>,
@@ -27,6 +26,7 @@ pub trait ProviderConfigValidator {
     ///
     /// This method checks that the configuration is valid for the specific
     /// provider it is intended for.
+    #[allow(clippy::result_large_err)]
     fn validate_provider_specific(
         &self,
         config: &HashMap<String, serde_json::Value>,
@@ -36,6 +36,7 @@ pub trait ProviderConfigValidator {
     ///
     /// This method checks that the configuration supports the capabilities
     /// required by the system.
+    #[allow(clippy::result_large_err)]
     fn validate_capabilities(
         &self,
         config: &HashMap<String, serde_json::Value>,
@@ -45,6 +46,7 @@ pub trait ProviderConfigValidator {
     ///
     /// This method checks that any dependencies required by the configuration
     /// are available and compatible.
+    #[allow(clippy::result_large_err)]
     fn validate_dependencies(
         &self,
         config: &HashMap<String, serde_json::Value>,
@@ -54,6 +56,7 @@ pub trait ProviderConfigValidator {
     ///
     /// This method combines all validation methods to perform a complete
     /// validation of the configuration.
+    #[allow(clippy::result_large_err)]
     fn validate(
         &self,
         config: &HashMap<String, serde_json::Value>,
@@ -101,6 +104,7 @@ impl ErrorCollector {
     ///
     /// If there are any errors, returns an error containing all collected errors.
     /// Otherwise, returns Ok(()).
+    #[allow(clippy::result_large_err)]
     pub fn result(&self) -> Result<(), ProviderConfigError> {
         if self.errors.is_empty() {
             Ok(())

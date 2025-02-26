@@ -4,8 +4,7 @@
 //! for provider configurations.
 
 use crate::provider::config::{
-    errors::{ErrorContext, ProviderConfigError, ProviderError, ValidationError},
-    validation::validate_range,
+    errors::{ProviderConfigError, ProviderError, ValidationError},
     validator::ProviderConfigValidator,
 };
 use std::collections::HashMap;
@@ -72,7 +71,7 @@ impl ProviderConfigValidator for EvaluatorValidator {
                         config.get("similarity_threshold")
                     {
                         if let Some(similarity_threshold) = similarity_threshold.as_f64() {
-                            if similarity_threshold < 0.0 || similarity_threshold > 1.0 {
+                            if !(0.0..=1.0).contains(&similarity_threshold) {
                                 return Err(ValidationError::invalid_value(
                                     "similarity_threshold",
                                     "Similarity threshold must be between 0.0 and 1.0",

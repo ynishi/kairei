@@ -2,24 +2,15 @@ use crate::{
     ast,
     config::ProviderConfig,
     eval::expression::Value,
-    provider::config::{
-        CollectingValidator, ErrorCollector, ProviderConfigValidator, TypeCheckerValidator,
-    },
+    provider::config::{CollectingValidator, TypeCheckerValidator},
     type_checker::{visitor::common::PluginVisitor, TypeCheckResult, TypeContext},
 };
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 
+#[derive(Default)]
 pub struct PluginConfigValidator {
     validator: TypeCheckerValidator,
-}
-
-impl Default for PluginConfigValidator {
-    fn default() -> Self {
-        Self {
-            validator: TypeCheckerValidator::default(),
-        }
-    }
 }
 
 impl PluginConfigValidator {
@@ -45,22 +36,14 @@ impl PluginVisitor for PluginConfigValidator {
                     .iter()
                     .map(|(k, v)| match v {
                         ast::Literal::String(s) => (k.clone(), JsonValue::String(s.clone())),
-                        ast::Literal::Number(n) => {
-                            if n.contains('.') {
-                                (
-                                    k.clone(),
-                                    JsonValue::Number(
-                                        serde_json::Number::from_f64(n.parse().unwrap_or(0.0))
-                                            .unwrap(),
-                                    ),
-                                )
+                        ast::Literal::Integer(i) => {
+                            (k.clone(), JsonValue::Number(serde_json::Number::from(*i)))
+                        }
+                        ast::Literal::Float(f) => {
+                            if let Some(num) = serde_json::Number::from_f64(*f) {
+                                (k.clone(), JsonValue::Number(num))
                             } else {
-                                (
-                                    k.clone(),
-                                    JsonValue::Number(serde_json::Number::from(
-                                        n.parse::<i64>().unwrap_or(0),
-                                    )),
-                                )
+                                (k.clone(), JsonValue::String(v.to_string()))
                             }
                         }
                         ast::Literal::Boolean(b) => (k.clone(), JsonValue::Bool(*b)),
@@ -74,12 +57,18 @@ impl PluginVisitor for PluginConfigValidator {
                 // If there are errors, add them to the type context
                 if collector.has_errors() {
                     for error in &collector.errors {
-                        ctx.add_error(error.to_string());
+                        let error_string = error.to_string();
+                        ctx.add_error(crate::type_checker::TypeCheckError::validation_error(
+                            &error_string,
+                        ));
                     }
 
                     // Return the first error
                     if !collector.errors.is_empty() {
-                        return Err(collector.errors[0].to_string().into());
+                        let error_string = collector.errors[0].to_string();
+                        return Err(crate::type_checker::TypeCheckError::validation_error(
+                            &error_string,
+                        ));
                     }
                 }
 

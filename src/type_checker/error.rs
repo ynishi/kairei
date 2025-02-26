@@ -225,6 +225,17 @@ impl TypeCheckError {
         }
     }
 
+    pub fn validation_error(message: &str) -> Self {
+        Self::InvalidThinkBlock {
+            message: message.to_string(),
+            meta: TypeCheckErrorMeta::default()
+                .with_help("Provider configuration validation error")
+                .with_suggestion(
+                    "Check that the provider configuration has valid properties and values",
+                ),
+        }
+    }
+
     pub fn invalid_handler_signature(message: String, location: Location) -> Self {
         Self::InvalidHandlerSignature {
             message: message.clone(),

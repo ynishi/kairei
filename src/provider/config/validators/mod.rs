@@ -11,10 +11,10 @@ pub use type_checker::TypeCheckerValidator;
 
 /// Creates a type checker validator.
 pub fn create_type_checker_validator() -> TypeCheckerValidator {
-    TypeCheckerValidator::default()
+    TypeCheckerValidator
 }
 
 /// Creates an evaluator validator.
 pub fn create_evaluator_validator() -> EvaluatorValidator {
-    EvaluatorValidator::default()
+    EvaluatorValidator
 }
