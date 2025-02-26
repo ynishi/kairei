@@ -7,6 +7,9 @@ use crate::provider::config::{
 use crate::provider::provider::ProviderType;
 use std::collections::HashMap;
 
+// Include validator tests
+mod validator_tests;
+
 #[test]
 fn test_plugin_config_validation() {
     // Test strict mode with known types
