@@ -1,3 +1,72 @@
+//! # KAIREI Preprocessor
+//!
+//! The Preprocessor module serves as a bridge between tokenization and parsing in the KAIREI DSL
+//! processing pipeline. It transforms and normalizes tokens and source code to prepare them for
+//! further processing.
+//!
+//! ## Core Components
+//!
+//! * **Preprocessor Trait**: A generic interface for different preprocessing operations
+//! * **TokenPreprocessor**: Specialization for token stream preprocessing
+//! * **StringPreprocessor**: Specialization for string preprocessing
+//!
+//! ## Position in the Pipeline
+//!
+//! The Preprocessor sits between the Tokenizer and Parser in the KAIREI compilation pipeline:
+//!
+//! ```text
+//! Source Code → Tokenizer → Preprocessor → Parser → Type Checker → Evaluator
+//! ```
+//!
+//! ## Preprocessing Operations
+//!
+//! ### Token Stream Preprocessing
+//!
+//! * **Comment Removal**: Filters out comment tokens
+//! * **Whitespace Normalization**: Removes redundant whitespace tokens
+//! * **Token Simplification**: Converts `TokenSpan` to simple `Token` objects for parsing
+//!
+//! ### String Preprocessing
+//!
+//! * **Comment Removal**: Removes block and line comments from source text
+//! * **Whitespace Normalization**: Normalizes empty lines and trims trailing spaces
+//! * **Text Preparation**: Prepares raw text for specialized processing needs
+//!
+//! ## Purpose and Benefits
+//!
+//! * **Cleaner Input**: Simplifies downstream parsing by removing non-essential elements
+//! * **Normalization**: Creates consistent input format for the parser
+//! * **Error Prevention**: Reduces potential error sources in the parsing stage
+//!
+//! ## Usage Example
+//!
+//! ```rust,no_run
+//! use kairei::preprocessor::{Preprocessor, TokenPreprocessor};
+//! use kairei::tokenizer::token::{Token, TokenSpan, Tokenizer};
+//!
+//! let source_code = r#"
+//!     micro ExampleAgent {
+//!         // This is a comment
+//!         state {
+//!             counter: i64 = 0;
+//!         }
+//!     }
+//! "#;
+//!
+//! // Tokenize the source
+//! let mut tokenizer = Tokenizer::new();
+//! let token_spans = tokenizer.tokenize(source_code).unwrap();
+//!
+//! // Preprocess tokens
+//! let preprocessor = TokenPreprocessor::default();
+//! let tokens: Vec<Token> = preprocessor.process(token_spans);
+//! ```
+//!
+//! ## Integration Points
+//!
+//! * **Tokenizer**: Receives the initial token stream from the tokenization process
+//! * **Parser**: Provides the preprocessed token stream to the parsing phase
+
 use crate::tokenizer::token::{Token, TokenSpan};
 use regex::Regex;
 

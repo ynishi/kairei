@@ -1,3 +1,48 @@
+//! # AST Registry: Coordinating the DSL Processing Pipeline
+//!
+//! The AST Registry module coordinates the complete DSL processing pipeline in KAIREI,
+//! serving as the central hub that connects tokenization, parsing, type checking, and AST management.
+//!
+//! ## Pipeline Coordination
+//!
+//! This module implements the full parsing flow:
+//!
+//! ```text
+//! Source Code → Tokenizer → Preprocessor → Parser → Type Checker → AST
+//! ```
+//!
+//! ### Complete Processing Sequence
+//!
+//! 1. **Source Code Reception**: Raw DSL strings are received for processing
+//! 2. **Tokenization**: The source is tokenized into a stream of lexical elements
+//! 3. **Preprocessing**: Tokens are normalized (comments removed, whitespace filtered)
+//! 4. **Parsing**: Tokens are transformed into an Abstract Syntax Tree (AST)
+//! 5. **Type Checking**: The AST is validated for type correctness
+//! 6. **AST Management**: The resulting AST is stored and made available for evaluation
+//!
+//! ## Core Components
+//!
+//! * **AST Registry**: Central registry for storing and retrieving ASTs
+//! * **Flow Coordination**: Methods for processing DSL and managing the resulting ASTs
+//! * **Error Handling**: Comprehensive error management across the pipeline
+//!
+//! ## AST Management
+//!
+//! Beyond the initial parsing process, the AST Registry provides:
+//!
+//! * **AST Caching**: Storing processed ASTs for reuse
+//! * **Agent AST Registry**: Registering and retrieving agent definitions
+//! * **Built-in Agent Creation**: Generation of system-defined agents
+//!
+//! ## Integration Points
+//!
+//! * **Tokenizer**: First stage of processing for raw source code
+//! * **Preprocessor**: Normalization and simplification of the token stream
+//! * **Parser**: Construction of the AST from tokens
+//! * **Type Checker**: Validation of the AST's type correctness
+//! * **System**: High-level interface for DSL processing
+//! * **Runtime**: Execution environment for the validated AST
+
 use std::{collections::HashMap, sync::Arc};
 
 use dashmap::DashMap;
@@ -14,18 +59,70 @@ use crate::{
     MicroAgentDef, RequestHandler, RequestType, StateAccessPath, StateDef, StateVarDef, Statement,
     TypeInfo, WorldDef,
 };
+
+/// Central registry for managing Abstract Syntax Trees (ASTs) in KAIREI
+///
+/// The AstRegistry coordinates the end-to-end processing pipeline for KAIREI DSL,
+/// from raw source code to a fully validated Abstract Syntax Tree.
 #[derive(Debug, Clone, Default)]
 pub struct AstRegistry {
     asts: Arc<DashMap<String, Arc<MicroAgentDef>>>,
 }
 
 impl AstRegistry {
+    /// Transforms a DSL string into an Abstract Syntax Tree (AST) representation.
+    ///
+    /// This method implements the complete parsing pipeline for KAIREI DSL:
+    /// 1. **Tokenization**: Converts raw text into a sequence of tokens
+    /// 2. **Preprocessing**: Normalizes and transforms tokens for consistent parsing
+    /// 3. **Parsing**: Builds a hierarchical AST structure from the token stream
+    /// 4. **Type Checking**: Validates type correctness across the entire AST
+    ///
+    /// The parsing flow is:
+    /// ```text
+    /// DSL String → Tokenizer → Preprocessor → Parser → Type Checker → AST Root
+    /// ```
+    ///
+    /// # Arguments
+    /// * `dsl` - A string slice containing the KAIREI DSL code to parse
+    ///
+    /// # Returns
+    /// * `ASTResult<ast::Root>` - On success, returns the parsed AST root
+    ///   containing world and agent definitions
+    ///
+    /// # Errors
+    /// * `ASTError::ParseError` - If the DSL cannot be parsed correctly
+    /// * `ASTError::TypeError` - If type checking fails
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// use kairei::ast_registry::AstRegistry;
+    ///
+    /// let registry = AstRegistry::default();
+    /// let dsl = r#"
+    ///     micro ExampleAgent {
+    ///         state {
+    ///             counter: i64 = 0;
+    ///         }
+    ///     }
+    /// "#;
+    ///
+    /// let ast = registry.create_ast_from_dsl(dsl).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn create_ast_from_dsl(&self, dsl: &str) -> ASTResult<ast::Root> {
+        // 1. Tokenization: Convert DSL string into tokens
         let mut tokenizer = tokenizer::token::Tokenizer::new();
         let tokens = tokenizer.tokenize(dsl).unwrap();
+
+        // 2. Preprocessing: Apply token transformations
         let preprocessor = preprocessor::TokenPreprocessor::default();
         let tokens: Vec<Token> = preprocessor.process(tokens);
         debug!("{:?}", tokens);
+
+        // 3. Parsing: Convert tokens into AST structure
         let (pos, mut root) = analyzer::parsers::world::parse_root()
             .parse(tokens.as_slice(), 0)
             .map_err(|e: analyzer::ParseError| ASTError::ParseError {
@@ -33,6 +130,8 @@ impl AstRegistry {
                 target: "root".to_string(),
             })?;
         debug!("{:?}", root);
+
+        // Verify that all tokens were consumed
         if pos != tokens.len() {
             warn!(
                 "Failed to parse DSL: {:?}, {}, {}",
@@ -45,8 +144,10 @@ impl AstRegistry {
                 target: "root".to_string(),
             });
         }
-        // type check
+
+        // 4. Type Checking: Validate type correctness in the AST
         run_type_checker(&mut root).map_err(ASTError::from)?;
+
         Ok(root)
     }
     pub async fn register_agent_ast(
