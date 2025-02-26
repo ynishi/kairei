@@ -148,7 +148,7 @@ impl ErrorContext {
 }
 
 /// Errors related to schema validation
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum SchemaError {
     /// A required field is missing
     #[error("Missing required field{}", format_location(&.context.location))]
@@ -212,7 +212,7 @@ impl SchemaError {
 }
 
 /// Errors related to value validation
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum ValidationError {
     /// A field has an invalid value
     #[error("Invalid value{}: {message}", format_location(&.context.location))]
@@ -272,7 +272,7 @@ impl ValidationError {
 }
 
 /// Errors related to provider configuration
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum ProviderError {
     /// Error during provider initialization
     #[error("Provider initialization error{}: {message}", format_location(&.context.location))]
@@ -336,19 +336,19 @@ impl ProviderError {
 /// This is the main error type for provider configuration validation. It includes
 /// schema errors, validation errors, provider-specific errors, and a Legacy variant
 /// for backward compatibility with the existing ConfigError type.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum ProviderConfigError {
     /// Schema validation errors
     #[error("Schema error: {0}")]
-    Schema(#[from] SchemaError),
+    Schema(Box<SchemaError>),
 
     /// Value validation errors
     #[error("Validation error: {0}")]
-    Validation(#[from] ValidationError),
+    Validation(Box<ValidationError>),
 
     /// Provider-specific errors
     #[error("Provider error: {0}")]
-    Provider(#[from] ProviderError),
+    Provider(Box<ProviderError>),
 
     /// Generic errors
     #[error("Configuration error: {0}")]
@@ -356,7 +356,31 @@ pub enum ProviderConfigError {
 
     /// Legacy ConfigError for backward compatibility
     #[error("{0}")]
-    Legacy(#[from] ConfigError),
+    Legacy(ConfigError),
+}
+
+impl From<SchemaError> for ProviderConfigError {
+    fn from(error: SchemaError) -> Self {
+        Self::Schema(Box::new(error))
+    }
+}
+
+impl From<ValidationError> for ProviderConfigError {
+    fn from(error: ValidationError) -> Self {
+        Self::Validation(Box::new(error))
+    }
+}
+
+impl From<ProviderError> for ProviderConfigError {
+    fn from(error: ProviderError) -> Self {
+        Self::Provider(Box::new(error))
+    }
+}
+
+impl From<ConfigError> for ProviderConfigError {
+    fn from(error: ConfigError) -> Self {
+        Self::Legacy(error)
+    }
 }
 
 impl ProviderConfigError {
