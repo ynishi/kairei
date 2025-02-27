@@ -5,7 +5,7 @@
 
 use super::{ErrorFormatter, FormatOptions};
 use crate::provider::config::errors::{
-    ProviderConfigError, ProviderError, SchemaError, ValidationError,
+    ErrorSeverity, ProviderConfigError, ProviderError, SchemaError, ValidationError,
 };
 use crate::provider::config::suggestions::{DefaultSuggestionGenerator, SuggestionGenerator};
 use std::fmt::Write;
@@ -53,6 +53,25 @@ impl ErrorFormatter for DefaultErrorFormatter {
             }
         }
 
+        // Add severity level
+        let severity = match error {
+            SchemaError::MissingField { context } => &context.severity,
+            SchemaError::InvalidType { context, .. } => &context.severity,
+            SchemaError::InvalidStructure { context, .. } => &context.severity,
+        };
+
+        if options.use_color {
+            let color = match severity {
+                ErrorSeverity::Critical => "\x1b[31;1m", // Bold red
+                ErrorSeverity::Error => "\x1b[31m",      // Red
+                ErrorSeverity::Warning => "\x1b[33m",    // Yellow
+                ErrorSeverity::Info => "\x1b[36m",       // Cyan
+            };
+            write!(output, "{}[{}]\x1b[0m ", color, severity).unwrap();
+        } else {
+            write!(output, "[{}] ", severity).unwrap();
+        }
+
         // Add error message
         if options.use_color {
             write!(output, "\x1b[31mSchema Error:\x1b[0m {}", error).unwrap();
@@ -82,6 +101,21 @@ impl ErrorFormatter for DefaultErrorFormatter {
             }
         }
 
+        // Add additional context if available
+        let additional_context = match error {
+            SchemaError::MissingField { context } => &context.additional_context,
+            SchemaError::InvalidType { context, .. } => &context.additional_context,
+            SchemaError::InvalidStructure { context, .. } => &context.additional_context,
+        };
+
+        if let Some(context) = additional_context {
+            if options.use_color {
+                write!(output, "\n\x1b[34mContext:\x1b[0m {}", context).unwrap();
+            } else {
+                write!(output, "\nContext: {}", context).unwrap();
+            }
+        }
+
         output
     }
 
@@ -101,6 +135,25 @@ impl ErrorFormatter for DefaultErrorFormatter {
             } else {
                 write!(output, "[{}] ", error_code).unwrap();
             }
+        }
+
+        // Add severity level
+        let severity = match error {
+            ValidationError::InvalidValue { context, .. } => &context.severity,
+            ValidationError::ConstraintViolation { context, .. } => &context.severity,
+            ValidationError::DependencyError { context, .. } => &context.severity,
+        };
+
+        if options.use_color {
+            let color = match severity {
+                ErrorSeverity::Critical => "\x1b[31;1m", // Bold red
+                ErrorSeverity::Error => "\x1b[31m",      // Red
+                ErrorSeverity::Warning => "\x1b[33m",    // Yellow
+                ErrorSeverity::Info => "\x1b[36m",       // Cyan
+            };
+            write!(output, "{}[{}]\x1b[0m ", color, severity).unwrap();
+        } else {
+            write!(output, "[{}] ", severity).unwrap();
         }
 
         // Add error message
@@ -132,6 +185,21 @@ impl ErrorFormatter for DefaultErrorFormatter {
             }
         }
 
+        // Add additional context if available
+        let additional_context = match error {
+            ValidationError::InvalidValue { context, .. } => &context.additional_context,
+            ValidationError::ConstraintViolation { context, .. } => &context.additional_context,
+            ValidationError::DependencyError { context, .. } => &context.additional_context,
+        };
+
+        if let Some(context) = additional_context {
+            if options.use_color {
+                write!(output, "\n\x1b[34mContext:\x1b[0m {}", context).unwrap();
+            } else {
+                write!(output, "\nContext: {}", context).unwrap();
+            }
+        }
+
         output
     }
 
@@ -151,6 +219,25 @@ impl ErrorFormatter for DefaultErrorFormatter {
             } else {
                 write!(output, "[{}] ", error_code).unwrap();
             }
+        }
+
+        // Add severity level
+        let severity = match error {
+            ProviderError::Initialization { context, .. } => &context.severity,
+            ProviderError::Capability { context, .. } => &context.severity,
+            ProviderError::Configuration { context, .. } => &context.severity,
+        };
+
+        if options.use_color {
+            let color = match severity {
+                ErrorSeverity::Critical => "\x1b[31;1m", // Bold red
+                ErrorSeverity::Error => "\x1b[31m",      // Red
+                ErrorSeverity::Warning => "\x1b[33m",    // Yellow
+                ErrorSeverity::Info => "\x1b[36m",       // Cyan
+            };
+            write!(output, "{}[{}]\x1b[0m ", color, severity).unwrap();
+        } else {
+            write!(output, "[{}] ", severity).unwrap();
         }
 
         // Add error message
@@ -179,6 +266,21 @@ impl ErrorFormatter for DefaultErrorFormatter {
                 } else {
                     write!(output, "\nSuggestion: {}", suggestion).unwrap();
                 }
+            }
+        }
+
+        // Add additional context if available
+        let additional_context = match error {
+            ProviderError::Initialization { context, .. } => &context.additional_context,
+            ProviderError::Capability { context, .. } => &context.additional_context,
+            ProviderError::Configuration { context, .. } => &context.additional_context,
+        };
+
+        if let Some(context) = additional_context {
+            if options.use_color {
+                write!(output, "\n\x1b[34mContext:\x1b[0m {}", context).unwrap();
+            } else {
+                write!(output, "\nContext: {}", context).unwrap();
             }
         }
 
