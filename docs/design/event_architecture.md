@@ -242,7 +242,7 @@ tokio::spawn(async move {
 ### Making a Request
 
 ```rust
-let request = Event::request_buidler()
+let request = Event::request_builder()
     .request_type("get_user_data")
     .requester("client_agent")
     .responder("data_service")

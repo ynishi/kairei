@@ -71,7 +71,11 @@ impl RequestManager {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use kairei::event_bus::EventBus;
+    /// use kairei::request_manager::RequestManager;
+    /// use std::time::Duration;
     /// let event_bus = Arc::new(EventBus::new(100));
     /// let request_manager = RequestManager::new(
     ///     event_bus.clone(),
@@ -111,15 +115,22 @@ impl RequestManager {
     ///
     /// # Example
     ///
-    /// ```rust
-    /// let request = Event::request_buidler()
-    ///     .request_type("get_data")
-    ///     .requester("client")
-    ///     .responder("data_service")
-    ///     .request_id(uuid::Uuid::new_v4().to_string())
-    ///     .build()
-    ///     .unwrap();
-    ///
+    /// ```rust,no_run
+    /// # use kairei::event_bus::{EventBus, Event};
+    /// # use kairei::event_registry::EventType;
+    /// # use kairei::event::request_manager::{RequestManager, RequestError};
+    /// # use std::sync::Arc;
+    /// # use std::time::Duration;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let event_bus = Arc::new(EventBus::new(10));
+    /// # let request_manager = Arc::new(RequestManager::new(event_bus.clone(), Duration::from_secs(5)));
+    /// # let request = Event::request_builder()
+    /// #     .request_type("get_data")
+    /// #     .requester("client")
+    /// #     .responder("data_service")
+    /// #     .request_id("test-id")
+    /// #     .build()?;
+    /// #
     /// match request_manager.request(&request).await {
     ///     Ok(response) => {
     ///         println!("Got response: {:?}", response);
@@ -131,6 +142,8 @@ impl RequestManager {
     ///         println!("Request failed: {}", e);
     ///     }
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     #[instrument(skip(self))]
     pub async fn request(&self, request: &Event) -> RequestResult<Event> {
@@ -308,7 +321,7 @@ mod tests {
         let response = event_bus::Value::String(format!("{}response", prefix));
 
         (
-            Event::request_buidler()
+            Event::request_builder()
                 .request_type(&request_type)
                 .requester(&requester_name)
                 .responder(&target_name)

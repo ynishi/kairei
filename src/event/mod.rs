@@ -107,11 +107,11 @@
 //! ));
 //!
 //! // Create request
-//! let request = Event::request_buidler()
+//! let request = Event::request_builder()
 //!     .request_type("get_user_info")
 //!     .requester("client")
 //!     .responder("user_service")
-//!     .request_id("request-123".to_string())
+//!     .request_id("request-123")
 //!     .parameter("user_id", &Value::String("12345".to_string()))
 //!     .build()?;
 //!
