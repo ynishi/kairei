@@ -1,6 +1,7 @@
 //! Tests for the provider configuration validation framework.
 
 use crate::provider::config::{
+    errors::{ErrorSeverity, ProviderConfigError, ValidationError},
     CollectingValidator, EvaluatorValidator, ProviderConfigValidator, TypeCheckerValidator,
 };
 use serde_json::json;
@@ -109,4 +110,64 @@ fn test_validator_integration() {
     // Type checker should pass but evaluator should fail
     assert!(type_checker.validate(&config).is_ok());
     assert!(evaluator.validate_provider_specific(&config).is_err());
+}
+
+#[test]
+fn test_collecting_validator_with_warnings() {
+    let validator = TypeCheckerValidator::default();
+
+    // Config with warnings but no errors
+    let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
+        "type": "memory",
+        "ttl": 3600,
+        "legacy_mode": true // This should trigger a warning
+    }))
+    .unwrap();
+
+    let collector = validator.validate_collecting(&config);
+
+    assert!(!collector.has_errors());
+    assert!(collector.has_warnings());
+    assert!(!collector.warnings.is_empty());
+
+    // Check that the warning is about the legacy_mode field
+    let warning = &collector.warnings[0];
+    match warning {
+        ProviderConfigError::Validation(ValidationError::InvalidValue { context, .. }) => {
+            assert_eq!(context.location.field, Some("legacy_mode".to_string()));
+            assert_eq!(context.severity, ErrorSeverity::Warning);
+        }
+        _ => panic!("Expected ValidationError::InvalidValue"),
+    }
+}
+
+#[test]
+fn test_evaluator_validator_warnings() {
+    let validator = EvaluatorValidator::default();
+
+    // Config with warnings but no errors
+    let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
+        "type": "memory",
+        "ttl": 30, // This should trigger a warning (too low)
+        "capabilities": {
+            "memory": true
+        }
+    }))
+    .unwrap();
+
+    let collector = validator.validate_collecting(&config);
+
+    assert!(!collector.has_errors());
+    assert!(collector.has_warnings());
+    assert!(!collector.warnings.is_empty());
+
+    // Check that the warning is about the ttl field
+    let warning = &collector.warnings[0];
+    match warning {
+        ProviderConfigError::Validation(ValidationError::InvalidValue { context, .. }) => {
+            assert_eq!(context.location.field, Some("ttl".to_string()));
+            assert_eq!(context.severity, ErrorSeverity::Warning);
+        }
+        _ => panic!("Expected ValidationError::InvalidValue"),
+    }
 }
