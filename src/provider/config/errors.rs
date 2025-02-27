@@ -160,7 +160,7 @@ impl ErrorContext {
 #[derive(Debug, Error, Clone)]
 pub enum SchemaError {
     /// A required field is missing
-    #[error("Missing required field{}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
+    #[error("Missing required field{}{}", format_location(&context.location), format_documentation(&context.documentation))]
     MissingField {
         /// Context for the error
         #[source]
@@ -168,7 +168,7 @@ pub enum SchemaError {
     },
 
     /// A field has an invalid type
-    #[error("Invalid type{}: expected {expected}, found {actual}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
+    #[error("Invalid type{}: expected {expected}, found {actual}{}", format_location(&context.location), format_documentation(&context.documentation))]
     InvalidType {
         /// Expected type
         expected: String,
@@ -180,7 +180,7 @@ pub enum SchemaError {
     },
 
     /// The structure of the configuration is invalid
-    #[error("Invalid structure{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
+    #[error("Invalid structure{}: {message}{}", format_location(&context.location), format_documentation(&context.documentation))]
     InvalidStructure {
         /// Error message
         message: String,
@@ -240,7 +240,7 @@ impl SchemaError {
 #[derive(Debug, Error, Clone)]
 pub enum ValidationError {
     /// A field has an invalid value
-    #[error("Invalid value{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
+    #[error("Invalid value{}: {message}{}", format_location(&context.location), format_documentation(&context.documentation))]
     InvalidValue {
         /// Error message
         message: String,
@@ -250,7 +250,7 @@ pub enum ValidationError {
     },
 
     /// A constraint was violated
-    #[error("Constraint violation{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
+    #[error("Constraint violation{}: {message}{}", format_location(&context.location), format_documentation(&context.documentation))]
     ConstraintViolation {
         /// Error message
         message: String,
@@ -260,7 +260,7 @@ pub enum ValidationError {
     },
 
     /// A dependency was not satisfied
-    #[error("Dependency error{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
+    #[error("Dependency error{}: {message}{}", format_location(&context.location), format_documentation(&context.documentation))]
     DependencyError {
         /// Error message
         message: String,
@@ -319,7 +319,7 @@ impl ValidationError {
 #[derive(Debug, Error, Clone)]
 pub enum ProviderError {
     /// Error during provider initialization
-    #[error("Provider initialization error{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
+    #[error("Provider initialization error{}: {message}{}", format_location(&context.location), format_documentation(&context.documentation))]
     Initialization {
         /// Error message
         message: String,
@@ -329,7 +329,7 @@ pub enum ProviderError {
     },
 
     /// Error related to provider capabilities
-    #[error("Provider capability error{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
+    #[error("Provider capability error{}: {message}{}", format_location(&context.location), format_documentation(&context.documentation))]
     Capability {
         /// Error message
         message: String,
@@ -339,7 +339,7 @@ pub enum ProviderError {
     },
 
     /// Error in provider configuration
-    #[error("Provider configuration error{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
+    #[error("Provider configuration error{}: {message}{}", format_location(&context.location), format_documentation(&context.documentation))]
     Configuration {
         /// Error message
         message: String,

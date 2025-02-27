@@ -4,7 +4,7 @@
 //! for provider configurations.
 
 use crate::provider::config::{
-    errors::{ProviderConfigError, SchemaError},
+    errors::{ErrorContext, ErrorSeverity, ProviderConfigError, SchemaError, ValidationError},
     validation::{check_property_type, check_required_properties},
     validator::ProviderConfigValidator,
 };
@@ -93,6 +93,84 @@ impl ProviderConfigValidator for TypeCheckerValidator {
     ) -> Result<(), ProviderConfigError> {
         // Type checker doesn't perform dependency validation
         Ok(())
+    }
+
+    fn validate_schema_warnings(
+        &self,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Vec<ProviderConfigError> {
+        let mut warnings = Vec::new();
+
+        // Check for deprecated fields based on provider type
+        if let Some(serde_json::Value::String(plugin_type)) = config.get("type") {
+            match plugin_type.as_str() {
+                "memory" => {
+                    // Check for deprecated fields in memory configuration
+                    if config.contains_key("legacy_mode") {
+                        let mut context = ErrorContext::new_with_field("legacy_mode");
+                        context = context.with_severity(ErrorSeverity::Warning);
+                        context = context.with_suggestion("The 'legacy_mode' field is deprecated and will be removed in a future version.");
+                        warnings.push(
+                            ValidationError::InvalidValue {
+                                message: "Deprecated field 'legacy_mode' is used".to_string(),
+                                context,
+                            }
+                            .into(),
+                        );
+                    }
+                }
+                "rag" => {
+                    // Check for deprecated fields in RAG configuration
+                    if config.contains_key("use_legacy_chunking") {
+                        let mut context = ErrorContext::new_with_field("use_legacy_chunking");
+                        context = context.with_severity(ErrorSeverity::Warning);
+                        context = context.with_suggestion("The 'use_legacy_chunking' field is deprecated. Use 'chunking_strategy' instead.");
+                        warnings.push(
+                            ValidationError::InvalidValue {
+                                message: "Deprecated field 'use_legacy_chunking' is used"
+                                    .to_string(),
+                                context,
+                            }
+                            .into(),
+                        );
+                    }
+
+                    // Check for deprecated similarity configuration
+                    if config.contains_key("similarity_method")
+                        && !config.contains_key("similarity_strategy")
+                    {
+                        let mut context = ErrorContext::new_with_field("similarity_method");
+                        context = context.with_severity(ErrorSeverity::Warning);
+                        context = context.with_suggestion("The 'similarity_method' field is deprecated. Use 'similarity_strategy' instead.");
+                        warnings.push(
+                            ValidationError::InvalidValue {
+                                message: "Deprecated field 'similarity_method' is used".to_string(),
+                                context,
+                            }
+                            .into(),
+                        );
+                    }
+                }
+                "search" => {
+                    // Check for deprecated fields in search configuration
+                    if config.contains_key("use_fuzzy") {
+                        let mut context = ErrorContext::new_with_field("use_fuzzy");
+                        context = context.with_severity(ErrorSeverity::Warning);
+                        context = context.with_suggestion("The 'use_fuzzy' field is deprecated. Use 'search_strategy' with value 'fuzzy' instead.");
+                        warnings.push(
+                            ValidationError::InvalidValue {
+                                message: "Deprecated field 'use_fuzzy' is used".to_string(),
+                                context,
+                            }
+                            .into(),
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        warnings
     }
 }
 
