@@ -104,6 +104,8 @@ pub struct ErrorContext {
     pub suggestion: Option<String>,
     /// Error code for reference
     pub error_code: Option<String>,
+    /// Additional context information
+    pub additional_context: Option<String>,
 }
 
 impl std::fmt::Display for ErrorContext {
@@ -144,6 +146,12 @@ impl ErrorContext {
     /// Sets the error code
     pub fn with_error_code(mut self, error_code: impl Into<String>) -> Self {
         self.error_code = Some(error_code.into());
+        self
+    }
+
+    /// Sets additional context information
+    pub fn with_additional_context(mut self, context: impl Into<String>) -> Self {
+        self.additional_context = Some(context.into());
         self
     }
 }
@@ -189,6 +197,8 @@ impl SchemaError {
         if let Some(doc_ref) = doc_references::schema::get_doc_reference("missing_field") {
             context = context.with_documentation(doc_ref);
         }
+        // Set severity level to Error
+        context = context.with_severity(ErrorSeverity::Error);
         Self::MissingField { context }
     }
 
@@ -202,6 +212,8 @@ impl SchemaError {
         if let Some(doc_ref) = doc_references::schema::get_doc_reference("invalid_type") {
             context = context.with_documentation(doc_ref);
         }
+        // Set severity level to Error
+        context = context.with_severity(ErrorSeverity::Error);
         Self::InvalidType {
             expected: expected.into(),
             actual: actual.into(),
@@ -215,6 +227,8 @@ impl SchemaError {
         if let Some(doc_ref) = doc_references::schema::get_doc_reference("invalid_structure") {
             context = context.with_documentation(doc_ref);
         }
+        // Set severity level to Error
+        context = context.with_severity(ErrorSeverity::Error);
         Self::InvalidStructure {
             message: message.into(),
             context,
@@ -263,6 +277,8 @@ impl ValidationError {
         if let Some(doc_ref) = doc_references::validation::get_doc_reference("invalid_value") {
             context = context.with_documentation(doc_ref);
         }
+        // Set severity level to Error
+        context = context.with_severity(ErrorSeverity::Error);
         Self::InvalidValue {
             message: message.into(),
             context,
@@ -276,6 +292,8 @@ impl ValidationError {
         {
             context = context.with_documentation(doc_ref);
         }
+        // Set severity level to Error
+        context = context.with_severity(ErrorSeverity::Error);
         Self::ConstraintViolation {
             message: message.into(),
             context,
@@ -288,6 +306,8 @@ impl ValidationError {
         if let Some(doc_ref) = doc_references::validation::get_doc_reference("dependency_error") {
             context = context.with_documentation(doc_ref);
         }
+        // Set severity level to Error
+        context = context.with_severity(ErrorSeverity::Error);
         Self::DependencyError {
             message: message.into(),
             context,
@@ -336,6 +356,8 @@ impl ProviderError {
         if let Some(doc_ref) = doc_references::provider::get_doc_reference("initialization") {
             context = context.with_documentation(doc_ref);
         }
+        // Set severity level to Critical
+        context = context.with_severity(ErrorSeverity::Critical);
         Self::Initialization {
             message: message.into(),
             context,
@@ -348,6 +370,8 @@ impl ProviderError {
         if let Some(doc_ref) = doc_references::provider::get_doc_reference("capability") {
             context = context.with_documentation(doc_ref);
         }
+        // Set severity level to Error
+        context = context.with_severity(ErrorSeverity::Error);
         Self::Capability {
             message: message.into(),
             context,
@@ -360,6 +384,8 @@ impl ProviderError {
         if let Some(doc_ref) = doc_references::provider::get_doc_reference("configuration") {
             context = context.with_documentation(doc_ref);
         }
+        // Set severity level to Error
+        context = context.with_severity(ErrorSeverity::Error);
         Self::Configuration {
             message: message.into(),
             context,
