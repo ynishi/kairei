@@ -1,3 +1,30 @@
+//! # Event Bus Implementation
+//!
+//! The EventBus is the central messaging hub for KAIREI's event-driven architecture.
+//! It provides a broadcast-based publish-subscribe mechanism for components to 
+//! communicate without direct dependencies.
+//!
+//! ## Features
+//!
+//! - **Broadcast Channel**: Efficiently delivers events to multiple subscribers
+//! - **Non-blocking Communication**: Asynchronous event publishing and handling
+//! - **Event Type Safety**: Ensures proper event type handling
+//! - **Error Management**: Handles error events in a separate channel
+//!
+//! ## Design Decisions
+//!
+//! The implementation uses Tokio's broadcast channel rather than MPSC channels to:
+//! 
+//! 1. Allow multiple subscribers to receive the same event
+//! 2. Efficiently handle backpressure through the channel capacity
+//! 3. Support non-blocking publish operations
+//!
+//! ## Performance Considerations
+//!
+//! - The EventBus capacity should be sized appropriately for the expected message volume
+//! - Subscribers should process events quickly to avoid lagging behind
+//! - For high-volume events like ticks, consider filtering at the receiver level
+
 use std::{collections::HashMap, time::Duration};
 
 use crate::{eval::expression, event_registry::EventType, RetryDelay};
@@ -6,9 +33,35 @@ use thiserror::Error;
 use tokio::sync::broadcast;
 use tracing::{debug, trace};
 
+/// # Event
+///
+/// Represents a discrete message in the event system containing an event type and parameters.
+/// Events are the fundamental unit of communication between components in KAIREI's
+/// event-driven architecture.
+///
+/// ## Structure
+///
+/// * `event_type`: Specifies the type and category of the event
+/// * `parameters`: Contains the event payload as key-value pairs
+///
+/// ## Example
+///
+/// ```rust
+/// let event = Event {
+///     event_type: EventType::Custom("data_updated".to_string()),
+///     parameters: {
+///         let mut params = HashMap::new();
+///         params.insert("entity_id".to_string(), Value::String("user_123".to_string()));
+///         params.insert("field".to_string(), Value::String("email".to_string()));
+///         params
+///     },
+/// };
+/// ```
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Event {
+    /// The type of event, which determines how it's routed and processed
     pub event_type: EventType,
+    /// Event payload data as key-value pairs 
     pub parameters: HashMap<String, Value>,
 }
 
@@ -423,19 +476,50 @@ impl From<LastStatus> for Event {
     }
 }
 
+/// # EventBus
+///
+/// Central message hub for the event-driven architecture. The EventBus provides
+/// a broadcast-based publish-subscribe mechanism for distributing events to
+/// multiple receivers.
+///
+/// It maintains two separate channels:
+/// 1. A regular event channel for normal system events
+/// 2. An error event channel for system errors and exceptions
+///
+/// ## Capacity and Backpressure
+///
+/// The EventBus manages backpressure through its channel capacity. If the number
+/// of unprocessed events exceeds this capacity, publishers may block or receive errors.
 pub struct EventBus {
+    /// Broadcast sender for regular events
     event_sender: broadcast::Sender<Event>,
+    /// Broadcast sender for error events
     error_sender: broadcast::Sender<ErrorEvent>,
+    /// Maximum number of events that can be buffered
     capacity: usize,
-    _internal_receiver: broadcast::Receiver<Event>, // EventBusをアクティブに保つための内部Receiver
+    /// Internal receiver to keep the broadcast channel active
+    _internal_receiver: broadcast::Receiver<Event>,
+    /// Internal receiver to keep the error channel active
     _internal_error_receiver: broadcast::Receiver<ErrorEvent>,
 }
 
 impl EventBus {
-    /// Create a new EventBus with the given capacity.
-    /// The capacity is the maximum number of events that can be buffered.
-    /// EventBus will initiate a broadcast channel with the given capacity.
-    /// The internal receiver is used to keep the EventBus active.
+    /// Creates a new EventBus with the specified buffer capacity.
+    ///
+    /// The capacity determines how many events can be buffered before publishers
+    /// start to block or receive errors. Choose a capacity based on expected
+    /// event volume and processing speed.
+    ///
+    /// # Parameters
+    ///
+    /// * `capacity` - Maximum number of unprocessed events that can be buffered
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Create an EventBus with a capacity of 100 events
+    /// let event_bus = EventBus::new(100);
+    /// ```
     pub fn new(capacity: usize) -> Self {
         let (event_sender, event_receiver) = broadcast::channel(capacity);
         let (error_sender, error_reciever) = broadcast::channel(capacity);
@@ -448,12 +532,60 @@ impl EventBus {
         }
     }
 
+    /// Subscribes to both regular and error events.
+    ///
+    /// Returns a tuple containing an EventReceiver for regular events and an
+    /// ErrorReceiver for error events.
+    ///
+    /// # Returns
+    ///
+    /// * `(EventReceiver, ErrorReceiver)` - Receivers for regular and error events
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let event_bus = EventBus::new(100);
+    /// let (event_rx, error_rx) = event_bus.subscribe();
+    ///
+    /// // Handle regular events
+    /// tokio::spawn(async move {
+    ///     while let Ok(event) = event_rx.recv().await {
+    ///         // Process event
+    ///     }
+    /// });
+    /// ```
     pub fn subscribe(&self) -> (EventReceiver, ErrorReceiver) {
         let event_rx = self.event_sender.subscribe();
         let error_rx = self.error_sender.subscribe();
         (EventReceiver::new(event_rx), ErrorReceiver::new(error_rx))
     }
 
+    /// Publishes an event to all subscribers asynchronously.
+    ///
+    /// This method is used for regular event distribution. If there are no subscribers
+    /// or the event buffer is full, an error will be returned.
+    ///
+    /// # Parameters
+    ///
+    /// * `event` - The event to publish
+    ///
+    /// # Returns
+    ///
+    /// * `EventResult<()>` - Success or error result
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the event could not be sent, typically because
+    /// the channel is full or closed.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let event_bus = EventBus::new(100);
+    /// let event = Event::new(&EventType::Custom("user_action".to_string()), &HashMap::new());
+    /// 
+    /// event_bus.publish(event).await.expect("Failed to publish event");
+    /// ```
     pub async fn publish(&self, event: Event) -> EventResult<()> {
         debug_event("Publishing", &event);
         self.event_sender
@@ -464,6 +596,18 @@ impl EventBus {
         Ok(())
     }
 
+    /// Publishes an event synchronously without awaiting.
+    ///
+    /// This method is useful when you need to publish an event from a synchronous
+    /// context without using .await. It has the same behavior as the async version.
+    ///
+    /// # Parameters
+    ///
+    /// * `event` - The event to publish
+    ///
+    /// # Returns
+    ///
+    /// * `EventResult<()>` - Success or error result
     pub fn sync_publish(&self, event: Event) -> EventResult<()> {
         debug_event("Sync Publishing", &event);
         self.event_sender
@@ -474,6 +618,18 @@ impl EventBus {
         Ok(())
     }
 
+    /// Publishes an error event to all error subscribers.
+    ///
+    /// Error events are separated from regular events to allow specialized
+    /// handling and monitoring of system errors.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - The error event to publish
+    ///
+    /// # Returns
+    ///
+    /// * `EventResult<()>` - Success or error result
     pub async fn publish_error(&self, error: ErrorEvent) -> EventResult<()> {
         self.error_sender
             .send(error)
