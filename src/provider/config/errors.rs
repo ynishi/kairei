@@ -6,6 +6,7 @@
 //! error metadata.
 
 use crate::provider::config::base::ConfigError;
+use crate::provider::config::doc_references;
 use thiserror::Error;
 
 /// Represents the location in source code where an error occurred
@@ -151,7 +152,7 @@ impl ErrorContext {
 #[derive(Debug, Error, Clone)]
 pub enum SchemaError {
     /// A required field is missing
-    #[error("Missing required field{}", format_location(&.context.location))]
+    #[error("Missing required field{}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
     MissingField {
         /// Context for the error
         #[source]
@@ -159,7 +160,7 @@ pub enum SchemaError {
     },
 
     /// A field has an invalid type
-    #[error("Invalid type{}: expected {expected}, found {actual}", format_location(&.context.location))]
+    #[error("Invalid type{}: expected {expected}, found {actual}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
     InvalidType {
         /// Expected type
         expected: String,
@@ -171,7 +172,7 @@ pub enum SchemaError {
     },
 
     /// The structure of the configuration is invalid
-    #[error("Invalid structure{}: {message}", format_location(&.context.location))]
+    #[error("Invalid structure{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
     InvalidStructure {
         /// Error message
         message: String,
@@ -184,9 +185,11 @@ pub enum SchemaError {
 impl SchemaError {
     /// Creates a new MissingField error
     pub fn missing_field(field: impl Into<String>) -> Self {
-        Self::MissingField {
-            context: ErrorContext::new_with_field(field),
+        let mut context = ErrorContext::new_with_field(field);
+        if let Some(doc_ref) = doc_references::schema::get_doc_reference("missing_field") {
+            context = context.with_documentation(doc_ref);
         }
+        Self::MissingField { context }
     }
 
     /// Creates a new InvalidType error
@@ -195,18 +198,26 @@ impl SchemaError {
         expected: impl Into<String>,
         actual: impl Into<String>,
     ) -> Self {
+        let mut context = ErrorContext::new_with_field(field);
+        if let Some(doc_ref) = doc_references::schema::get_doc_reference("invalid_type") {
+            context = context.with_documentation(doc_ref);
+        }
         Self::InvalidType {
             expected: expected.into(),
             actual: actual.into(),
-            context: ErrorContext::new_with_field(field),
+            context,
         }
     }
 
     /// Creates a new InvalidStructure error
     pub fn invalid_structure(field: impl Into<String>, message: impl Into<String>) -> Self {
+        let mut context = ErrorContext::new_with_field(field);
+        if let Some(doc_ref) = doc_references::schema::get_doc_reference("invalid_structure") {
+            context = context.with_documentation(doc_ref);
+        }
         Self::InvalidStructure {
             message: message.into(),
-            context: ErrorContext::new_with_field(field),
+            context,
         }
     }
 }
@@ -215,7 +226,7 @@ impl SchemaError {
 #[derive(Debug, Error, Clone)]
 pub enum ValidationError {
     /// A field has an invalid value
-    #[error("Invalid value{}: {message}", format_location(&.context.location))]
+    #[error("Invalid value{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
     InvalidValue {
         /// Error message
         message: String,
@@ -225,7 +236,7 @@ pub enum ValidationError {
     },
 
     /// A constraint was violated
-    #[error("Constraint violation{}: {message}", format_location(&.context.location))]
+    #[error("Constraint violation{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
     ConstraintViolation {
         /// Error message
         message: String,
@@ -235,7 +246,7 @@ pub enum ValidationError {
     },
 
     /// A dependency was not satisfied
-    #[error("Dependency error{}: {message}", format_location(&.context.location))]
+    #[error("Dependency error{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
     DependencyError {
         /// Error message
         message: String,
@@ -248,25 +259,38 @@ pub enum ValidationError {
 impl ValidationError {
     /// Creates a new InvalidValue error
     pub fn invalid_value(field: impl Into<String>, message: impl Into<String>) -> Self {
+        let mut context = ErrorContext::new_with_field(field);
+        if let Some(doc_ref) = doc_references::validation::get_doc_reference("invalid_value") {
+            context = context.with_documentation(doc_ref);
+        }
         Self::InvalidValue {
             message: message.into(),
-            context: ErrorContext::new_with_field(field),
+            context,
         }
     }
 
     /// Creates a new ConstraintViolation error
     pub fn constraint_violation(field: impl Into<String>, message: impl Into<String>) -> Self {
+        let mut context = ErrorContext::new_with_field(field);
+        if let Some(doc_ref) = doc_references::validation::get_doc_reference("constraint_violation")
+        {
+            context = context.with_documentation(doc_ref);
+        }
         Self::ConstraintViolation {
             message: message.into(),
-            context: ErrorContext::new_with_field(field),
+            context,
         }
     }
 
     /// Creates a new DependencyError error
     pub fn dependency_error(field: impl Into<String>, message: impl Into<String>) -> Self {
+        let mut context = ErrorContext::new_with_field(field);
+        if let Some(doc_ref) = doc_references::validation::get_doc_reference("dependency_error") {
+            context = context.with_documentation(doc_ref);
+        }
         Self::DependencyError {
             message: message.into(),
-            context: ErrorContext::new_with_field(field),
+            context,
         }
     }
 }
@@ -275,7 +299,7 @@ impl ValidationError {
 #[derive(Debug, Error, Clone)]
 pub enum ProviderError {
     /// Error during provider initialization
-    #[error("Provider initialization error{}: {message}", format_location(&.context.location))]
+    #[error("Provider initialization error{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
     Initialization {
         /// Error message
         message: String,
@@ -285,7 +309,7 @@ pub enum ProviderError {
     },
 
     /// Error related to provider capabilities
-    #[error("Provider capability error{}: {message}", format_location(&.context.location))]
+    #[error("Provider capability error{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
     Capability {
         /// Error message
         message: String,
@@ -295,7 +319,7 @@ pub enum ProviderError {
     },
 
     /// Error in provider configuration
-    #[error("Provider configuration error{}: {message}", format_location(&.context.location))]
+    #[error("Provider configuration error{}: {message}{}", format_location(&.context.location), format_documentation(&.context.documentation))]
     Configuration {
         /// Error message
         message: String,
@@ -308,25 +332,37 @@ pub enum ProviderError {
 impl ProviderError {
     /// Creates a new Initialization error
     pub fn initialization(field: impl Into<String>, message: impl Into<String>) -> Self {
+        let mut context = ErrorContext::new_with_field(field);
+        if let Some(doc_ref) = doc_references::provider::get_doc_reference("initialization") {
+            context = context.with_documentation(doc_ref);
+        }
         Self::Initialization {
             message: message.into(),
-            context: ErrorContext::new_with_field(field),
+            context,
         }
     }
 
     /// Creates a new Capability error
     pub fn capability(field: impl Into<String>, message: impl Into<String>) -> Self {
+        let mut context = ErrorContext::new_with_field(field);
+        if let Some(doc_ref) = doc_references::provider::get_doc_reference("capability") {
+            context = context.with_documentation(doc_ref);
+        }
         Self::Capability {
             message: message.into(),
-            context: ErrorContext::new_with_field(field),
+            context,
         }
     }
 
     /// Creates a new Configuration error
     pub fn configuration(field: impl Into<String>, message: impl Into<String>) -> Self {
+        let mut context = ErrorContext::new_with_field(field);
+        if let Some(doc_ref) = doc_references::provider::get_doc_reference("configuration") {
+            context = context.with_documentation(doc_ref);
+        }
         Self::Configuration {
             message: message.into(),
-            context: ErrorContext::new_with_field(field),
+            context,
         }
     }
 }
@@ -378,6 +414,15 @@ impl ProviderConfigError {
                 ConfigError::ValidationError(_) => "LEGACY_0003".to_string(),
             },
         }
+    }
+}
+
+/// Helper function to format documentation references for error messages
+fn format_documentation(doc_ref: &Option<String>) -> String {
+    if let Some(doc) = doc_ref {
+        format!(" (see: {})", doc)
+    } else {
+        String::new()
     }
 }
 
