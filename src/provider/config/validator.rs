@@ -52,6 +52,50 @@ pub trait ProviderConfigValidator {
         config: &HashMap<String, serde_json::Value>,
     ) -> Result<(), ProviderConfigError>;
 
+    /// Validates the schema of the configuration and returns warnings.
+    ///
+    /// This method checks for non-critical issues in the schema structure
+    /// and returns warnings instead of errors.
+    fn validate_schema_warnings(
+        &self,
+        _config: &HashMap<String, serde_json::Value>,
+    ) -> Vec<ProviderConfigError> {
+        Vec::new()
+    }
+
+    /// Validates provider-specific configuration and returns warnings.
+    ///
+    /// This method checks for non-critical issues in the provider-specific
+    /// configuration and returns warnings instead of errors.
+    fn validate_provider_specific_warnings(
+        &self,
+        _config: &HashMap<String, serde_json::Value>,
+    ) -> Vec<ProviderConfigError> {
+        Vec::new()
+    }
+
+    /// Validates provider capabilities and returns warnings.
+    ///
+    /// This method checks for non-critical issues in the capability
+    /// configuration and returns warnings instead of errors.
+    fn validate_capabilities_warnings(
+        &self,
+        _config: &HashMap<String, serde_json::Value>,
+    ) -> Vec<ProviderConfigError> {
+        Vec::new()
+    }
+
+    /// Validates provider dependencies and returns warnings.
+    ///
+    /// This method checks for non-critical issues in the dependency
+    /// configuration and returns warnings instead of errors.
+    fn validate_dependencies_warnings(
+        &self,
+        _config: &HashMap<String, serde_json::Value>,
+    ) -> Vec<ProviderConfigError> {
+        Vec::new()
+    }
+
     /// Validates a provider configuration.
     ///
     /// This method combines all validation methods to perform a complete
@@ -157,6 +201,23 @@ pub trait CollectingValidator: ProviderConfigValidator {
         // Validate dependencies
         if let Err(error) = self.validate_dependencies(config) {
             collector.add_error(error);
+        }
+
+        // Collect warnings
+        for warning in self.validate_schema_warnings(config) {
+            collector.add_warning(warning);
+        }
+
+        for warning in self.validate_provider_specific_warnings(config) {
+            collector.add_warning(warning);
+        }
+
+        for warning in self.validate_capabilities_warnings(config) {
+            collector.add_warning(warning);
+        }
+
+        for warning in self.validate_dependencies_warnings(config) {
+            collector.add_warning(warning);
         }
 
         collector
