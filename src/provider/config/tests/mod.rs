@@ -13,6 +13,9 @@ mod validator_tests;
 // Include formatter tests
 mod formatter_tests;
 
+// Include suggestion generator tests
+mod suggestion_tests;
+
 #[test]
 fn test_plugin_config_validation() {
     // Test strict mode with known types
