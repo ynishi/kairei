@@ -48,7 +48,7 @@ pub struct PendingRequest {
 /// # Request Manager
 ///
 /// Coordinates the request-response pattern on top of the event bus.
-/// 
+///
 /// The RequestManager maintains a registry of pending requests and handles
 /// matching responses to their original requests. It also manages timeouts
 /// for requests that don't receive timely responses.
