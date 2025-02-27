@@ -186,6 +186,65 @@ The system uses an event-driven architecture with:
 - Event-based communication between agents
 - Asynchronous event processing
 
+### Event Publishing Flow
+
+```mermaid
+sequenceDiagram
+    participant Publisher as Publisher (Agent/Component)
+    participant EventBus
+    participant Subscriber1 as Subscriber 1
+    participant Subscriber2 as Subscriber 2
+    
+    Publisher->>EventBus: publish(Event)
+    Note over EventBus: Event broadcast to all subscribers
+    par Parallel delivery
+        EventBus->>Subscriber1: Event
+        Subscriber1->>Subscriber1: handle_event()
+    and
+        EventBus->>Subscriber2: Event
+        Subscriber2->>Subscriber2: handle_event()
+    end
+```
+
+### Request-Response Pattern
+
+```mermaid
+sequenceDiagram
+    participant Requester as Requester (Agent)
+    participant RM as RequestManager
+    participant EB as EventBus
+    participant Responder as Responder (Agent)
+    
+    Requester->>RM: request(RequestEvent)
+    RM->>RM: register pending request
+    RM->>EB: publish(RequestEvent)
+    EB->>Responder: RequestEvent
+    Note over Responder: Process request
+    Responder->>EB: publish(ResponseEvent)
+    EB->>RM: ResponseEvent
+    RM->>RM: match to pending request
+    RM->>Requester: ResponseEvent
+    Note over Requester: Continue execution
+```
+
+### Event Error Handling
+
+```mermaid
+sequenceDiagram
+    participant Component
+    participant EventBus
+    participant ErrorHandler
+    
+    Component->>EventBus: publish_error(ErrorEvent)
+    EventBus->>ErrorHandler: ErrorEvent
+    Note over ErrorHandler: Log, recover or propagate
+    alt Critical Error
+        ErrorHandler->>EventBus: publish(ShutdownEvent)
+    else Recoverable Error
+        ErrorHandler->>EventBus: publish(RetryEvent)
+    end
+```
+
 ## Further Resources
 
 - [KAIREI Documentation](../README.md)
