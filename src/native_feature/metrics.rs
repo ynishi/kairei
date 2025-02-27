@@ -373,7 +373,7 @@ mod tests {
             .await
             .unwrap();
 
-        sleep(Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(20)).await;
 
         // レスポンスイベントの発行
         event_bus
@@ -388,7 +388,7 @@ mod tests {
             })
             .unwrap();
 
-        sleep(Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(20)).await;
         // メトリクスの検証 - 非同期でロックを取得
 
         let store = metrics.metrics_store.read().await.clone();
