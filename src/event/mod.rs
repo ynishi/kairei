@@ -1,5 +1,5 @@
 //! # Event-Driven Architecture
-//! 
+//!
 //! KAIREI's event-driven architecture is the core mechanism for agent communication and system coordination.
 //! It enables loosely coupled interactions between components through a centralized event bus and typed events.
 //!
@@ -47,7 +47,11 @@
 //!
 //! ### Publishing an Event
 //!
-//! ```rust
+//! ```rust,no_run
+//! # use kairei::event_bus::{EventBus, Event, Value};
+//! # use kairei::event_registry::EventType;
+//! # use std::collections::HashMap;
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let event_bus = EventBus::new(10);
 //! let event = Event {
 //!     event_type: EventType::Custom("user_logged_in".to_string()),
@@ -57,12 +61,17 @@
 //!         params
 //!     },
 //! };
-//! event_bus.publish(event).await.expect("Failed to publish event");
+//! event_bus.publish(event).await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ### Subscribing to Events
 //!
-//! ```rust
+//! ```rust,no_run
+//! # use kairei::event_bus::{EventBus, Event, Value};
+//! # use kairei::event_registry::EventType;
+//! # fn example() {
 //! let event_bus = EventBus::new(10);
 //! let (mut event_rx, _) = event_bus.subscribe();
 //!
@@ -79,11 +88,18 @@
 //!         }
 //!     }
 //! });
+//! # }
 //! ```
 //!
 //! ### Request-Response Example
 //!
-//! ```rust
+//! ```rust,no_run
+//! # use kairei::event_bus::{EventBus, Event, Value};
+//! # use kairei::event_registry::EventType;
+//! # use kairei::event::request_manager::{RequestManager, RequestError};
+//! # use std::sync::Arc;
+//! # use std::time::Duration;
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let event_bus = Arc::new(EventBus::new(10));
 //! let request_manager = Arc::new(RequestManager::new(
 //!     event_bus.clone(),
@@ -95,10 +111,9 @@
 //!     .request_type("get_user_info")
 //!     .requester("client")
 //!     .responder("user_service")
-//!     .request_id(uuid::Uuid::new_v4().to_string())
+//!     .request_id("request-123".to_string())
 //!     .parameter("user_id", &Value::String("12345".to_string()))
-//!     .build()
-//!     .unwrap();
+//!     .build()?;
 //!
 //! // Send request and await response
 //! match request_manager.request(&request).await {
@@ -107,6 +122,8 @@
 //!     },
 //!     Err(e) => println!("Request failed: {}", e)
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod event_bus;

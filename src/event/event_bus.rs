@@ -1,7 +1,7 @@
 //! # Event Bus Implementation
 //!
 //! The EventBus is the central messaging hub for KAIREI's event-driven architecture.
-//! It provides a broadcast-based publish-subscribe mechanism for components to 
+//! It provides a broadcast-based publish-subscribe mechanism for components to
 //! communicate without direct dependencies.
 //!
 //! ## Features
@@ -14,7 +14,7 @@
 //! ## Design Decisions
 //!
 //! The implementation uses Tokio's broadcast channel rather than MPSC channels to:
-//! 
+//!
 //! 1. Allow multiple subscribers to receive the same event
 //! 2. Efficiently handle backpressure through the channel capacity
 //! 3. Support non-blocking publish operations
@@ -46,7 +46,10 @@ use tracing::{debug, trace};
 ///
 /// ## Example
 ///
-/// ```rust
+/// ```rust,no_run
+/// # use kairei::event_bus::{Event, Value};
+/// # use kairei::event_registry::EventType;
+/// # use std::collections::HashMap;
 /// let event = Event {
 ///     event_type: EventType::Custom("data_updated".to_string()),
 ///     parameters: {
@@ -61,7 +64,7 @@ use tracing::{debug, trace};
 pub struct Event {
     /// The type of event, which determines how it's routed and processed
     pub event_type: EventType,
-    /// Event payload data as key-value pairs 
+    /// Event payload data as key-value pairs
     pub parameters: HashMap<String, Value>,
 }
 
@@ -543,7 +546,9 @@ impl EventBus {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
+    /// # use kairei::event_bus::{EventBus, EventReceiver};
+    /// # fn example() {
     /// let event_bus = EventBus::new(100);
     /// let (event_rx, error_rx) = event_bus.subscribe();
     ///
@@ -553,6 +558,7 @@ impl EventBus {
     ///         // Process event
     ///     }
     /// });
+    /// # }
     /// ```
     pub fn subscribe(&self) -> (EventReceiver, ErrorReceiver) {
         let event_rx = self.event_sender.subscribe();
@@ -580,11 +586,17 @@ impl EventBus {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
+    /// # use kairei::event_bus::{EventBus, Event};
+    /// # use kairei::event_registry::EventType;
+    /// # use std::collections::HashMap;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let event_bus = EventBus::new(100);
     /// let event = Event::new(&EventType::Custom("user_action".to_string()), &HashMap::new());
-    /// 
-    /// event_bus.publish(event).await.expect("Failed to publish event");
+    ///
+    /// event_bus.publish(event).await?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub async fn publish(&self, event: Event) -> EventResult<()> {
         debug_event("Publishing", &event);
