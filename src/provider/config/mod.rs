@@ -48,6 +48,7 @@
 //! ```
 
 mod base;
+pub mod doc_references;
 mod errors;
 mod formatters;
 mod plugins;
