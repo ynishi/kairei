@@ -1,54 +1,121 @@
+//! # Event Registry
+//!
+//! The EventRegistry is responsible for managing and validating event types in the KAIREI system.
+//! It acts as a central repository of event type information, including parameter definitions
+//! and validation logic.
+//!
+//! ## Core Functionality
+//!
+//! - **Event Type Registration**: Register built-in and custom event types
+//! - **Parameter Validation**: Validate event parameters against registered schemas
+//! - **Type Safety**: Ensure events conform to their defined structure
+//!
+//! ## Architecture
+//!
+//! The registry uses a thread-safe concurrent hashmap (DashMap) to store event definitions,
+//! allowing safe access from multiple threads.
+//!
+//! ## Usage Patterns
+//!
+//! The registry is typically initialized at system startup and populated with:
+//! 1. Core system events (Tick, Lifecycle events, etc.)
+//! 2. Agent-defined custom events
+//! 3. Request/response definitions
+//!
+//! Events are validated against this registry before being published to ensure
+//! system integrity and prevent runtime errors from malformed events.
+
 use crate::event_bus::{EventError, EventResult};
 use crate::{ast, native_feature::types::NativeFeatureType, TypeInfo};
 use dashmap::DashMap;
 use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
 
-/// イベントのメタデータ
+/// Metadata about an event type including its structure and parameters
+///
+/// EventInfo stores the definition of an event, including its type identifier
+/// and the expected parameters with their types. This information is used for
+/// validation and documentation.
 #[derive(Clone, Debug)]
 pub struct EventInfo {
+    /// The unique identifier for this event type
     pub event_type: EventType,
-    pub parameters: HashMap<String, ParameterType>, // (パラメータ名, 型)
+    /// Map of parameter names to their expected types
+    pub parameters: HashMap<String, ParameterType>,
 }
 
+/// # EventType
+///
+/// Defines the various types of events in the KAIREI system. Each event type
+/// represents a distinct kind of notification or message that can be sent
+/// through the event bus.
+///
+/// The event types are organized into several categories:
+/// - System events (Tick, MetricsSummary)
+/// - Agent lifecycle events (AgentCreated, AgentStarted, etc.)
+/// - System lifecycle events (SystemStarted, SystemStopped, etc.)
+/// - Request/Response events for agent communication
+/// - Message and Failure events for notifications and error handling
+/// - Custom events for user-defined scenarios
 #[derive(Debug, Clone, PartialEq, Hash, Eq, strum::EnumString, Default, PartialOrd, Ord)]
 pub enum EventType {
     #[default]
     // System Events
+    /// Regular timing signal for time-based operations
     Tick,
+    /// Periodic metrics collection summary
     MetricsSummary,
+    /// Notification that an agent's internal state has changed
     StateUpdated {
+        /// Name of the agent whose state changed
         agent_name: String,
+        /// Name of the state property that was updated
         state_name: String,
     },
-    // メッセージイベント
-    // emit something で Publish する際に使用する。
+    // Message Events
+    /// General purpose message event used with emit statements
     Message {
+        /// Type of content being sent in the message
         content_type: String,
     },
-    // something.onFail などで停止した際にこのイベントを使用する。
+    /// Error notification when an agent handler fails
     Failure {
+        /// Type of error that occurred
         error_type: String,
     },
-    // Request/Response
+    // Request/Response Pattern
+    /// Request from one agent to another for processing
     Request {
+        /// Type of request being made
         request_type: String,
-        requester: String,  // リクエストの送信者
-        responder: String,  // 期待される応答者
-        request_id: String, // Globally unique request ID like UUID
+        /// Agent sending the request
+        requester: String,
+        /// Agent expected to handle the request
+        responder: String,
+        /// Unique identifier for matching responses to requests
+        request_id: String,
     },
-    // Response は、Ok(ResponseSuccess)/Err(ResponseFailure) を使用する。
+    /// Successful response to a request
     ResponseSuccess {
+        /// Type of the original request
         request_type: String,
-        requester: String,  // 元のリクエストの送信者
-        responder: String,  // 応答者
-        request_id: String, // Globally unique request ID like UUID
+        /// Original requesting agent
+        requester: String,
+        /// Agent sending the response
+        responder: String,
+        /// Unique identifier matching the original request
+        request_id: String,
     },
+    /// Failed response to a request
     ResponseFailure {
+        /// Type of the original request
         request_type: String,
-        requester: String,  // 元のリクエストの送信者
-        responder: String,  // 応答者
-        request_id: String, // Globally unique request ID like UUID
+        /// Original requesting agent
+        requester: String,
+        /// Agent sending the response
+        responder: String,
+        /// Unique identifier matching the original request
+        request_id: String,
     },
     // Lifecycle
     AgentCreated,

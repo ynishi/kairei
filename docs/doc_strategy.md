@@ -48,9 +48,14 @@ KAIREI documentation is managed in two primary locations:
 
 ## docs/ Structure
 - design/: Architecture and design documents
+  - **Core Architecture Documents**:
+    - `event_architecture.md`: Event-driven communication system
+    - `kairei_type_checker.md`: Type system and validation
+  - Other design documents
 - process/: Development processes and workflows
 - tutorials/: Tutorials and guides
 - assets/: Diagrams and visual assets
+- quick_reference/: Essential guides and diagrams
 
 ## Cross-referencing
 - RustDoc to docs/ references
