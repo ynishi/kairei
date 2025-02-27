@@ -7,11 +7,22 @@ use super::{ErrorFormatter, FormatOptions};
 use crate::provider::config::errors::{
     ProviderConfigError, ProviderError, SchemaError, ValidationError,
 };
+use crate::provider::config::suggestions::{DefaultSuggestionGenerator, SuggestionGenerator};
 use std::fmt::Write;
 
 /// Default error formatter
-#[derive(Debug, Default)]
-pub struct DefaultErrorFormatter;
+#[derive(Debug)]
+pub struct DefaultErrorFormatter {
+    suggestion_generator: Box<dyn SuggestionGenerator>,
+}
+
+impl Default for DefaultErrorFormatter {
+    fn default() -> Self {
+        Self {
+            suggestion_generator: Box::new(DefaultSuggestionGenerator),
+        }
+    }
+}
 
 impl ErrorFormatter for DefaultErrorFormatter {
     fn format_error(&self, error: &ProviderConfigError, options: &FormatOptions) -> String {
@@ -205,44 +216,43 @@ impl DefaultErrorFormatter {
 
     /// Get suggestion for a schema error
     fn get_suggestion_for_schema_error(&self, error: &SchemaError) -> Option<String> {
+        // First try to get a suggestion from the error context
         match error {
-            SchemaError::MissingField { context } => context.suggestion.clone().or_else(|| {
-                let field = context.location.field.as_ref()?;
-                Some(format!(
-                    "Add the required '{}' field to your configuration",
-                    field
-                ))
-            }),
-            SchemaError::InvalidType {
-                context,
-                expected,
-                actual,
-            } => context.suggestion.clone().or_else(|| {
-                let field = context.location.field.as_ref()?;
-                Some(format!(
-                    "Change the type of '{}' from {} to {}",
-                    field, actual, expected
-                ))
-            }),
+            SchemaError::MissingField { context } => context.suggestion.clone(),
+            SchemaError::InvalidType { context, .. } => context.suggestion.clone(),
             SchemaError::InvalidStructure { context, .. } => context.suggestion.clone(),
         }
+        // If no suggestion is available in the context, generate one
+        .or_else(|| self.suggestion_generator.generate_schema_suggestion(error))
     }
 
     /// Get suggestion for a validation error
     fn get_suggestion_for_validation_error(&self, error: &ValidationError) -> Option<String> {
+        // First try to get a suggestion from the error context
         match error {
             ValidationError::InvalidValue { context, .. } => context.suggestion.clone(),
             ValidationError::ConstraintViolation { context, .. } => context.suggestion.clone(),
             ValidationError::DependencyError { context, .. } => context.suggestion.clone(),
         }
+        // If no suggestion is available in the context, generate one
+        .or_else(|| {
+            self.suggestion_generator
+                .generate_validation_suggestion(error)
+        })
     }
 
     /// Get suggestion for a provider error
     fn get_suggestion_for_provider_error(&self, error: &ProviderError) -> Option<String> {
+        // First try to get a suggestion from the error context
         match error {
             ProviderError::Initialization { context, .. } => context.suggestion.clone(),
             ProviderError::Capability { context, .. } => context.suggestion.clone(),
             ProviderError::Configuration { context, .. } => context.suggestion.clone(),
         }
+        // If no suggestion is available in the context, generate one
+        .or_else(|| {
+            self.suggestion_generator
+                .generate_provider_suggestion(error)
+        })
     }
 }
