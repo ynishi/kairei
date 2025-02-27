@@ -127,7 +127,7 @@ impl Event {
         }
     }
 
-    pub fn request_buidler() -> RequestBuilder {
+    pub fn request_builder() -> RequestBuilder {
         RequestBuilder::new()
     }
 
@@ -519,8 +519,9 @@ impl EventBus {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// // Create an EventBus with a capacity of 100 events
+    /// use kairei::event_bus::EventBus;
     /// let event_bus = EventBus::new(100);
     /// ```
     pub fn new(capacity: usize) -> Self {
@@ -550,7 +551,7 @@ impl EventBus {
     /// # use kairei::event_bus::{EventBus, EventReceiver};
     /// # fn example() {
     /// let event_bus = EventBus::new(100);
-    /// let (event_rx, error_rx) = event_bus.subscribe();
+    /// let (mut event_rx, error_rx) = event_bus.subscribe();
     ///
     /// // Handle regular events
     /// tokio::spawn(async move {

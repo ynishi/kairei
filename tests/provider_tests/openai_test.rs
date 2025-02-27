@@ -66,7 +66,7 @@ async fn setup_system(
 }
 
 fn create_request(request_id: &Uuid, requests: Vec<(&str, &str)>, timeout: Option<u64>) -> Event {
-    let mut builder = Event::request_buidler()
+    let mut builder = Event::request_builder()
         .request_type("PlanTrip")
         .requester("test")
         .responder("TravelAgent")

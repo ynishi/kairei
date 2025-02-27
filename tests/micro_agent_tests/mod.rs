@@ -50,7 +50,7 @@ fn create_request(
     requests: Vec<(&str, Value)>,
     timeout: Option<u64>,
 ) -> Event {
-    let mut builder = Event::request_buidler()
+    let mut builder = Event::request_builder()
         .request_type(request_type)
         .requester("test")
         .responder(agnent_name)
