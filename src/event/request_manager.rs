@@ -1,3 +1,24 @@
+//! # Request Manager
+//!
+//! The RequestManager provides a synchronous request-response pattern on top of the
+//! asynchronous event bus. It allows components to send a request and wait for a
+//! matching response, with timeout handling and correlation.
+//!
+//! ## Key Features
+//!
+//! - **Request-Response Correlation**: Tracks pending requests and matches responses
+//! - **Timeout Handling**: Automatically times out requests that don't receive responses
+//! - **Response Awaiting**: Provides a Future that resolves when a response is received
+//! - **Cancellation**: Supports cancelling pending requests when a component shuts down
+//!
+//! ## Implementation Details
+//!
+//! The RequestManager uses Tokio oneshot channels to bridge the gap between the
+//! asynchronous event bus and the synchronous request-response pattern. When a request
+//! is made, a oneshot receiver is registered, and the corresponding sender is stored
+//! with the request ID. When a matching response arrives, it's forwarded through
+//! the oneshot channel to awaken the waiting task.
+
 use std::{sync::Arc, time::Duration};
 
 use dashmap::DashMap;
@@ -10,23 +31,53 @@ use super::{
     event_registry::EventType,
 };
 
+/// Type alias for request correlation identifiers
 type RequestId = String;
 
+/// Represents a pending request awaiting a response
+///
+/// Each pending request consists of a oneshot sender for delivering the response
+/// and the original request event type for correlation and error handling.
 pub struct PendingRequest {
+    /// Channel for delivering the response back to the requester
     sender: oneshot::Sender<Event>,
+    /// The original request event type (for error handling and cancellation)
     request_event_type: EventType,
 }
 
-// 1. RequestManagerの基本実装
+/// # Request Manager
+///
+/// Coordinates the request-response pattern on top of the event bus.
+/// 
+/// The RequestManager maintains a registry of pending requests and handles
+/// matching responses to their original requests. It also manages timeouts
+/// for requests that don't receive timely responses.
 pub struct RequestManager {
+    /// Reference to the event bus for publishing requests
     event_bus: Arc<EventBus>,
+    /// Map of pending requests indexed by request ID
     pending_requests: Arc<DashMap<RequestId, PendingRequest>>,
-    // Requestにタイムアウトがなければ使用する
+    /// Default timeout duration for requests that don't specify one
     default_timeout: Duration,
 }
 
-// 2. コンストラクタとコア機能
 impl RequestManager {
+    /// Creates a new RequestManager with the given event bus and timeout.
+    ///
+    /// # Parameters
+    ///
+    /// * `event_bus` - Shared reference to the event bus for publishing requests
+    /// * `timeout` - Default timeout duration for requests
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let event_bus = Arc::new(EventBus::new(100));
+    /// let request_manager = RequestManager::new(
+    ///     event_bus.clone(),
+    ///     Duration::from_secs(5) // 5 second default timeout
+    /// );
+    /// ```
     pub fn new(event_bus: Arc<EventBus>, timeout: Duration) -> Self {
         Self {
             event_bus,
@@ -35,6 +86,52 @@ impl RequestManager {
         }
     }
 
+    /// Sends a request event and waits for a matching response.
+    ///
+    /// This method provides a synchronous request-response pattern by:
+    /// 1. Creating a oneshot channel for the response
+    /// 2. Registering the pending request with its ID
+    /// 3. Publishing the request to the event bus
+    /// 4. Awaiting a matching response or timeout
+    ///
+    /// # Parameters
+    ///
+    /// * `request` - The request event to send
+    ///
+    /// # Returns
+    ///
+    /// * `RequestResult<Event>` - The response event or an error
+    ///
+    /// # Errors
+    ///
+    /// * `RequestError::InvalidRequest` - If the request is missing required fields
+    /// * `RequestError::Timeout` - If no response is received within the timeout period
+    /// * `RequestError::EventBus` - If publishing the request fails
+    /// * `RequestError::ChannelClosed` - If the response channel unexpectedly closes
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let request = Event::request_buidler()
+    ///     .request_type("get_data")
+    ///     .requester("client")
+    ///     .responder("data_service")
+    ///     .request_id(uuid::Uuid::new_v4().to_string())
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// match request_manager.request(&request).await {
+    ///     Ok(response) => {
+    ///         println!("Got response: {:?}", response);
+    ///     },
+    ///     Err(RequestError::Timeout(_)) => {
+    ///         println!("Request timed out");
+    ///     },
+    ///     Err(e) => {
+    ///         println!("Request failed: {}", e);
+    ///     }
+    /// }
+    /// ```
     #[instrument(skip(self))]
     pub async fn request(&self, request: &Event) -> RequestResult<Event> {
         let (tx, rx) = oneshot::channel();
@@ -57,7 +154,7 @@ impl RequestManager {
         let timeout = self.timeout(request);
         self.event_bus.publish(request.clone()).await?;
 
-        // レスポンス待ち
+        // Wait for the response
         self.await_response(request_id, timeout, rx).await
     }
 
