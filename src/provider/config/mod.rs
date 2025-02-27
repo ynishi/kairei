@@ -52,6 +52,7 @@ mod errors;
 mod formatters;
 mod plugins;
 mod providers;
+mod suggestions;
 mod validation;
 mod validator;
 mod validators;
@@ -69,6 +70,7 @@ pub use plugins::{
     BasePluginConfig, MemoryConfig, ProviderSpecificConfig, RagConfig, SearchConfig,
 };
 pub use providers::{OpenAIApiConfig, OpenAIMemoryConfig, OpenAIRagConfig, OpenAISearchConfig};
+pub use suggestions::{DefaultSuggestionGenerator, SuggestionGenerator};
 pub use validation::{
     check_property_type, check_required_properties, validate_range, validate_required_field,
 };
