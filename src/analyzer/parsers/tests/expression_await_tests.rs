@@ -275,7 +275,7 @@ fn test_parse_await_with_think_expressions() {
         Token::Delimiter(Delimiter::CloseParen),
     ];
 
-    let (pos, expr) = parse_await_multiple().parse(input, 0).unwrap();
+    let (_, expr) = parse_await_multiple().parse(input, 0).unwrap();
     match expr {
         ast::Expression::Await(expressions) => {
             assert_eq!(expressions.len(), 2);
@@ -370,7 +370,7 @@ fn test_parse_await_with_nested_complex_expressions() {
         Token::Delimiter(Delimiter::CloseParen),
     ];
 
-    let (pos, expr) = parse_await_multiple().parse(input, 0).unwrap();
+    let (_, expr) = parse_await_multiple().parse(input, 0).unwrap();
     match expr {
         ast::Expression::Await(expressions) => {
             assert_eq!(expressions.len(), 2);

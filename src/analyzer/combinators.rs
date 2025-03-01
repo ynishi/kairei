@@ -411,9 +411,24 @@ where
         let mut results = Vec::new();
         let mut current_pos = pos;
 
-        while let Ok((new_pos, value)) = self.parser.parse(input, current_pos) {
-            results.push(value);
-            current_pos = new_pos;
+        loop {
+            match self.parser.parse(input, current_pos) {
+                Ok((new_pos, value)) => {
+                    results.push(value);
+                    current_pos = new_pos;
+                }
+                Err(e) => {
+                    // エラー情報をトレースログに出力
+                    tracing::warn!(
+                        target: "parser::many",
+                        error = ?e,
+                        position = current_pos,
+                        items_collected = results.len(),
+                        "Many parser stopped collection due to error"
+                    );
+                    break;
+                }
+            }
         }
 
         Ok((current_pos, results))
@@ -454,9 +469,24 @@ where
         let mut result = vec![first];
         let mut current_pos = pos;
 
-        while let Ok((new_pos, value)) = self.parser.parse(input, current_pos) {
-            result.push(value);
-            current_pos = new_pos;
+        // 残りの要素を可能な限り収集
+        loop {
+            match self.parser.parse(input, current_pos) {
+                Ok((new_pos, value)) => {
+                    result.push(value);
+                    current_pos = new_pos;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target: "parser::many1",
+                        error = ?e,
+                        position = current_pos,
+                        items_collected = result.len(),
+                        "Many1 parser stopped additional collection due to error"
+                    );
+                    break;
+                }
+            }
         }
 
         Ok((current_pos, result))
@@ -550,7 +580,15 @@ where
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<Option<O>> {
         match self.parser.parse(input, pos) {
             Ok((new_pos, value)) => Ok((new_pos, Some(value))),
-            Err(_) => Ok((pos, None)),
+            Err(e) => {
+                tracing::warn!(
+                    target: "parser::optional",
+                    error = ?e,
+                    position = pos,
+                    "Optional parser suppressed an error"
+                );
+                Ok((pos, None))
+            }
         }
     }
 }
