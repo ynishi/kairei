@@ -50,6 +50,7 @@
 mod base;
 pub mod doc_references;
 mod errors;
+mod events;
 mod formatters;
 mod plugins;
 mod providers;
@@ -67,6 +68,7 @@ pub use errors::{
     ErrorContext, ErrorSeverity, ProviderConfigError, ProviderError, SchemaError, SourceLocation,
     ValidationError,
 };
+pub use events::ProviderErrorEvent;
 pub use formatters::{DefaultErrorFormatter, ErrorFormatter, FormatOptions};
 pub use plugins::{
     BasePluginConfig, MemoryConfig, ProviderSpecificConfig, RagConfig, SearchConfig,
