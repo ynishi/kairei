@@ -1,6 +1,5 @@
 use kairei::{
     analyzer::{
-        self,
         core::{ParseError, Parser},
         error_handling::{
             error_collecting_many, error_collecting_optional, format_detailed_error_message,
@@ -9,7 +8,10 @@ use kairei::{
         prelude::*,
     },
     ast_registry::AstRegistry,
-    tokenizer::token::{Token, Tokenizer},
+    tokenizer::{
+        keyword::Keyword,
+        token::Token,
+    },
     ASTError,
 };
 
@@ -51,7 +53,7 @@ fn test_error_collecting_many() {
     let input = vec![
         Token::Identifier("test1".to_string()),
         Token::Identifier("test2".to_string()),
-        Token::Keyword("invalid".to_string()),
+        Token::Keyword(Keyword::If), // Using a valid keyword
     ];
 
     let parser = error_collecting_many(
@@ -71,10 +73,7 @@ fn test_error_collecting_many() {
     let result = parser.parse(&input, 0);
     assert_eq!(
         result,
-        Ok((
-            2,
-            vec!["test1".to_string(), "test2".to_string()]
-        ))
+        Ok((2, vec!["test1".to_string(), "test2".to_string()]))
     );
 
     // Check that the error was collected
@@ -94,32 +93,30 @@ fn test_error_collecting_many() {
 fn test_format_detailed_error_message() {
     // Create a main error and some collected errors
     let main_error = ParseError::Fail("main error".to_string());
-    
+
     // Clear any previous errors
     ERROR_COLLECTOR.with(|collector| {
         collector.borrow_mut().clear();
     });
-    
+
     // Add some errors to the collector
-    let parser1 = error_collecting_optional(fail::<Token, i32>("optional error"), "optional context");
-    let parser2 = error_collecting_many(
-        satisfy(|_: &Token| None::<String>),
-        "many context",
-    );
-    
+    let parser1 =
+        error_collecting_optional(fail::<Token, i32>("optional error"), "optional context");
+    let parser2 = error_collecting_many(satisfy(|_: &Token| None::<String>), "many context");
+
     let input = vec![Token::Identifier("test".to_string())];
     let _ = parser1.parse(&input, 0);
     let _ = parser2.parse(&input, 0);
-    
+
     // Get the collected errors
     let collected_errors = ERROR_COLLECTOR.with(|collector| {
         let collector = collector.borrow();
         collector.get_errors().to_vec()
     });
-    
+
     // Format the error message
     let message = format_detailed_error_message(&main_error, &collected_errors);
-    
+
     // Check that the message contains all the expected information
     assert!(message.contains("Parse error: main error"));
     assert!(message.contains("Additional parsing issues:"));
@@ -130,7 +127,7 @@ fn test_format_detailed_error_message() {
 #[tokio::test]
 async fn test_ast_registry_error_handling() {
     let registry = AstRegistry::default();
-    
+
     // A DSL with intentional errors in both world and agent definitions
     let dsl = r#"
     world {
@@ -147,10 +144,10 @@ async fn test_ast_registry_error_handling() {
         invalid_agent_item
     }
     "#;
-    
+
     // Try to parse the DSL
     let result = registry.create_ast_from_dsl(dsl).await;
-    
+
     // Check that the error contains detailed information
     assert!(result.is_err());
     if let Err(ASTError::ParseError { message, .. }) = result {

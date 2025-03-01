@@ -132,14 +132,18 @@ impl AstRegistry {
             .parse(tokens.as_slice(), 0)
             .map_err(|e: analyzer::ParseError| {
                 // Check if we have collected errors
-                let collected_errors = analyzer::error_handling::ERROR_COLLECTOR.with(|collector| {
-                    let collector = collector.borrow();
-                    collector.get_errors().to_vec()
-                });
-                
+                let collected_errors =
+                    analyzer::error_handling::ERROR_COLLECTOR.with(|collector| {
+                        let collector = collector.borrow();
+                        collector.get_errors().to_vec()
+                    });
+
                 if !collected_errors.is_empty() {
                     // Create a detailed error message including collected errors
-                    let detailed_message = analyzer::error_handling::format_detailed_error_message(&e, &collected_errors);
+                    let detailed_message = analyzer::error_handling::format_detailed_error_message(
+                        &e,
+                        &collected_errors,
+                    );
                     ASTError::ParseError {
                         message: detailed_message,
                         target: "root".to_string(),

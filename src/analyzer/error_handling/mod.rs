@@ -23,7 +23,11 @@ pub struct ParseErrorInfo {
 
 impl fmt::Display for ParseErrorInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let error_type = if self.is_optional { "Optional" } else { "Repeated" };
+        let error_type = if self.is_optional {
+            "Optional"
+        } else {
+            "Repeated"
+        };
         write!(
             f,
             "{} parsing failed in '{}': {}",
@@ -196,20 +200,16 @@ pub fn format_detailed_error_message(
     collected_errors: &[ParseErrorInfo],
 ) -> String {
     let mut message = format!("Parse error: {}\n", main_error);
-    
+
     // Add information about optional and many errors
     if !collected_errors.is_empty() {
         message.push_str("\nAdditional parsing issues:\n");
-        
+
         for (i, error_info) in collected_errors.iter().enumerate() {
-            message.push_str(&format!(
-                "{}. {}\n",
-                i + 1,
-                error_info
-            ));
+            message.push_str(&format!("{}. {}\n", i + 1, error_info));
         }
     }
-    
+
     message
 }
 
@@ -217,30 +217,31 @@ pub fn format_detailed_error_message(
 mod tests {
     use super::*;
     use crate::analyzer::core::*;
-    use crate::analyzer::prelude::*;
+    // Import specific functions instead of using glob imports
+    use crate::analyzer::combinators::{fail, satisfy};
 
     #[test]
     fn test_error_collecting_optional() {
         // Create a parser that always fails
         let fail_parser = fail::<char, i32>("test failure");
         let parser = error_collecting_optional(fail_parser, "test context");
-        
+
         // Clear any previous errors
         ERROR_COLLECTOR.with(|collector| {
             collector.borrow_mut().clear();
         });
-        
+
         // Parse should return None but collect the error
         let input = vec!['a', 'b', 'c'];
         let result = parser.parse(&input, 0);
         assert_eq!(result, Ok((0, None)));
-        
+
         // Check that the error was collected
         ERROR_COLLECTOR.with(|collector| {
             let collector = collector.borrow();
             assert!(collector.has_errors());
             assert_eq!(collector.get_errors().len(), 1);
-            
+
             let error_info = &collector.get_errors()[0];
             assert_eq!(error_info.context, "test context");
             assert!(error_info.is_optional);
@@ -255,27 +256,27 @@ mod tests {
     fn test_error_collecting_many() {
         // Create a parser that succeeds once then fails
         let input = vec!['a', 'b', 'c'];
-        
+
         let parser = error_collecting_many(
             satisfy(|c: &char| if *c == 'a' { Some(*c) } else { None }),
-            "test context"
+            "test context",
         );
-        
+
         // Clear any previous errors
         ERROR_COLLECTOR.with(|collector| {
             collector.borrow_mut().clear();
         });
-        
+
         // Parse should return ['a'] and collect an error for 'b'
         let result = parser.parse(&input, 0);
         assert_eq!(result, Ok((1, vec!['a'])));
-        
+
         // Check that the error was collected
         ERROR_COLLECTOR.with(|collector| {
             let collector = collector.borrow();
             assert!(collector.has_errors());
             assert_eq!(collector.get_errors().len(), 1);
-            
+
             let error_info = &collector.get_errors()[0];
             assert_eq!(error_info.context, "test context");
             assert!(!error_info.is_optional);
