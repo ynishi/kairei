@@ -1,8 +1,7 @@
 //! Tests for provider error event handling.
 
-use crate::event::event_bus::{ErrorEvent, ErrorSeverity, EventBus, Value};
+use crate::event::event_bus::{ErrorSeverity, EventBus, Value};
 use crate::provider::config::errors::{ProviderConfigError, SchemaError, ValidationError};
-use crate::provider::config::events::ProviderErrorEvent;
 use crate::provider::config::validator::{ErrorCollector, ProviderConfigValidator};
 use std::collections::HashMap;
 use std::sync::Arc;
