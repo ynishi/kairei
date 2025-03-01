@@ -1,4 +1,4 @@
-.PHONY: build run test clippy fmt doc doc_check doc_open clean_doc all
+.PHONY: build run test clippy fmt doc doc_check doc_open clean_doc all setup-hooks
 
 test:
 	cargo test
@@ -34,5 +34,10 @@ dev:
 
 build:
 	cargo build
+
+setup-hooks:
+	@echo "Setting up Git hooks..."
+	@chmod +x scripts/install-hooks.sh
+	@./scripts/install-hooks.sh
 
 all: fmt test doc
