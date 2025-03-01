@@ -3,8 +3,11 @@
 //! This module defines the validation framework for provider configurations,
 //! including the ProviderConfigValidator trait and its implementations.
 
+use crate::event::event_bus::EventBus;
 use crate::provider::config::errors::ProviderConfigError;
+use crate::provider::config::events::ProviderErrorEvent;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Trait for validating provider configurations.
 ///
@@ -117,30 +120,67 @@ pub trait ProviderConfigValidator {
 ///
 /// This struct allows validators to collect multiple errors during validation
 /// rather than stopping at the first error.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct ErrorCollector {
     /// Errors collected during validation.
     pub errors: Vec<ProviderConfigError>,
     /// Warnings collected during validation.
     pub warnings: Vec<ProviderConfigError>,
+    /// Event bus for publishing error events.
+    pub event_bus: Option<Arc<EventBus>>,
+    /// Provider ID for error events.
+    pub provider_id: Option<String>,
+}
+
+impl Default for ErrorCollector {
+    fn default() -> Self {
+        Self {
+            errors: Vec::new(),
+            warnings: Vec::new(),
+            event_bus: None,
+            provider_id: None,
+        }
+    }
 }
 
 impl ErrorCollector {
     /// Creates a new error collector.
     pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Creates a new error collector with an event bus.
+    pub fn new_with_event_bus(event_bus: Arc<EventBus>, provider_id: impl Into<String>) -> Self {
         Self {
             errors: Vec::new(),
             warnings: Vec::new(),
+            event_bus: Some(event_bus),
+            provider_id: Some(provider_id.into()),
         }
     }
 
-    /// Adds an error to the collector.
+    /// Adds an error to the collector and publishes an error event if an event bus is available.
     pub fn add_error(&mut self, error: ProviderConfigError) {
+        // Publish error event if event bus is available
+        if let (Some(event_bus), Some(provider_id)) = (&self.event_bus, &self.provider_id) {
+            let error_event = ProviderErrorEvent::new(error.clone(), provider_id.clone());
+            // Use sync_publish to avoid requiring async
+            let _ = event_bus.sync_publish_error(error_event.into());
+        }
+        
         self.errors.push(error);
     }
 
-    /// Adds a warning to the collector.
+    /// Adds a warning to the collector and publishes a warning event if an event bus is available.
     pub fn add_warning(&mut self, warning: ProviderConfigError) {
+        // Publish warning event if event bus is available
+        if let (Some(event_bus), Some(provider_id)) = (&self.event_bus, &self.provider_id) {
+            let warning_event = ProviderErrorEvent::new(warning.clone(), provider_id.clone())
+                .with_context("Warning during provider config validation");
+            // Use sync_publish to avoid requiring async
+            let _ = event_bus.sync_publish_error(warning_event.into());
+        }
+        
         self.warnings.push(warning);
     }
 

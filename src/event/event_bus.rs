@@ -651,6 +651,27 @@ impl EventBus {
             })?;
         Ok(())
     }
+    
+    /// Publishes an error event synchronously without awaiting.
+    ///
+    /// This method is useful when you need to publish an error event from a synchronous
+    /// context without using .await. It has the same behavior as the async version.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - The error event to publish
+    ///
+    /// # Returns
+    ///
+    /// * `EventResult<()>` - Success or error result
+    pub fn sync_publish_error(&self, error: ErrorEvent) -> EventResult<()> {
+        self.error_sender
+            .send(error)
+            .map_err(|e| EventError::SendFailed {
+                message: e.to_string(),
+            })?;
+        Ok(())
+    }
 
     pub fn queue_size(&self) -> usize {
         self.event_sender.len()
