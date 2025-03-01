@@ -21,6 +21,7 @@ async fn test_travel_agent_basic_flow() {
                         "name": "simple_expert",
                         "provider_type": "SimpleExpert",
                         "provider_specific": {
+                            "type": "simple_expert",
                             "assistant_id": "assistant_id",
                             "Tokyo": "Tokyo is a great city!",
                             "Osaka": "Osaka is a great city!",
