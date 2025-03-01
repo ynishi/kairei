@@ -89,6 +89,29 @@ impl ProviderRegistry {
         let provider = self
             .create_provider(name, config, &secret, &provider_type)
             .await?;
+
+        // Validate configuration
+        let collector = provider.validate_config_collecting(config);
+
+        // Handle errors
+        if collector.has_errors() {
+            return Err(ProviderError::ConfigValidationFailed(format!(
+                "Validation failed for provider {}: {}",
+                name,
+                collector.errors.first().unwrap()
+            )));
+        }
+
+        // Log warnings
+        if collector.has_warnings() {
+            for warning in &collector.warnings {
+                debug!(
+                    "Warning during validation of provider {}: {}",
+                    name, warning
+                );
+            }
+        }
+
         self.register_provider_with(name, config, &secret, provider)
             .await?;
 
