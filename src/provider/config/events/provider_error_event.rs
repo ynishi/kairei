@@ -64,8 +64,14 @@ impl ProviderErrorEvent {
         let message = self.error.to_string();
         let mut parameters = HashMap::new();
 
-        parameters.insert("provider_id".to_string(), Value::String(self.provider_id.clone()));
-        parameters.insert("error_code".to_string(), Value::String(self.error.error_code()));
+        parameters.insert(
+            "provider_id".to_string(),
+            Value::String(self.provider_id.clone()),
+        );
+        parameters.insert(
+            "error_code".to_string(),
+            Value::String(self.error.error_code()),
+        );
 
         if let Some(context) = &self.context {
             parameters.insert("context".to_string(), Value::String(context.clone()));
@@ -101,20 +107,14 @@ impl ProviderErrorEvent {
     ///
     /// * `ErrorSeverity` - The severity of the error
     fn get_severity(&self) -> ErrorSeverity {
-        match &self.error {
-            ProviderConfigError::Provider(provider_error) => match provider_error {
-                crate::provider::config::errors::ProviderError::Initialization { context, .. } => {
-                    match context.severity {
-                        crate::provider::config::errors::ErrorSeverity::Critical => {
-                            ErrorSeverity::Critical
-                        }
-                        _ => ErrorSeverity::Error,
-                    }
-                }
-                _ => ErrorSeverity::Error,
-            },
-            _ => ErrorSeverity::Error,
+        if let ProviderConfigError::Provider(
+            crate::provider::config::errors::ProviderError::Initialization { context, .. }
+        ) = &self.error {
+            if context.severity == crate::provider::config::errors::ErrorSeverity::Critical {
+                return ErrorSeverity::Critical;
+            }
         }
+        ErrorSeverity::Error
     }
 
     /// Gets the source location of the error, if available.
@@ -131,32 +131,33 @@ impl ProviderErrorEvent {
                 crate::provider::config::errors::SchemaError::InvalidType { context, .. } => {
                     Some(&context.location)
                 }
-                crate::provider::config::errors::SchemaError::InvalidStructure { context, .. } => {
-                    Some(&context.location)
-                }
+                crate::provider::config::errors::SchemaError::InvalidStructure {
+                    context, ..
+                } => Some(&context.location),
             },
             ProviderConfigError::Validation(validation_error) => match validation_error {
-                crate::provider::config::errors::ValidationError::InvalidValue { context, .. } => {
-                    Some(&context.location)
-                }
+                crate::provider::config::errors::ValidationError::InvalidValue {
+                    context, ..
+                } => Some(&context.location),
                 crate::provider::config::errors::ValidationError::ConstraintViolation {
                     context,
                     ..
                 } => Some(&context.location),
-                crate::provider::config::errors::ValidationError::DependencyError { context, .. } => {
-                    Some(&context.location)
-                }
+                crate::provider::config::errors::ValidationError::DependencyError {
+                    context,
+                    ..
+                } => Some(&context.location),
             },
             ProviderConfigError::Provider(provider_error) => match provider_error {
-                crate::provider::config::errors::ProviderError::Initialization { context, .. } => {
-                    Some(&context.location)
-                }
+                crate::provider::config::errors::ProviderError::Initialization {
+                    context, ..
+                } => Some(&context.location),
                 crate::provider::config::errors::ProviderError::Capability { context, .. } => {
                     Some(&context.location)
                 }
-                crate::provider::config::errors::ProviderError::Configuration { context, .. } => {
-                    Some(&context.location)
-                }
+                crate::provider::config::errors::ProviderError::Configuration {
+                    context, ..
+                } => Some(&context.location),
             },
             _ => None,
         }
@@ -178,17 +179,17 @@ mod tests {
     fn test_provider_error_event_conversion() {
         // Create a provider config error
         let error = ProviderConfigError::Schema(SchemaError::missing_field("test_field"));
-        
+
         // Create a provider error event
         let provider_error_event = ProviderErrorEvent::new(error, "test_provider");
-        
+
         // Convert to error event
         let error_event = provider_error_event.to_error_event();
-        
+
         // Verify error event properties
         assert_eq!(error_event.error_type, "provider_config_schema_error");
         assert_eq!(error_event.severity, ErrorSeverity::Error);
-        
+
         // Verify parameters
         let provider_id = error_event.parameters.get("provider_id").unwrap();
         if let Value::String(id) = provider_id {
@@ -196,7 +197,7 @@ mod tests {
         } else {
             panic!("provider_id is not a string");
         }
-        
+
         let field = error_event.parameters.get("field").unwrap();
         if let Value::String(field_name) = field {
             assert_eq!(field_name, "test_field");
