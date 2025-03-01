@@ -1,8 +1,7 @@
 //! Tests for the provider configuration validation framework.
 
 use crate::provider::config::{
-    CollectingValidator, EvaluatorValidator, ProviderConfigValidator,
-    TypeCheckerValidator,
+    CollectingValidator, EvaluatorValidator, ProviderConfigValidator, TypeCheckerValidator,
 };
 use serde_json::json;
 use std::collections::HashMap;
