@@ -122,13 +122,38 @@ impl AstRegistry {
         let tokens: Vec<Token> = preprocessor.process(tokens);
         debug!("{:?}", tokens);
 
+        // Clear any previous errors
+        analyzer::error_handling::ERROR_COLLECTOR.with(|collector| {
+            collector.borrow_mut().clear();
+        });
+
         // 3. Parsing: Convert tokens into AST structure
-        let (pos, mut root) = analyzer::parsers::world::parse_root()
+        let parse_result = analyzer::parsers::world::parse_root()
             .parse(tokens.as_slice(), 0)
-            .map_err(|e: analyzer::ParseError| ASTError::ParseError {
-                message: format!("failed to parse DSL {}", e),
-                target: "root".to_string(),
-            })?;
+            .map_err(|e: analyzer::ParseError| {
+                // Check if we have collected errors
+                let collected_errors = analyzer::error_handling::ERROR_COLLECTOR.with(|collector| {
+                    let collector = collector.borrow();
+                    collector.get_errors().to_vec()
+                });
+                
+                if !collected_errors.is_empty() {
+                    // Create a detailed error message including collected errors
+                    let detailed_message = analyzer::error_handling::format_detailed_error_message(&e, &collected_errors);
+                    ASTError::ParseError {
+                        message: detailed_message,
+                        target: "root".to_string(),
+                    }
+                } else {
+                    // Fall back to the original error
+                    ASTError::ParseError {
+                        message: format!("failed to parse DSL {}", e),
+                        target: "root".to_string(),
+                    }
+                }
+            });
+
+        let (pos, mut root) = parse_result?;
         debug!("{:?}", root);
 
         // Verify that all tokens were consumed

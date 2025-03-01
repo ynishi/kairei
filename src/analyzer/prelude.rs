@@ -8,6 +8,7 @@
 
 use super::combinators::*;
 use super::core::Parser;
+use super::error_handling::*;
 
 /// Creates a parser that matches a specific value
 ///
@@ -188,6 +189,27 @@ where
     Many::new(parser)
 }
 
+/// Creates an error-collecting many parser that preserves error information
+///
+/// # Arguments
+///
+/// * `parser` - The parser to apply repeatedly
+/// * `context` - Context information for error reporting
+///
+/// # Returns
+///
+/// A parser that collects results into a vector, always succeeding (possibly with empty vector),
+/// while collecting error information for better diagnostics
+pub fn error_collecting_many<P, I, O>(
+    parser: P,
+    context: impl Into<String>,
+) -> ErrorCollectingMany<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    ErrorCollectingMany::new(parser, context)
+}
+
 /// Creates a parser that applies another parser one or more times
 ///
 /// # Arguments
@@ -236,6 +258,63 @@ where
     P: Parser<I, O>,
 {
     Optional::new(parser)
+}
+
+/// Creates an error-collecting optional parser that preserves error information
+///
+/// # Arguments
+///
+/// * `parser` - The parser to make optional
+/// * `context` - Context information for error reporting
+///
+/// # Returns
+///
+/// A parser that returns Some(value) if the inner parser succeeds, or None if it fails,
+/// while collecting error information for better diagnostics
+pub fn error_collecting_optional<P, I, O>(
+    parser: P,
+    context: impl Into<String>,
+) -> ErrorCollectingOptional<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    ErrorCollectingOptional::new(parser, context)
+}</old_str>
+<new_str>/// Creates a parser that makes another parser optional
+///
+/// # Arguments
+///
+/// * `parser` - The parser to make optional
+///
+/// # Returns
+///
+/// A parser that returns Some(value) if the inner parser succeeds, or None if it fails
+pub fn optional<P, I, O>(parser: P) -> Optional<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    Optional::new(parser)
+}
+
+/// Creates an error-collecting optional parser that preserves error information
+///
+/// # Arguments
+///
+/// * `parser` - The parser to make optional
+/// * `context` - Context information for error reporting
+///
+/// # Returns
+///
+/// A parser that returns Some(value) if the inner parser succeeds, or None if it fails,
+/// while collecting error information for better diagnostics
+pub fn error_collecting_optional<P, I, O>(
+    parser: P,
+    context: impl Into<String>,
+) -> ErrorCollectingOptional<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    ErrorCollectingOptional::new(parser, context)
 }
 
 /// Creates a parser for content between left and right delimiters

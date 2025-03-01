@@ -163,7 +163,10 @@ use std::collections::HashMap;
 pub fn parse_root() -> impl Parser<Token, ast::Root> {
     with_context(
         map(
-            tuple2(optional(parse_world()), many(parse_agent_def())),
+            tuple2(
+                error_collecting_optional(parse_world(), "world definition"),
+                error_collecting_many(parse_agent_def(), "agent definitions"),
+            ),
             |(world_def, micro_agent_defs)| ast::Root::new(world_def, micro_agent_defs),
         ),
         "root",

@@ -43,6 +43,7 @@
 
 pub mod combinators;
 pub mod core;
+pub mod error_handling;
 pub mod parsers;
 pub mod prelude;
 

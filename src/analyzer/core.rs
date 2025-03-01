@@ -78,4 +78,44 @@ pub enum ParseError {
         /// Inner error
         inner: Box<ParseError>,
     },
+    /// Error with location information
+    #[error("Parse error in {message} at {file}:{line}:{column}: {inner}")]
+    WithLocation {
+        /// Context message
+        message: String,
+        /// Inner error
+        inner: Box<ParseError>,
+        /// Source file
+        file: String,
+        /// Line number
+        line: usize,
+        /// Column number
+        column: usize,
+    },
+    /// Multiple errors
+    #[error("Multiple parse errors: {message}")]
+    Multiple {
+        /// List of errors
+        errors: Vec<ParseError>,
+        /// Summary message
+        message: String,
+    },
+    /// Error in optional parsing
+    #[error("Optional parsing failed in '{context}': {inner}")]
+    OptionalFailed {
+        /// Context where the error occurred
+        context: String,
+        /// Inner error
+        inner: Box<ParseError>,
+    },
+    /// Error in repeated parsing
+    #[error("Repeated parsing failed in '{context}' after {collected_count} items: {inner}")]
+    ManyFailed {
+        /// Context where the error occurred
+        context: String,
+        /// Number of items successfully parsed before the error
+        collected_count: usize,
+        /// Inner error
+        inner: Box<ParseError>,
+    },
 }
