@@ -14,7 +14,9 @@ impl ProviderConfigValidator for TestValidator {
         &self,
         _config: &HashMap<String, serde_json::Value>,
     ) -> Result<(), ProviderConfigError> {
-        Err(ProviderConfigError::Schema(SchemaError::missing_field("test_field")))
+        Err(ProviderConfigError::Schema(SchemaError::missing_field(
+            "test_field",
+        )))
     }
 
     fn validate_provider_specific(

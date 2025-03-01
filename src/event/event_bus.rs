@@ -651,7 +651,7 @@ impl EventBus {
             })?;
         Ok(())
     }
-    
+
     /// Publishes an error event synchronously without awaiting.
     ///
     /// This method is useful when you need to publish an error event from a synchronous
