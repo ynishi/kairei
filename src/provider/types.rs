@@ -102,6 +102,9 @@ pub enum ProviderError {
 
     #[error("Internal error: {0}")]
     InternalError(String),
+
+    #[error("Config validation failed: {0}")]
+    ConfigValidationFailed(String),
 }
 
 pub type ProviderResult<T> = Result<T, ProviderError>;
