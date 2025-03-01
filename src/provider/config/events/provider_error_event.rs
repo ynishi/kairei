@@ -108,8 +108,9 @@ impl ProviderErrorEvent {
     /// * `ErrorSeverity` - The severity of the error
     fn get_severity(&self) -> ErrorSeverity {
         if let ProviderConfigError::Provider(
-            crate::provider::config::errors::ProviderError::Initialization { context, .. }
-        ) = &self.error {
+            crate::provider::config::errors::ProviderError::Initialization { context, .. },
+        ) = &self.error
+        {
             if context.severity == crate::provider::config::errors::ErrorSeverity::Critical {
                 return ErrorSeverity::Critical;
             }
