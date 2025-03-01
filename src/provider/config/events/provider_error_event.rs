@@ -174,7 +174,7 @@ impl From<ProviderErrorEvent> for ErrorEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::config::errors::{ErrorContext, SchemaError};
+    use crate::provider::config::errors::SchemaError;
 
     #[test]
     fn test_provider_error_event_conversion() {
