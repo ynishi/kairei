@@ -218,7 +218,7 @@ mod tests {
     use super::*;
     use crate::analyzer::core::*;
     // Import specific functions instead of using glob imports
-    use crate::analyzer::combinators::{fail, satisfy};
+    use crate::analyzer::prelude::{fail, satisfy};
 
     #[test]
     fn test_error_collecting_optional() {

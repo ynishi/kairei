@@ -8,10 +8,7 @@ use kairei::{
         prelude::*,
     },
     ast_registry::AstRegistry,
-    tokenizer::{
-        keyword::Keyword,
-        token::Token,
-    },
+    tokenizer::{keyword::Keyword, token::Token},
     ASTError,
 };
 
