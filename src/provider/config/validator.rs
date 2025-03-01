@@ -137,19 +137,28 @@ impl std::fmt::Debug for ErrorCollector {
         f.debug_struct("ErrorCollector")
             .field("errors", &self.errors)
             .field("warnings", &self.warnings)
-            .field("event_bus", &format!("<EventBus>"))
+            .field("event_bus", &"<EventBus>".to_string())
             .field("provider_id", &self.provider_id)
             .finish()
     }
 }
 
+#[derive(Default)]
+struct ErrorCollectorDefault {
+    errors: Vec<ProviderConfigError>,
+    warnings: Vec<ProviderConfigError>,
+    event_bus: Option<Arc<EventBus>>,
+    provider_id: Option<String>,
+}
+
 impl Default for ErrorCollector {
     fn default() -> Self {
+        let default = ErrorCollectorDefault::default();
         Self {
-            errors: Vec::new(),
-            warnings: Vec::new(),
-            event_bus: None,
-            provider_id: None,
+            errors: default.errors,
+            warnings: default.warnings,
+            event_bus: default.event_bus,
+            provider_id: default.provider_id,
         }
     }
 }
@@ -178,7 +187,7 @@ impl ErrorCollector {
             // Use sync_publish to avoid requiring async
             let _ = event_bus.sync_publish_error(error_event.into());
         }
-        
+
         self.errors.push(error);
     }
 
@@ -191,7 +200,7 @@ impl ErrorCollector {
             // Use sync_publish to avoid requiring async
             let _ = event_bus.sync_publish_error(warning_event.into());
         }
-        
+
         self.warnings.push(warning);
     }
 
