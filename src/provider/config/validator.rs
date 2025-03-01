@@ -120,7 +120,7 @@ pub trait ProviderConfigValidator {
 ///
 /// This struct allows validators to collect multiple errors during validation
 /// rather than stopping at the first error.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ErrorCollector {
     /// Errors collected during validation.
     pub errors: Vec<ProviderConfigError>,
@@ -130,6 +130,17 @@ pub struct ErrorCollector {
     pub event_bus: Option<Arc<EventBus>>,
     /// Provider ID for error events.
     pub provider_id: Option<String>,
+}
+
+impl std::fmt::Debug for ErrorCollector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ErrorCollector")
+            .field("errors", &self.errors)
+            .field("warnings", &self.warnings)
+            .field("event_bus", &format!("<EventBus>"))
+            .field("provider_id", &self.provider_id)
+            .finish()
+    }
 }
 
 impl Default for ErrorCollector {

@@ -4,7 +4,7 @@
 //! for handling provider configuration validation errors as events.
 
 use crate::event::event_bus::{ErrorEvent, ErrorSeverity, Value};
-use crate::provider::config::errors::{ErrorContext, ProviderConfigError, SourceLocation};
+use crate::provider::config::errors::{ProviderConfigError, SourceLocation};
 use std::collections::HashMap;
 
 /// Represents an error event from provider configuration validation.
