@@ -28,7 +28,10 @@ pub fn setup_non_api_config() -> (SystemConfig, SecretConfig) {
                     provider_type: ProviderType::SimpleExpert,
                     provider_specific: {
                         let mut map = HashMap::new();
-                        map.insert("type".to_string(), serde_json::Value::String("simple_expert".to_string()));
+                        map.insert(
+                            "type".to_string(),
+                            serde_json::Value::String("simple_expert".to_string()),
+                        );
                         map
                     },
                     ..Default::default()
