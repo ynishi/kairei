@@ -23,18 +23,20 @@ micro TravelPlanner {
     policy "Create balanced itineraries with appropriate time allocation"
 
     state {
-        current_plan: String = "none",
-        planning_stage: String = "none"
+        current_plan: String = "none";
+        planning_stage: String = "none";
     }
     answer {
         // create a comprehensive travel plan
         on request PlanTrip(destination: String, start: String, end: String, budget: Float, interests: String) -> Result<String, Error> {
+            /* TODO
             (hotels, flights, attractions, local_info) = await {
                 request FindHotels to HotelFinder(location: destination, start_date: start,end_date: end, budget: budget * 0.4)
                 request FindFlight to FlightFinder(departure_location: "NewYork", arrival_location: destination, departure_date: start, back_date: end, budget :budget * 0.4)
                 request FindAttractions to AttractionRecommender(location: destination, dates: "${start} to ${end}", interests: interests, budget: budget * 0.2)
                 request GetLocalInfo to LocalExpertAgent(location: destination, season: start, specific_questions: "")
             }
+            */
             plan = think("""Create a comprehensive travel plan by combining this flight, hotels, attractions and local information:
 
                             Destination: ${destination}
@@ -71,8 +73,8 @@ micro TravelPlanner {
 micro HotelFinder {
     answer {
         // web search for hotels
-        on request FindHotels(location: String, start_date: String, end_date: String, budget: Float) {
-            hotels = think("Find suitable hotels matching criteria", location, check_in: start_date, check_out: end_date, budget") with {
+        on request FindHotels(location: String, start_date: String, end_date: String, budget: Float) -> Result<String, Error> {
+            hotels = think("Find suitable hotels matching criteria", location, check_in: start_date, check_out: end_date, budget) with {
                 search: {
                     filters: ["hotels"]
                     // recent: "24h"
@@ -85,7 +87,7 @@ micro HotelFinder {
 
 micro FlightFinder {
     answer {
-        on request FindFlight(departure_location: String, arrival_location: String, departure_date: String, back_date: String, budget: Float) {
+        on request FindFlight(departure_location: String, arrival_location: String, departure_date: String, back_date: String, budget: Float) -> Result<String, Error> {
             flights = think("""Provide flight recommendations for:
                             Route: ${departure_location} to ${arrival_location}
                             Departure: ${departure_date} (must include this exact date)
