@@ -27,15 +27,15 @@ impl ProviderConfigValidator for TypeCheckerValidator {
         } else {
             return Err(SchemaError::missing_field("type or provider_type").into());
         };
-        
+
         // Check required properties based on the plugin type
         let required_props = match plugin_type {
-            "memory" => vec![],  // No specific requirements for memory besides the type
+            "memory" => vec![], // No specific requirements for memory besides the type
             "rag" => vec!["chunk_size", "max_tokens"],
             "search" => vec!["max_results"],
-            _ => vec![],  // No specific requirements for unknown types
+            _ => vec![], // No specific requirements for unknown types
         };
-        
+
         // Add either "type" or "provider_type" to required fields
         let mut final_props = required_props.clone();
         if config.contains_key("type") {
@@ -78,7 +78,7 @@ impl ProviderConfigValidator for TypeCheckerValidator {
             // Handle the OpenAIChat and other provider types
             "OpenAIChat" | "OpenAIAssistant" | "SimpleExpert" => {
                 // Common configuration for LLM-based providers
-                if let Some(_) = config.get("common_config") {
+                if config.get("common_config").is_some() {
                     check_property_type(&json_obj, "common_config", "object")
                         .map_err(ProviderConfigError::from)?;
                 }
@@ -217,7 +217,7 @@ mod tests {
 
         assert!(validator.validate_schema(&config).is_ok());
     }
-    
+
     #[test]
     fn test_validate_schema_valid_memory_with_provider_type() {
         let validator = TypeCheckerValidator;
@@ -243,7 +243,7 @@ mod tests {
 
         assert!(validator.validate_schema(&config).is_ok());
     }
-    
+
     #[test]
     fn test_validate_schema_valid_llm_provider() {
         let validator = TypeCheckerValidator;
