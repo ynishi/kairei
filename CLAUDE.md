@@ -33,12 +33,25 @@
 - **docs/**: Design documentation
 - **examples/**: Example KAIREI applications
 
-## Issue Creation Process
-1. Draft issue content in the .claude_workspace directory first
-2. Create the issue using: `gh issue create --title "Title" --body-file .claude_workspace/your_file.md --label "${label name}"`
-  - label for implementation: enhancement
-  - label for research, design: design
-3. To create follow-up issues for future enhancements, use the process above with descriptive titles and detailed background/goals
+## GitHub Content Creation
+### Preparing Content
+1. Always draft content in the .claude_workspace directory first:
+   - For issues: `.claude_workspace/issue_name.md`
+   - For PRs: `.claude_workspace/pr_name.md`
+   - For documentation: `.claude_workspace/doc_name.md`
+
+2. Use a clear structure for all content:
+   - Title/headline
+   - Background/context
+   - Goals/objectives
+   - Implementation details or approach
+   - Benefits/outcomes
+
+3. Standard labels for reference:
+   - Implementation tasks: `enhancement`
+   - Design/research tasks: `design`
+   - Documentation tasks: `documentation`
+   - Bug fixes: `bug`
 
 ## Claude Workspace
 The `.claude_workspace/` directory is a dedicated workspace for Claude to:
