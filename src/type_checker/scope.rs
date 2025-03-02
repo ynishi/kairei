@@ -15,8 +15,8 @@ pub struct TypeScope {
 
 /// Single layer in the type scope stack
 #[derive(Clone)]
-struct TypeScopeLayer {
-    types: HashMap<String, TypeInfo>,
+pub struct TypeScopeLayer {
+    pub types: HashMap<String, TypeInfo>,
 }
 
 impl Default for TypeScopeLayer {
@@ -97,6 +97,65 @@ impl TypeScope {
     /// Get the current scope depth
     pub fn depth(&self) -> usize {
         self.scopes.len()
+    }
+
+    /// Create a scope checkpoint for later restoration
+    /// Returns the current scope depth as a checkpoint
+    pub fn create_checkpoint(&self) -> usize {
+        self.scopes.len()
+    }
+
+    /// Restore a scope checkpoint
+    /// Truncates the scope stack to the checkpoint depth
+    pub fn restore_checkpoint(&mut self, checkpoint: usize) {
+        if checkpoint <= self.scopes.len() && checkpoint > 0 {
+            self.scopes.truncate(checkpoint);
+        }
+    }
+
+    /// Enter an isolated scope
+    /// This is a semantic alias for enter_scope() to make code more readable
+    /// when the intention is to create an isolated context
+    pub fn enter_isolated_scope(&mut self) {
+        self.enter_scope();
+    }
+
+    /// Exit an isolated scope and clean up
+    /// This is a semantic alias for exit_scope() to make code more readable
+    /// when the intention is to clean up an isolated context
+    pub fn exit_isolated_scope(&mut self) {
+        self.exit_scope();
+    }
+
+    /// Get a type from the current scope only (not parent scopes)
+    /// This is useful for checking if a type exists in the current scope
+    /// without considering parent scopes
+    pub fn get_type_from_current_scope(&self, name: &str) -> Option<TypeInfo> {
+        if let Some(scope) = self.scopes.last() {
+            scope.types.get(name).cloned()
+        } else {
+            None
+        }
+    }
+
+    /// Get the scope at a specific level
+    /// Level 0 is the global scope, higher levels are nested scopes
+    /// Returns None if the level is out of bounds
+    pub fn get_scope_at_level(&self, level: usize) -> Option<&TypeScopeLayer> {
+        if level < self.scopes.len() {
+            Some(&self.scopes[level])
+        } else {
+            None
+        }
+    }
+
+    /// Insert a type at a specific scope level
+    /// Level 0 is the global scope, higher levels are nested scopes
+    /// Does nothing if the level is out of bounds
+    pub fn insert_type_at_level(&mut self, level: usize, name: String, ty: TypeInfo) {
+        if level < self.scopes.len() {
+            self.scopes[level].types.insert(name, ty);
+        }
     }
 }
 
