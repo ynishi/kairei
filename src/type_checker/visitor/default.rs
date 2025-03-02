@@ -515,17 +515,48 @@ impl TypeVisitor for DefaultVisitor {
         match stmt {
             Statement::Expression(expr) => self.visit_expression(expr, ctx),
             Statement::Assignment { target, value } => {
-                // Get target type
-                let target_type = self.infer_type(&target[0], ctx)?;
-                // Get value type
+                // Get value type first
                 let value_type = self.infer_type(value, ctx)?;
-                // Check compatibility
-                if target_type != value_type {
-                    return Err(TypeCheckError::type_mismatch(
-                        target_type,
-                        value_type,
-                        Default::default(),
-                    ));
+
+                // Handle target based on expression type
+                match &target[0] {
+                    Expression::Variable(name) => {
+                        // Try to get the target type
+                        let target_type_result = self.infer_type(&target[0], ctx);
+
+                        match target_type_result {
+                            Ok(target_type) => {
+                                // Variable already has a type, check compatibility
+                                if target_type != value_type {
+                                    return Err(TypeCheckError::type_mismatch(
+                                        target_type,
+                                        value_type,
+                                        Default::default(),
+                                    ));
+                                }
+                            }
+                            Err(TypeCheckError::UndefinedVariable { .. }) => {
+                                // Variable doesn't have a type yet
+                                // In Normal mode, infer the type from the value
+                                ctx.scope.insert_type(name.clone(), value_type);
+                            }
+                            Err(err) => {
+                                // Propagate other errors
+                                return Err(err);
+                            }
+                        }
+                    }
+                    _ => {
+                        // For other expressions (e.g., StateAccess), get target type and check compatibility
+                        let target_type = self.infer_type(&target[0], ctx)?;
+                        if target_type != value_type {
+                            return Err(TypeCheckError::type_mismatch(
+                                target_type,
+                                value_type,
+                                Default::default(),
+                            ));
+                        }
+                    }
                 }
                 Ok(())
             }
