@@ -35,3 +35,4 @@ config.json
 !/.claude_workspace/README.md
 
 *.profraw
+.devin_workspace/
