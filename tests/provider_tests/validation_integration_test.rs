@@ -16,8 +16,8 @@ fn test_memory_provider_validation() {
     }))
     .unwrap();
 
-    let type_checker = TypeCheckerValidator::default();
-    let evaluator = EvaluatorValidator::default();
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
 
     assert!(
         type_checker.validate(&config).is_ok(),
@@ -61,8 +61,8 @@ fn test_rag_provider_validation() {
     }))
     .unwrap();
 
-    let type_checker = TypeCheckerValidator::default();
-    let evaluator = EvaluatorValidator::default();
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
 
     assert!(
         type_checker.validate(&config).is_ok(),
@@ -108,8 +108,8 @@ fn test_llm_provider_validation() {
     }))
     .unwrap();
 
-    let type_checker = TypeCheckerValidator::default();
-    let evaluator = EvaluatorValidator::default();
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
 
     assert!(
         type_checker.validate(&config).is_ok(),
@@ -134,7 +134,7 @@ fn test_validation_with_missing_capabilities() {
     }))
     .unwrap();
 
-    let type_checker = TypeCheckerValidator::default();
+    let type_checker = TypeCheckerValidator;
 
     assert!(
         type_checker.validate(&config).is_ok(),
@@ -164,8 +164,8 @@ fn test_validation_with_invalid_dependencies() {
     }))
     .unwrap();
 
-    let type_checker = TypeCheckerValidator::default();
-    let evaluator = EvaluatorValidator::default();
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
 
     assert!(
         type_checker.validate(&config).is_ok(),
@@ -190,7 +190,7 @@ fn test_cross_field_validation() {
     }))
     .unwrap();
 
-    let evaluator = EvaluatorValidator::default();
+    let evaluator = EvaluatorValidator;
 
     // Just verify that the validation runs without crashing
     let _result = evaluator.validate(&config);
@@ -214,8 +214,8 @@ fn test_validation_with_custom_provider() {
     }))
     .unwrap();
 
-    let type_checker = TypeCheckerValidator::default();
-    let evaluator = EvaluatorValidator::default();
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
 
     assert!(
         type_checker.validate(&config).is_ok(),
