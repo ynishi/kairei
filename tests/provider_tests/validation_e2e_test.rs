@@ -223,3 +223,52 @@ fn test_validation_e2e_error_collection_order() {
         "Should have at least one identified error field"
     );
 }
+
+#[test]
+fn test_validation_e2e_with_provider_type() {
+    // Create a configuration with provider_type instead of type
+    let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
+        "provider_type": "memory",
+        "ttl": 3600,
+        "capabilities": {
+            "memory": true
+        }
+    }))
+    .unwrap();
+
+    // Use both validators to validate the configuration
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
+
+    // Verify that both validators pass for valid config with provider_type
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for valid config with provider_type"
+    );
+    assert!(
+        evaluator.validate(&config).is_ok(),
+        "Evaluation should pass for valid config with provider_type"
+    );
+
+    // Test with invalid ttl
+    let invalid_config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
+        "provider_type": "memory",
+        "ttl": 0, // Invalid value
+        "capabilities": {
+            "memory": true
+        }
+    }))
+    .unwrap();
+
+    // Verify that type checking passes but evaluation fails for invalid ttl
+    assert!(
+        type_checker.validate(&invalid_config).is_ok(),
+        "Type checking should pass for config with semantic errors"
+    );
+    assert!(
+        evaluator
+            .validate_provider_specific(&invalid_config)
+            .is_err(),
+        "Evaluation should fail for config with invalid ttl"
+    );
+}

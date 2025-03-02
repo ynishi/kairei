@@ -26,77 +26,83 @@ impl ProviderConfigValidator for EvaluatorValidator {
         &self,
         config: &HashMap<String, serde_json::Value>,
     ) -> Result<(), ProviderConfigError> {
+        // Get plugin type from either "type" or "provider_type" field
+        let plugin_type = if let Some(serde_json::Value::String(t)) = config.get("type") {
+            t.as_str()
+        } else if let Some(serde_json::Value::String(t)) = config.get("provider_type") {
+            t.as_str()
+        } else {
+            return Ok(()); // No type to validate against
+        };
+
         // Validate provider-specific aspects
-        if let Some(serde_json::Value::String(plugin_type)) = config.get("type") {
-            match plugin_type.as_str() {
-                "memory" => {
-                    if let Some(serde_json::Value::Number(ttl)) = config.get("ttl") {
-                        if let Some(ttl) = ttl.as_u64() {
-                            if ttl == 0 {
-                                return Err(ValidationError::invalid_value(
-                                    "ttl",
-                                    "TTL must be greater than 0",
-                                )
-                                .into());
-                            }
+        match plugin_type {
+            "memory" => {
+                if let Some(serde_json::Value::Number(ttl)) = config.get("ttl") {
+                    if let Some(ttl) = ttl.as_u64() {
+                        if ttl == 0 {
+                            return Err(ValidationError::invalid_value(
+                                "ttl",
+                                "TTL must be greater than 0",
+                            )
+                            .into());
                         }
                     }
                 }
-                "rag" => {
-                    if let Some(serde_json::Value::Number(chunk_size)) = config.get("chunk_size") {
-                        if let Some(chunk_size) = chunk_size.as_u64() {
-                            if chunk_size == 0 {
-                                return Err(ValidationError::invalid_value(
-                                    "chunk_size",
-                                    "Chunk size must be greater than 0",
-                                )
-                                .into());
-                            }
-                        }
-                    }
-
-                    if let Some(serde_json::Value::Number(max_tokens)) = config.get("max_tokens") {
-                        if let Some(max_tokens) = max_tokens.as_u64() {
-                            if max_tokens == 0 {
-                                return Err(ValidationError::invalid_value(
-                                    "max_tokens",
-                                    "Max tokens must be greater than 0",
-                                )
-                                .into());
-                            }
-                        }
-                    }
-
-                    if let Some(serde_json::Value::Number(similarity_threshold)) =
-                        config.get("similarity_threshold")
-                    {
-                        if let Some(similarity_threshold) = similarity_threshold.as_f64() {
-                            if !(0.0..=1.0).contains(&similarity_threshold) {
-                                return Err(ValidationError::invalid_value(
-                                    "similarity_threshold",
-                                    "Similarity threshold must be between 0.0 and 1.0",
-                                )
-                                .into());
-                            }
-                        }
-                    }
-                }
-                "search" => {
-                    if let Some(serde_json::Value::Number(max_results)) = config.get("max_results")
-                    {
-                        if let Some(max_results) = max_results.as_u64() {
-                            if max_results == 0 {
-                                return Err(ValidationError::invalid_value(
-                                    "max_results",
-                                    "Max results must be greater than 0",
-                                )
-                                .into());
-                            }
-                        }
-                    }
-                }
-                _ => {}
             }
+            "rag" => {
+                if let Some(serde_json::Value::Number(chunk_size)) = config.get("chunk_size") {
+                    if let Some(chunk_size) = chunk_size.as_u64() {
+                        if chunk_size == 0 {
+                            return Err(ValidationError::invalid_value(
+                                "chunk_size",
+                                "Chunk size must be greater than 0",
+                            )
+                            .into());
+                        }
+                    }
+                }
+
+                if let Some(serde_json::Value::Number(max_tokens)) = config.get("max_tokens") {
+                    if let Some(max_tokens) = max_tokens.as_u64() {
+                        if max_tokens == 0 {
+                            return Err(ValidationError::invalid_value(
+                                "max_tokens",
+                                "Max tokens must be greater than 0",
+                            )
+                            .into());
+                        }
+                    }
+                }
+
+                if let Some(serde_json::Value::Number(similarity_threshold)) =
+                    config.get("similarity_threshold")
+                {
+                    if let Some(similarity_threshold) = similarity_threshold.as_f64() {
+                        if !(0.0..=1.0).contains(&similarity_threshold) {
+                            return Err(ValidationError::invalid_value(
+                                "similarity_threshold",
+                                "Similarity threshold must be between 0.0 and 1.0",
+                            )
+                            .into());
+                        }
+                    }
+                }
+            }
+            "search" => {
+                if let Some(serde_json::Value::Number(max_results)) = config.get("max_results") {
+                    if let Some(max_results) = max_results.as_u64() {
+                        if max_results == 0 {
+                            return Err(ValidationError::invalid_value(
+                                "max_results",
+                                "Max results must be greater than 0",
+                            )
+                            .into());
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
 
         Ok(())
@@ -106,77 +112,78 @@ impl ProviderConfigValidator for EvaluatorValidator {
         &self,
         config: &HashMap<String, serde_json::Value>,
     ) -> Result<(), ProviderConfigError> {
+        // Get plugin type from either "type" or "provider_type" field
+        let plugin_type = if let Some(serde_json::Value::String(t)) = config.get("type") {
+            t.as_str()
+        } else if let Some(serde_json::Value::String(t)) = config.get("provider_type") {
+            t.as_str()
+        } else {
+            return Ok(()); // No type to validate against
+        };
+
         // Validate capabilities
-        if let Some(serde_json::Value::String(plugin_type)) = config.get("type") {
-            match plugin_type.as_str() {
-                "memory" => {
-                    // Memory plugin requires memory capability
-                    if let Some(serde_json::Value::Object(capabilities)) =
-                        config.get("capabilities")
-                    {
-                        if let Some(serde_json::Value::Bool(memory)) = capabilities.get("memory") {
-                            if !memory {
-                                return Err(ProviderError::capability(
-                                    "capabilities.memory",
-                                    "Memory plugin requires memory capability",
-                                )
-                                .into());
-                            }
-                        } else {
+        match plugin_type {
+            "memory" => {
+                // Memory plugin requires memory capability
+                if let Some(serde_json::Value::Object(capabilities)) = config.get("capabilities") {
+                    if let Some(serde_json::Value::Bool(memory)) = capabilities.get("memory") {
+                        if !memory {
                             return Err(ProviderError::capability(
                                 "capabilities.memory",
                                 "Memory plugin requires memory capability",
                             )
                             .into());
                         }
+                    } else {
+                        return Err(ProviderError::capability(
+                            "capabilities.memory",
+                            "Memory plugin requires memory capability",
+                        )
+                        .into());
                     }
                 }
-                "rag" => {
-                    // RAG plugin requires rag capability
-                    if let Some(serde_json::Value::Object(capabilities)) =
-                        config.get("capabilities")
-                    {
-                        if let Some(serde_json::Value::Bool(rag)) = capabilities.get("rag") {
-                            if !rag {
-                                return Err(ProviderError::capability(
-                                    "capabilities.rag",
-                                    "RAG plugin requires rag capability",
-                                )
-                                .into());
-                            }
-                        } else {
+            }
+            "rag" => {
+                // RAG plugin requires rag capability
+                if let Some(serde_json::Value::Object(capabilities)) = config.get("capabilities") {
+                    if let Some(serde_json::Value::Bool(rag)) = capabilities.get("rag") {
+                        if !rag {
                             return Err(ProviderError::capability(
                                 "capabilities.rag",
                                 "RAG plugin requires rag capability",
                             )
                             .into());
                         }
+                    } else {
+                        return Err(ProviderError::capability(
+                            "capabilities.rag",
+                            "RAG plugin requires rag capability",
+                        )
+                        .into());
                     }
                 }
-                "search" => {
-                    // Search plugin requires search capability
-                    if let Some(serde_json::Value::Object(capabilities)) =
-                        config.get("capabilities")
-                    {
-                        if let Some(serde_json::Value::Bool(search)) = capabilities.get("search") {
-                            if !search {
-                                return Err(ProviderError::capability(
-                                    "capabilities.search",
-                                    "Search plugin requires search capability",
-                                )
-                                .into());
-                            }
-                        } else {
+            }
+            "search" => {
+                // Search plugin requires search capability
+                if let Some(serde_json::Value::Object(capabilities)) = config.get("capabilities") {
+                    if let Some(serde_json::Value::Bool(search)) = capabilities.get("search") {
+                        if !search {
                             return Err(ProviderError::capability(
                                 "capabilities.search",
                                 "Search plugin requires search capability",
                             )
                             .into());
                         }
+                    } else {
+                        return Err(ProviderError::capability(
+                            "capabilities.search",
+                            "Search plugin requires search capability",
+                        )
+                        .into());
                     }
                 }
-                _ => {}
             }
+            _ => {}
         }
 
         Ok(())
@@ -230,9 +237,18 @@ impl ProviderConfigValidator for EvaluatorValidator {
     ) -> Vec<ProviderConfigError> {
         let mut warnings = Vec::new();
 
+        // Get plugin type from either "type" or "provider_type" field
+        let plugin_type = if let Some(serde_json::Value::String(t)) = config.get("type") {
+            Some(t.as_str())
+        } else if let Some(serde_json::Value::String(t)) = config.get("provider_type") {
+            Some(t.as_str())
+        } else {
+            None
+        };
+
         // Check for suboptimal configurations based on provider type
-        if let Some(serde_json::Value::String(plugin_type)) = config.get("type") {
-            match plugin_type.as_str() {
+        if let Some(plugin_type) = plugin_type {
+            match plugin_type {
                 "memory" => {
                     // Warn about low TTL values which may impact performance
                     if let Some(serde_json::Value::Number(ttl)) = config.get("ttl") {
