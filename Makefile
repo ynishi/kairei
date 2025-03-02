@@ -14,6 +14,7 @@ bench:
 
 fmt:
 	cargo fmt
+	cargo clippy --fix --allow-dirty
 	cargo clippy -- -D warnings
 	cargo fmt
 

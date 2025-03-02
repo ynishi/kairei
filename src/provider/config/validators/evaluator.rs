@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_validate_provider_specific_valid_memory() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "type": "memory",
             "ttl": 3600
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_validate_provider_specific_invalid_memory() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "type": "memory",
             "ttl": 0 // Invalid: must be > 0
@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn test_validate_capabilities_valid_rag() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "type": "rag",
             "capabilities": {
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn test_validate_capabilities_invalid_rag() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "type": "rag",
             "capabilities": {
@@ -421,7 +421,7 @@ mod tests {
 
     #[test]
     fn test_validate_dependencies_valid() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "dependencies": [
                 {
@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_validate_dependencies_invalid() {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
         let config = serde_json::from_value(json!({
             "dependencies": [
                 {

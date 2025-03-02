@@ -164,8 +164,8 @@ world TravelPlanningWorld {
             emit NextTick(delta_time)
         }
         
-        on TravellerJoined(user_id: String) {
-            // Handle traveller joining
+        on TravelerJoined(user_id: String) {
+            // Handle Traveler joining
         }
     }
 }

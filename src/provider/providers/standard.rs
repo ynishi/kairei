@@ -323,9 +323,11 @@ mod tests {
             query: expression::Value::String("test".to_string()),
             parameters: HashMap::new(),
         };
-        let mut request = ProviderRequest::default();
-        request.input = input;
-        request
+
+        ProviderRequest {
+            input,
+            ..Default::default()
+        }
     }
 
     // LLM -> Generate

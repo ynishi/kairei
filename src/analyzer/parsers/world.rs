@@ -331,9 +331,9 @@ pub fn parse_config_item() -> impl Parser<Token, (String, ast::Literal)> {
 /// - `ErrorOccurred(message: String)`
 ///
 /// # Example
-/// ```text
+/// ```texts
 /// events {
-///     TravellerJoined(user_id: String)
+///     TravelerJoined(user_id: String)
 ///     TripStarted
 ///     LocationUpdated(latitude: Float, longitude: Float)
 /// }
@@ -379,8 +379,8 @@ fn parse_event() -> impl Parser<Token, ast::CustomEventDef> {
 ///         emit NextTick(delta_time)
 ///     }
 ///     
-///     on TravellerJoined(user_id: String) {
-///         // Handle traveller joining
+///     on TravelerJoined(user_id: String) {
+///         // Handle traveler joining
 ///     }
 /// }
 /// ```

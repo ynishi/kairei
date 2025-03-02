@@ -892,7 +892,7 @@ mod tests {
 
         // RuntimeAgentを生成
         let agent = RuntimeAgentData::new(
-            &counter_def,
+            counter_def,
             &event_bus,
             AgentConfig::default(),
             Arc::new(ProviderInstance::default()),
@@ -1033,7 +1033,7 @@ mod tests {
         };
 
         let agent = RuntimeAgentData::new(
-            &answer_def,
+            answer_def,
             &event_bus,
             AgentConfig::default(),
             Arc::new(ProviderInstance::default()),
@@ -1142,7 +1142,7 @@ mod tests {
         };
 
         let agent = RuntimeAgentData::new(
-            &react_def,
+            react_def,
             &event_bus,
             AgentConfig::default(),
             Arc::new(ProviderInstance::default()),
@@ -1171,7 +1171,6 @@ mod tests {
                     params.insert("value".to_string(), Value::Integer(42));
                     params
                 },
-                ..Default::default()
             })
             .await
             .unwrap();

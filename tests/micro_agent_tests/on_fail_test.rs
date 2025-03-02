@@ -152,10 +152,8 @@ async fn test_on_fail() {
     let events = recv_events.read().await.clone();
     assert!(events
         .iter()
-        .find(|e| e.event_type == EventType::Custom("ProccessError".to_string()))
-        .is_some());
+        .any(|e| e.event_type == EventType::Custom("ProccessError".to_string())));
     assert!(events
         .iter()
-        .find(|e| e.event_type == EventType::Custom("SearchError".to_string()))
-        .is_some());
+        .any(|e| e.event_type == EventType::Custom("SearchError".to_string())));
 }

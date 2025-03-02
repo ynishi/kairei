@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 #[test]
 fn test_type_checker_validator() {
-    let validator = TypeCheckerValidator::default();
+    let validator = TypeCheckerValidator;
 
     // Valid memory config
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
@@ -31,7 +31,7 @@ fn test_type_checker_validator() {
 
 #[test]
 fn test_evaluator_validator() {
-    let validator = EvaluatorValidator::default();
+    let validator = EvaluatorValidator;
 
     // Valid memory config
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
@@ -60,7 +60,7 @@ fn test_evaluator_validator() {
 
 #[test]
 fn test_collecting_validator() {
-    let validator = TypeCheckerValidator::default();
+    let validator = TypeCheckerValidator;
 
     // Config with multiple errors
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
@@ -79,8 +79,8 @@ fn test_collecting_validator() {
 #[test]
 fn test_validator_integration() {
     // Test that both validators can be used together
-    let type_checker = TypeCheckerValidator::default();
-    let evaluator = EvaluatorValidator::default();
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
 
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
         "type": "rag",
@@ -114,7 +114,7 @@ fn test_validator_integration() {
 
 #[test]
 fn test_collecting_validator_with_warnings() {
-    let validator = TypeCheckerValidator::default();
+    let validator = TypeCheckerValidator;
 
     // Config with warnings but no errors
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
@@ -143,7 +143,7 @@ fn test_collecting_validator_with_warnings() {
 
 #[test]
 fn test_evaluator_validator_warnings() {
-    let validator = EvaluatorValidator::default();
+    let validator = EvaluatorValidator;
 
     // Config with warnings but no errors
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({

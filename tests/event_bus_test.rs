@@ -45,7 +45,7 @@ async fn test_concurrent_subscribers() {
     // 期待される総受信数: subscriber_count * event_count
     assert_eq!(
         u64::try_from(received_count.load(Ordering::SeqCst)).unwrap(),
-        u64::try_from(subscriber_count * event_count).unwrap()
+        subscriber_count * event_count
     );
 }
 
@@ -59,7 +59,7 @@ async fn test_slow_subscriber_doesnt_block_others() {
     let (mut slow_rx, _) = bus.subscribe();
     let slow_count = slow_received.clone();
     tokio::spawn(async move {
-        while let Ok(_) = slow_rx.recv().await {
+        while slow_rx.recv().await.is_ok() {
             // 重い処理をシミュレート
             sleep(Duration::from_millis(500)).await;
             slow_count.fetch_add(1, Ordering::SeqCst);
@@ -70,7 +70,7 @@ async fn test_slow_subscriber_doesnt_block_others() {
     let (mut fast_rx, _) = bus.subscribe();
     let fast_count = fast_received.clone();
     tokio::spawn(async move {
-        while let Ok(_) = fast_rx.recv().await {
+        while fast_rx.recv().await.is_ok() {
             // 軽い処理
             sleep(Duration::from_millis(10)).await;
             fast_count.fetch_add(1, Ordering::SeqCst);

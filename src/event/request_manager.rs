@@ -359,10 +359,7 @@ mod tests {
         // リクエストを発行
         let request_task = tokio::spawn({
             let manager = manager.clone();
-            async move {
-                let result = manager.request(&request_event).await;
-                result
-            }
+            async move { manager.request(&request_event).await }
         });
 
         tokio::time::sleep(Duration::from_millis(100)).await;

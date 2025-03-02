@@ -141,7 +141,7 @@ fn test_custom_type_default_values() -> TypeCheckResult<()> {
     if let Some(TypeInfo::Custom { fields, .. }) = ctx.scope.get_type("Person") {
         for (_, field_info) in fields {
             if let Some(default_value) = &field_info.default_value {
-                let _default_type = visitor.visit_expression(default_value, &mut ctx)?;
+                visitor.visit_expression(default_value, &mut ctx)?;
                 assert!(matches!(field_info.type_info, Some(TypeInfo::Simple(..))));
             }
         }
@@ -178,10 +178,7 @@ fn test_custom_type_type_inference() -> TypeCheckResult<()> {
         let field_info = fields.get("inferred_field").unwrap();
         if let Some(Expression::Literal(Literal::Integer(_))) = field_info.default_value {
             // Type should be inferred as Int
-            assert!(matches!(
-                field_info.type_info,
-                None // Currently None, but should be inferred
-            ));
+            assert!(field_info.type_info.is_none());
         }
     }
 

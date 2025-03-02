@@ -148,7 +148,7 @@ fn test_type_mismatch_in_assignment() -> TypeCheckResult<()> {
     let result = visitor.visit_statement(
         &crate::ast::Statement::Assignment {
             target: vec![expr],
-            value: value,
+            value,
         },
         &mut ctx,
     );

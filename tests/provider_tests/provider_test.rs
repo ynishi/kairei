@@ -69,7 +69,7 @@ async fn test_travel_agent_basic_flow() {
     // Initialize system
     let mut system = System::new(&config, &secret_config).await;
 
-    let root = system.parse_dsl(&dsl).await.unwrap();
+    let root = system.parse_dsl(dsl).await.unwrap();
 
     debug!("Root: {:?}", root);
 

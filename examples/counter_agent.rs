@@ -103,7 +103,7 @@ async fn main() {
 
     // inner_project ディレクトリで cargo build を実行
     let output = Command::new("cargo")
-        .args(&["build"])
+        .args(["build"])
         .current_dir("inner_project")
         .output()
         .expect("failed to execute cargo build");
