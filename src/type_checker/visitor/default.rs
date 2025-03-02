@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Expression, FieldInfo, HandlerBlock, HandlerDef, MicroAgentDef, RequestType, Root, StateDef, Statement,
-        TypeInfo,
+        Expression, FieldInfo, HandlerBlock, HandlerDef, MicroAgentDef, RequestType, Root,
+        StateDef, Statement, TypeInfo,
     },
     type_checker::{visitor::common::TypeVisitor, TypeCheckError, TypeCheckResult, TypeContext},
     Argument,
