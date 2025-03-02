@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 62e0825f93e20916199c9225e968ab49a4850961dfebe48faaa780e69c555c3d # shrinks to config = {}
 cc 9705a2ac14a8e31885f0b86c2d13368697446c35002e27802fe73a3dae8b114d # shrinks to config = {"chunk_size": Number(0), "ttl": Number(0), "max_tokens": Number(0), "type": String("memory"), "capabilities": Object {"memory": Bool(true)}}
+cc 651b97c0929939e79f77b56d2a699e583528b74616d174bde7b21fed19bab933 # shrinks to config = {"ttl": Number(0), "max_tokens": Number(0), "chunk_size": Number(0), "capabilities": Object {"llm": Bool(true)}, "type": String("llm")}

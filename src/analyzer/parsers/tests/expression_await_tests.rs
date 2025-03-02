@@ -225,7 +225,7 @@ fn test_parse_await_mixed_arguments() {
                     assert_eq!(function, "getData");
                     assert_eq!(arguments.len(), 1);
                     match &arguments[0] {
-                        ast::Expression::Literal(ast::Literal::Boolean(b)) => assert_eq!(*b, true),
+                        ast::Expression::Literal(ast::Literal::Boolean(b)) => assert!(*b),
                         _ => panic!("Expected Boolean argument"),
                     }
                 }
