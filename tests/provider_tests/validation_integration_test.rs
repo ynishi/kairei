@@ -1,8 +1,8 @@
 //! Integration tests for provider configuration validation scenarios.
 
 use kairei::provider::config::{
-    CollectingValidator, EvaluatorValidator, ProviderConfigValidator, TypeCheckerValidator,
-    ProviderConfigError, ValidationError,
+    CollectingValidator, EvaluatorValidator, ProviderConfigError, ProviderConfigValidator,
+    TypeCheckerValidator, ValidationError,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -22,8 +22,14 @@ fn test_memory_provider_validation() {
     let type_checker = TypeCheckerValidator::default();
     let evaluator = EvaluatorValidator::default();
 
-    assert!(type_checker.validate(&config).is_ok(), "Type checking should pass for valid memory config");
-    assert!(evaluator.validate(&config).is_ok(), "Evaluation should pass for valid memory config");
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for valid memory config"
+    );
+    assert!(
+        evaluator.validate(&config).is_ok(),
+        "Evaluation should pass for valid memory config"
+    );
 
     // Test with invalid ttl
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
@@ -35,8 +41,14 @@ fn test_memory_provider_validation() {
     }))
     .unwrap();
 
-    assert!(type_checker.validate(&config).is_ok(), "Type checking should pass for memory config with invalid ttl");
-    assert!(evaluator.validate_provider_specific(&config).is_err(), "Evaluation should fail for memory config with invalid ttl");
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for memory config with invalid ttl"
+    );
+    assert!(
+        evaluator.validate_provider_specific(&config).is_err(),
+        "Evaluation should fail for memory config with invalid ttl"
+    );
 }
 
 #[test]
@@ -55,8 +67,14 @@ fn test_rag_provider_validation() {
     let type_checker = TypeCheckerValidator::default();
     let evaluator = EvaluatorValidator::default();
 
-    assert!(type_checker.validate(&config).is_ok(), "Type checking should pass for valid RAG config");
-    assert!(evaluator.validate(&config).is_ok(), "Evaluation should pass for valid RAG config");
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for valid RAG config"
+    );
+    assert!(
+        evaluator.validate(&config).is_ok(),
+        "Evaluation should pass for valid RAG config"
+    );
 
     // Test with invalid chunk_size
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
@@ -69,8 +87,14 @@ fn test_rag_provider_validation() {
     }))
     .unwrap();
 
-    assert!(type_checker.validate(&config).is_ok(), "Type checking should pass for RAG config with invalid chunk_size");
-    assert!(evaluator.validate_provider_specific(&config).is_err(), "Evaluation should fail for RAG config with invalid chunk_size");
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for RAG config with invalid chunk_size"
+    );
+    assert!(
+        evaluator.validate_provider_specific(&config).is_err(),
+        "Evaluation should fail for RAG config with invalid chunk_size"
+    );
 }
 
 #[test]
@@ -90,8 +114,14 @@ fn test_llm_provider_validation() {
     let type_checker = TypeCheckerValidator::default();
     let evaluator = EvaluatorValidator::default();
 
-    assert!(type_checker.validate(&config).is_ok(), "Type checking should pass for valid LLM config");
-    assert!(evaluator.validate(&config).is_ok(), "Evaluation should pass for valid LLM config");
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for valid LLM config"
+    );
+    assert!(
+        evaluator.validate(&config).is_ok(),
+        "Evaluation should pass for valid LLM config"
+    );
 
     // Note: In the actual implementation, missing model might not be validated
     // by the type checker, so we don't test for that specifically
@@ -110,8 +140,11 @@ fn test_validation_with_missing_capabilities() {
     let type_checker = TypeCheckerValidator::default();
     let evaluator = EvaluatorValidator::default();
 
-    assert!(type_checker.validate(&config).is_ok(), "Type checking should pass for config with missing capabilities");
-    
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for config with missing capabilities"
+    );
+
     // Note: In the actual implementation, validate_capabilities might not exist or might not
     // fail for missing capabilities, so we don't test for that specifically
 }
@@ -138,8 +171,14 @@ fn test_validation_with_invalid_dependencies() {
     let type_checker = TypeCheckerValidator::default();
     let evaluator = EvaluatorValidator::default();
 
-    assert!(type_checker.validate(&config).is_ok(), "Type checking should pass for config with invalid dependencies");
-    assert!(evaluator.validate_dependencies(&config).is_err(), "Dependencies validation should fail for config with invalid dependencies");
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for config with invalid dependencies"
+    );
+    assert!(
+        evaluator.validate_dependencies(&config).is_err(),
+        "Dependencies validation should fail for config with invalid dependencies"
+    );
 }
 
 #[test]
@@ -156,10 +195,10 @@ fn test_cross_field_validation() {
     .unwrap();
 
     let evaluator = EvaluatorValidator::default();
-    
+
     // Just verify that the validation runs without crashing
     let _result = evaluator.validate(&config);
-    
+
     // Note: In the actual implementation, cross-field validation might not be implemented
     // or might not check for max_tokens < chunk_size, so we don't test for that specifically
 }
@@ -182,8 +221,14 @@ fn test_validation_with_custom_provider() {
     let type_checker = TypeCheckerValidator::default();
     let evaluator = EvaluatorValidator::default();
 
-    assert!(type_checker.validate(&config).is_ok(), "Type checking should pass for valid custom provider config");
-    assert!(evaluator.validate(&config).is_ok(), "Evaluation should pass for valid custom provider config");
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for valid custom provider config"
+    );
+    assert!(
+        evaluator.validate(&config).is_ok(),
+        "Evaluation should pass for valid custom provider config"
+    );
 
     // Note: In the actual implementation, missing implementation might not be validated
     // by the type checker, so we don't test for that specifically

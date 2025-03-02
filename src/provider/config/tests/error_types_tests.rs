@@ -22,7 +22,11 @@ fn test_schema_error_variants() {
     }
 
     match invalid_type {
-        SchemaError::InvalidType { expected, actual, context } => {
+        SchemaError::InvalidType {
+            expected,
+            actual,
+            context,
+        } => {
             assert_eq!(expected, "string");
             assert_eq!(actual, "number");
             assert_eq!(context.location.field, Some("test_field".to_string()));
@@ -45,8 +49,10 @@ fn test_schema_error_variants() {
 fn test_validation_error_variants() {
     // Test ValidationError variants that exist in the implementation
     let invalid_value = ValidationError::invalid_value("test_field", "Value must be positive");
-    let constraint_violation = ValidationError::constraint_violation("test_field", "Value must be less than 100");
-    let dependency_error = ValidationError::dependency_error("test_field", "Depends on missing field 'other_field'");
+    let constraint_violation =
+        ValidationError::constraint_violation("test_field", "Value must be less than 100");
+    let dependency_error =
+        ValidationError::dependency_error("test_field", "Depends on missing field 'other_field'");
 
     // Verify each variant
     match invalid_value {
@@ -80,9 +86,11 @@ fn test_validation_error_variants() {
 #[test]
 fn test_provider_error_variants() {
     // Test ProviderError variants that exist in the implementation
-    let initialization = ProviderError::initialization("test_field", "Failed to initialize provider");
+    let initialization =
+        ProviderError::initialization("test_field", "Failed to initialize provider");
     let capability = ProviderError::capability("test_field", "Required capability not supported");
-    let configuration = ProviderError::configuration("test_field", "Invalid provider configuration");
+    let configuration =
+        ProviderError::configuration("test_field", "Invalid provider configuration");
 
     // Verify each variant
     match initialization {
@@ -126,10 +134,19 @@ fn test_error_context_with_all_fields() {
     // Verify all fields
     assert_eq!(context.location.field, Some("test_field".to_string()));
     assert_eq!(context.severity, ErrorSeverity::Warning);
-    assert_eq!(context.documentation, Some("https://docs.example.com".to_string()));
-    assert_eq!(context.suggestion, Some("Try using a different value".to_string()));
+    assert_eq!(
+        context.documentation,
+        Some("https://docs.example.com".to_string())
+    );
+    assert_eq!(
+        context.suggestion,
+        Some("Try using a different value".to_string())
+    );
     assert_eq!(context.error_code, Some("TEST_001".to_string()));
-    assert_eq!(context.additional_context, Some("Additional context information".to_string()));
+    assert_eq!(
+        context.additional_context,
+        Some("Additional context information".to_string())
+    );
 }
 
 #[test]
@@ -151,7 +168,8 @@ fn test_provider_config_error_conversion() {
     }
 
     // Test conversion from ProviderError to ProviderConfigError
-    let provider_error = ProviderError::initialization("test_field", "Failed to initialize provider");
+    let provider_error =
+        ProviderError::initialization("test_field", "Failed to initialize provider");
     let provider_config_error: ProviderConfigError = provider_error.into();
     match provider_config_error {
         ProviderConfigError::Provider(_) => {}
@@ -166,7 +184,7 @@ fn test_error_severity_comparison() {
     assert_eq!(ErrorSeverity::Error, ErrorSeverity::Error);
     assert_eq!(ErrorSeverity::Warning, ErrorSeverity::Warning);
     assert_eq!(ErrorSeverity::Info, ErrorSeverity::Info);
-    
+
     // Note: ErrorSeverity doesn't implement PartialOrd in the current implementation
     // so we can't directly compare severities with > or <
 }
@@ -175,21 +193,18 @@ fn test_error_severity_comparison() {
 fn test_source_location_builder() {
     // Test building a SourceLocation
     let location = SourceLocation::new_with_field("test_field");
-    
+
     assert_eq!(location.field, Some("test_field".to_string()));
     assert_eq!(location.file, None);
     assert_eq!(location.line, None);
     assert_eq!(location.column, None);
-    
+
     // Test display formatting
-    assert_eq!(
-        location.to_string(),
-        "in field 'test_field'"
-    );
-    
+    assert_eq!(location.to_string(), "in field 'test_field'");
+
     // Test with empty location
     let empty_location = SourceLocation::new();
-    
+
     assert_eq!(empty_location.field, None);
     assert_eq!(empty_location.file, None);
     assert_eq!(empty_location.line, None);
