@@ -27,7 +27,7 @@ fn test_request_expression_type_checking() {
                     request_type: RequestType::Custom("PlanTrip".to_string()),
                     parameters: vec![],
                     return_type: TypeInfo::Result {
-                        ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+                        ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
                         err_type: Box::new(TypeInfo::Simple("Error".to_string())),
                     },
                     constraints: None,
@@ -82,7 +82,7 @@ fn test_request_expression_in_assignment() {
                     request_type: RequestType::Custom("PlanTrip".to_string()),
                     parameters: vec![],
                     return_type: TypeInfo::Result {
-                        ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+                        ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
                         err_type: Box::new(TypeInfo::Simple("Error".to_string())),
                     },
                     constraints: None,

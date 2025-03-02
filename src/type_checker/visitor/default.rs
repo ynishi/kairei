@@ -229,10 +229,10 @@ impl DefaultVisitor {
                     }
                 }
 
-                // Request expressions return Result<String, Error> in Normal mode
-                // This matches the return type of Think expressions for consistency
+                // Request expressions return Result<Any, Error> in Normal mode
+                // This allows for flexibility in return types from different agent handlers
                 Ok(TypeInfo::Result {
-                    ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+                    ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
                     err_type: Box::new(TypeInfo::Simple("Error".to_string())),
                 })
             }
