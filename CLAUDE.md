@@ -59,3 +59,7 @@ The `.claude_workspace/` directory is a dedicated workspace for Claude to:
 - Store temporary content like issue drafts, documentation, etc.
 - Test ideas before implementing them in the main repository
 - The directory is ignored by git (via .gitignore)
+
+## GitHub CLI Commands
+### PR and Issue Management
+- use `gh pr`, `gh issue` and so on, instead of `git` command
