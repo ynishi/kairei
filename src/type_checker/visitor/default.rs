@@ -296,16 +296,40 @@ impl DefaultVisitor {
                 }
             }
             Expression::Await(exprs) => {
-                for expr in exprs {
-                    let expr_type = self.infer_type(expr, ctx)?;
-                    if !matches!(expr_type, TypeInfo::Result { .. }) {
+                // For a single expression, return the ok_type of the Result
+                if exprs.len() == 1 {
+                    let expr_type = self.infer_type(&exprs[0], ctx)?;
+                    if let TypeInfo::Result { ok_type, .. } = expr_type {
+                        return Ok(*ok_type);
+                    } else {
                         return Err(TypeCheckError::type_inference_error(
                             "Can only await Result types".to_string(),
                             Default::default(),
                         ));
                     }
                 }
-                Ok(TypeInfo::Simple("Any".to_string()))
+
+                // For multiple expressions, create an array of the ok_types
+                // Since there's no Tuple type, we use Array to represent multiple values
+                let mut element_type = TypeInfo::Simple("Any".to_string());
+
+                // Check that all expressions are Result types and extract their ok_types
+                for expr in exprs {
+                    let expr_type = self.infer_type(expr, ctx)?;
+                    if let TypeInfo::Result { .. } = expr_type {
+                        // For simplicity, we just use Any as the element type for multiple expressions
+                        // A more sophisticated implementation could track the actual types
+                        element_type = TypeInfo::Simple("Any".to_string());
+                    } else {
+                        return Err(TypeCheckError::type_inference_error(
+                            "Can only await Result types".to_string(),
+                            Default::default(),
+                        ));
+                    }
+                }
+
+                // Return an array type for multiple expressions
+                Ok(TypeInfo::Array(Box::new(element_type)))
             }
         }
     }
