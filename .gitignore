@@ -30,5 +30,8 @@ data
 *.kairei
 config.json
 
+# Claude workspace
+/.claude_workspace/*
+!/.claude_workspace/README.md
 
 *.profraw
