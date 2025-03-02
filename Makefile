@@ -1,7 +1,7 @@
 .PHONY: build run test clippy fmt doc doc_check doc_open clean_doc all setup-hooks
 
 test:
-	cargo test
+	cargo test --quiet
 
 test_v:
 	RUST_LOG=debug cargo test -p kairei $(CASE) --verbose
