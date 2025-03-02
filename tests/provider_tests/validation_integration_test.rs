@@ -1,8 +1,8 @@
 //! Integration tests for provider configuration validation scenarios.
 
 use kairei::provider::config::{
-    CollectingValidator, EvaluatorValidator, ProviderConfigError, ProviderConfigValidator,
-    TypeCheckerValidator, ValidationError,
+     EvaluatorValidator, ProviderConfigValidator,
+    TypeCheckerValidator, 
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -138,8 +138,7 @@ fn test_validation_with_missing_capabilities() {
     .unwrap();
 
     let type_checker = TypeCheckerValidator::default();
-    let evaluator = EvaluatorValidator::default();
-
+    
     assert!(
         type_checker.validate(&config).is_ok(),
         "Type checking should pass for config with missing capabilities"

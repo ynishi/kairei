@@ -156,8 +156,7 @@ proptest! {
     #[test]
     fn test_validator_with_missing_fields(config in provider_config_with_missing_fields_strategy()) {
         let type_checker = TypeCheckerValidator::default();
-        let evaluator = EvaluatorValidator::default();
-
+        
         // Collect validation results
         let type_checker_collector = type_checker.validate_collecting(&config);
 
