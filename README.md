@@ -15,9 +15,19 @@ With KAIREI, large-scale AI agent systems—once limited to enterprises and rese
 
 ## Features ✨
 - **Intuitive DSL**: Simple syntax for constructing multi-agent AI systems
+- **MicroAgent architecture**: Single-responsibility agents that communicate through events and maintain independent state
 - **Event-driven architecture**: Optimized asynchronous processing for high performance and scalability
 - **Type system for consistency**: Ensures safe and structured agent communication
 - **High performance with Rust**: The generated binaries are lightweight and run efficiently across various environments
+
+## 🚧 Current Limitations (In Development)
+KAIREI is still in early development
+
+- ❌ Advanced UI/CLI Tools: Minimum CLI functionality is available, but a full-featured interactive UI is not yet supported.
+- ❌ Complete Type Inference: The type system is functional, but some advanced type inference cases are still under development.
+- ❌ Advanced Performance Optimizations: Initial optimizations are in place, but further tuning for large-scale applications is ongoing.
+
+These features are planned for future updates. 🚀 Stay tuned!
 
 ## Quick Start 🚀
 First, install KAIREI and try running a simple AI agent.
