@@ -19,6 +19,12 @@ mod suggestion_tests;
 // Include error event tests
 mod error_event_tests;
 
+// Include property-based tests
+pub mod proptest;
+
+// Include expanded error type tests
+mod error_types_tests;
+
 #[test]
 fn test_plugin_config_validation() {
     // Test strict mode with known types
