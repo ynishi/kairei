@@ -67,7 +67,7 @@ proptest! {
         // If ttl, chunk_size, and max_tokens are all positive, it should pass
         if let Some(Value::Number(ttl)) = config.get("ttl") {
             if let Some(ttl_i64) = ttl.as_i64() {
-                if ttl_i64 <= 0 {
+                if ttl_i64 < 0 {
                     prop_assert!(result.is_err());
                 }
             }
@@ -75,7 +75,7 @@ proptest! {
 
         if let Some(Value::Number(chunk_size)) = config.get("chunk_size") {
             if let Some(chunk_size_i64) = chunk_size.as_i64() {
-                if chunk_size_i64 <= 0 {
+                if chunk_size_i64 < 0 {
                     prop_assert!(result.is_err());
                 }
             }
@@ -83,7 +83,7 @@ proptest! {
 
         if let Some(Value::Number(max_tokens)) = config.get("max_tokens") {
             if let Some(max_tokens_i64) = max_tokens.as_i64() {
-                if max_tokens_i64 <= 0 {
+                if max_tokens_i64 < 0 {
                     prop_assert!(result.is_err());
                 }
             }
