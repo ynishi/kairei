@@ -388,3 +388,252 @@ fn test_function_call_with_generic_return_type() -> TypeCheckResult<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_nested_ok_err_expressions() -> TypeCheckResult<()> {
+    use crate::type_checker::visitor::default::DefaultVisitor;
+
+    let visitor = DefaultVisitor::new();
+    let ctx = TypeContext::new();
+
+    // Test Ok(Ok(expr))
+    let inner_ok = Expression::Ok(Box::new(Expression::Literal(Literal::Integer(42))));
+    let nested_ok = Expression::Ok(Box::new(inner_ok));
+    let result_type = visitor.infer_type(&nested_ok, &ctx)?;
+
+    // The result should be a Result type with a Result as the ok_type
+    assert!(matches!(
+        result_type,
+        TypeInfo::Result {
+            ok_type,
+            ..
+        } if matches!(*ok_type, TypeInfo::Result { .. })
+    ));
+
+    // Test Ok(Err(expr))
+    let inner_err = Expression::Err(Box::new(Expression::Literal(Literal::String(
+        "error".to_string(),
+    ))));
+    let nested_ok_err = Expression::Ok(Box::new(inner_err));
+    let result_type = visitor.infer_type(&nested_ok_err, &ctx)?;
+
+    // The result should be a Result type with a Result as the ok_type
+    assert!(matches!(
+        result_type,
+        TypeInfo::Result {
+            ok_type,
+            ..
+        } if matches!(*ok_type, TypeInfo::Result { .. })
+    ));
+
+    // Test Err(Ok(expr))
+    let inner_ok = Expression::Ok(Box::new(Expression::Literal(Literal::Integer(42))));
+    let nested_err_ok = Expression::Err(Box::new(inner_ok));
+    let result_type = visitor.infer_type(&nested_err_ok, &ctx)?;
+
+    // The result should be a Result type with a Result as the err_type
+    assert!(matches!(
+        result_type,
+        TypeInfo::Result {
+            err_type,
+            ..
+        } if matches!(*err_type, TypeInfo::Result { .. })
+    ));
+
+    // Test Err(Err(expr))
+    let inner_err = Expression::Err(Box::new(Expression::Literal(Literal::String(
+        "inner error".to_string(),
+    ))));
+    let nested_err_err = Expression::Err(Box::new(inner_err));
+    let result_type = visitor.infer_type(&nested_err_err, &ctx)?;
+
+    // The result should be a Result type with a Result as the err_type
+    assert!(matches!(
+        result_type,
+        TypeInfo::Result {
+            err_type,
+            ..
+        } if matches!(*err_type, TypeInfo::Result { .. })
+    ));
+
+    // Test deeply nested Ok expressions: Ok(Ok(Ok(expr)))
+    let inner_ok = Expression::Ok(Box::new(Expression::Literal(Literal::Integer(42))));
+    let middle_ok = Expression::Ok(Box::new(inner_ok));
+    let outer_ok = Expression::Ok(Box::new(middle_ok));
+    let result_type = visitor.infer_type(&outer_ok, &ctx)?;
+
+    // The result should be a Result type with a nested Result structure
+    if let TypeInfo::Result { ok_type, .. } = &result_type {
+        if let TypeInfo::Result {
+            ok_type: inner_ok, ..
+        } = &**ok_type
+        {
+            if let TypeInfo::Result { .. } = &**inner_ok {
+                // Test passes - we have a Result with a Result with a Result
+            } else {
+                panic!("Expected a Result with a Result with a Result, but got a Result with a Result with something else");
+            }
+        } else {
+            panic!("Expected a Result with a Result, but got a Result with something else");
+        }
+    } else {
+        panic!("Expected a Result, but got something else");
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_ok_err_assignment() -> TypeCheckResult<()> {
+    use crate::ast::Statement;
+    use crate::type_checker::visitor::default::DefaultVisitor;
+
+    let mut visitor = DefaultVisitor::new();
+    let mut ctx = TypeContext::new();
+
+    // Create an assignment with an Ok expression
+    let name = "ok_var".to_string();
+    let value = Expression::Ok(Box::new(Expression::Literal(Literal::Integer(42))));
+    let stmt = Statement::Assignment {
+        target: vec![Expression::Variable(name.clone())],
+        value,
+    };
+
+    // Visit the statement to trigger type inference
+    visitor.visit_statement(&stmt, &mut ctx)?;
+
+    // Now the variable should have a Result type in the scope
+    let var_type = ctx.scope.get_type(&name).unwrap();
+    if let TypeInfo::Result { ok_type, err_type } = var_type {
+        if let TypeInfo::Simple(s) = &*ok_type {
+            assert_eq!(s, "Int");
+        } else {
+            panic!("Expected ok_type to be Int, but got something else");
+        }
+        if let TypeInfo::Simple(s) = &*err_type {
+            assert_eq!(s, "Error");
+        } else {
+            panic!("Expected err_type to be Error, but got something else");
+        }
+    } else {
+        panic!("Expected a Result type, but got something else");
+    }
+
+    // Create an assignment with an Err expression
+    let name = "err_var".to_string();
+    let value = Expression::Err(Box::new(Expression::Literal(Literal::String(
+        "error".to_string(),
+    ))));
+    let stmt = Statement::Assignment {
+        target: vec![Expression::Variable(name.clone())],
+        value,
+    };
+
+    // Visit the statement to trigger type inference
+    visitor.visit_statement(&stmt, &mut ctx)?;
+
+    // Now the variable should have a Result type in the scope
+    let var_type = ctx.scope.get_type(&name).unwrap();
+    if let TypeInfo::Result { ok_type, err_type } = var_type {
+        if let TypeInfo::Simple(s) = &*ok_type {
+            assert_eq!(s, "Any");
+        } else {
+            panic!("Expected ok_type to be Any, but got something else");
+        }
+        if let TypeInfo::Simple(s) = &*err_type {
+            assert_eq!(s, "String");
+        } else {
+            panic!("Expected err_type to be String, but got something else");
+        }
+    } else {
+        panic!("Expected a Result type, but got something else");
+    }
+
+    // Create an assignment with a nested Ok expression
+    let name = "nested_ok_var".to_string();
+    let inner_ok = Expression::Ok(Box::new(Expression::Literal(Literal::Integer(42))));
+    let value = Expression::Ok(Box::new(inner_ok));
+    let stmt = Statement::Assignment {
+        target: vec![Expression::Variable(name.clone())],
+        value,
+    };
+
+    // Visit the statement to trigger type inference
+    visitor.visit_statement(&stmt, &mut ctx)?;
+
+    // Now the variable should have a nested Result type in the scope
+    let var_type = ctx.scope.get_type(&name).unwrap();
+    if let TypeInfo::Result { ok_type, .. } = var_type {
+        if let TypeInfo::Result { .. } = &*ok_type {
+            // Test passes - we have a Result with a Result
+        } else {
+            panic!("Expected a Result with a Result, but got a Result with something else");
+        }
+    } else {
+        panic!("Expected a Result, but got something else");
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_ok_err_type_mismatch() -> TypeCheckResult<()> {
+    use crate::ast::Statement;
+    use crate::type_checker::visitor::default::DefaultVisitor;
+    use crate::type_checker::TypeCheckError;
+
+    // Test assignment with type mismatch
+    let mut visitor = DefaultVisitor::new();
+    let mut ctx = TypeContext::new();
+
+    // First, create a variable with a specific Result type
+    ctx.scope.insert_type(
+        "typed_result".to_string(),
+        TypeInfo::Result {
+            ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+        },
+    );
+
+    // Try to assign an Ok expression with the wrong type
+    let stmt = Statement::Assignment {
+        target: vec![Expression::Variable("typed_result".to_string())],
+        value: Expression::Ok(Box::new(Expression::Literal(Literal::Integer(42)))),
+    };
+
+    // Visit the statement should result in a type mismatch error
+    let result = visitor.visit_statement(&stmt, &mut ctx);
+    assert!(matches!(result, Err(TypeCheckError::TypeMismatch { .. })));
+
+    // Test nested Ok expressions with type mismatch
+    let mut visitor = DefaultVisitor::new();
+    let mut ctx = TypeContext::new();
+
+    // Register a variable with a specific nested Result type
+    ctx.scope.insert_type(
+        "nested_result".to_string(),
+        TypeInfo::Result {
+            ok_type: Box::new(TypeInfo::Result {
+                ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+                err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+            }),
+            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+        },
+    );
+
+    // Create a nested Ok expression with the wrong inner type
+    let inner_ok = Expression::Ok(Box::new(Expression::Literal(Literal::Integer(42))));
+    let nested_ok = Expression::Ok(Box::new(inner_ok));
+
+    // Try to assign the nested Ok expression to the variable
+    let stmt = Statement::Assignment {
+        target: vec![Expression::Variable("nested_result".to_string())],
+        value: nested_ok,
+    };
+
+    // Visit the statement should result in a type mismatch error
+    let result = visitor.visit_statement(&stmt, &mut ctx);
+    assert!(matches!(result, Err(TypeCheckError::TypeMismatch { .. })));
+
+    Ok(())
+}
