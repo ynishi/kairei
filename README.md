@@ -48,6 +48,27 @@ type TravelPlanner {
 
 Executing this code allows the agent to **generate an optimal travel itinerary within budget!** ✨
 
+### 🔧 Running API Tests for Travel Planning
+To enable API tests and run the Travel Planning example, follow these steps:
+
+#### 1️. Setup API Credentials
+```sh
+cp tests/micro_agent_tests/test_secret.json.example tests/micro_agent_tests/test_secret.json
+```
+→ This creates a test_secret.json file.
+
+Now, edit test_secret.json and replace the placeholders with your actual API keys:
+- OpenAI API Key
+- Serper API Key
+
+#### 2. Run API Tests
+Execute the following command to run the Travel Planner test:
+
+```sh
+RUN_API_TESTS=true cargo test -p kairei micro_agent_tests::travel_planning_test::test_travel_planner
+```
+→ This will run the KAIREI Travel Planner test and output debug logs. 🚀✨
+
 ## Architecture Overview 🏗
 KAIREI consists of the following components:
 

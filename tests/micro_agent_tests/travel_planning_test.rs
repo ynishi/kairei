@@ -196,6 +196,7 @@ async fn setup_travel_planner() -> System {
 
 #[tokio::test]
 async fn test_travel_planner() {
+    println!("Running test_travel_planner");
     if !should_run_external_api_tests() {
         return;
     }
@@ -215,7 +216,7 @@ async fn test_travel_planner() {
     let request = create_request("TravelPlanner", &request_id, "PlanTrip", request_data, None);
 
     let result = system.send_request(request).await.unwrap();
-    debug!("Result: {:?}", result);
+    println!("Result: {:?}", result);
     assert!(format!("{:?}", result).contains("travel"));
     assert!(format!("{:?}", result).contains("Tokyo"));
 }

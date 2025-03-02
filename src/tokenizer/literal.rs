@@ -52,6 +52,7 @@ use nom::{
     multi::many0,
     sequence::{delimited, pair, tuple},
 };
+use tracing::debug;
 
 use super::token::{ParserResult, Token};
 
@@ -163,8 +164,8 @@ pub fn parse_triple_quote_string(input: &str) -> ParserResult<Literal> {
             tag(TRIPLE_QUOTE),        // Closing """
         )),
     )(input)?;
-    println!("content: {}", content);
-    println!("remaining: START{}EMD", remaining);
+    debug!("content: {}", content);
+    debug!("remaining: START{}END", remaining);
 
     let (_, lit) = context(
         "triple quote string",
