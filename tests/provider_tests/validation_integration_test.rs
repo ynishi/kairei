@@ -49,6 +49,50 @@ fn test_memory_provider_validation() {
 }
 
 #[test]
+fn test_memory_provider_validation_with_provider_type() {
+    // Test validation for memory provider with provider_type
+    let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
+        "provider_type": "memory",
+        "ttl": 3600,
+        "capabilities": {
+            "memory": true
+        }
+    }))
+    .unwrap();
+
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
+
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for valid memory config with provider_type"
+    );
+    assert!(
+        evaluator.validate(&config).is_ok(),
+        "Evaluation should pass for valid memory config with provider_type"
+    );
+
+    // Test with invalid ttl
+    let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
+        "provider_type": "memory",
+        "ttl": 0,
+        "capabilities": {
+            "memory": true
+        }
+    }))
+    .unwrap();
+
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for memory config with invalid ttl"
+    );
+    assert!(
+        evaluator.validate_provider_specific(&config).is_err(),
+        "Evaluation should fail for memory config with invalid ttl"
+    );
+}
+
+#[test]
 fn test_rag_provider_validation() {
     // Test validation for RAG provider
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
@@ -95,6 +139,52 @@ fn test_rag_provider_validation() {
 }
 
 #[test]
+fn test_rag_provider_validation_with_provider_type() {
+    // Test validation for RAG provider with provider_type
+    let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
+        "provider_type": "rag",
+        "chunk_size": 512,
+        "max_tokens": 1000,
+        "capabilities": {
+            "rag": true
+        }
+    }))
+    .unwrap();
+
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
+
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for valid RAG config with provider_type"
+    );
+    assert!(
+        evaluator.validate(&config).is_ok(),
+        "Evaluation should pass for valid RAG config with provider_type"
+    );
+
+    // Test with invalid chunk_size
+    let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
+        "provider_type": "rag",
+        "chunk_size": 0,
+        "max_tokens": 1000,
+        "capabilities": {
+            "rag": true
+        }
+    }))
+    .unwrap();
+
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for RAG config with invalid chunk_size"
+    );
+    assert!(
+        evaluator.validate_provider_specific(&config).is_err(),
+        "Evaluation should fail for RAG config with invalid chunk_size"
+    );
+}
+
+#[test]
 fn test_llm_provider_validation() {
     // Test validation for LLM provider
     let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
@@ -118,6 +208,36 @@ fn test_llm_provider_validation() {
     assert!(
         evaluator.validate(&config).is_ok(),
         "Evaluation should pass for valid LLM config"
+    );
+
+    // Note: In the actual implementation, missing model might not be validated
+    // by the type checker, so we don't test for that specifically
+}
+
+#[test]
+fn test_llm_provider_validation_with_provider_type() {
+    // Test validation for LLM provider with provider_type
+    let config: HashMap<String, serde_json::Value> = serde_json::from_value(json!({
+        "provider_type": "llm",
+        "model": "gpt-4",
+        "max_tokens": 2000,
+        "temperature": 0.7,
+        "capabilities": {
+            "llm": true
+        }
+    }))
+    .unwrap();
+
+    let type_checker = TypeCheckerValidator;
+    let evaluator = EvaluatorValidator;
+
+    assert!(
+        type_checker.validate(&config).is_ok(),
+        "Type checking should pass for valid LLM config with provider_type"
+    );
+    assert!(
+        evaluator.validate(&config).is_ok(),
+        "Evaluation should pass for valid LLM config with provider_type"
     );
 
     // Note: In the actual implementation, missing model might not be validated
