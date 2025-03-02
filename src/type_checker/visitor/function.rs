@@ -189,12 +189,83 @@ impl DefaultFunctionChecker {
                 })
             }
             Expression::StateAccess(path) => {
-                // For state access, we need to look up the type in the scope
-                if let Some(type_info) = ctx.scope.get_type(&path.0.join(".")) {
+                // For state access, delegate to the same logic as in DefaultVisitor
+                // This ensures consistent behavior between different implementations
+                if path.0.is_empty() {
+                    return Err(TypeCheckError::type_inference_error(
+                        "Empty state access path".to_string(),
+                        Default::default(),
+                    ));
+                }
+
+                // First check if the root variable exists
+                if let Some(type_info) = ctx.scope.get_type(&path.0[0]) {
+                    // If there's only one component in the path, return the type directly
+                    if path.0.len() == 1 {
+                        return Ok(type_info.clone());
+                    }
+
+                    // Handle nested field access recursively
+                    let mut current_type = type_info.clone();
+                    let mut current_path = path.0[0].clone();
+
+                    // Start from the second component (index 1)
+                    for i in 1..path.0.len() {
+                        let field_name = &path.0[i];
+                        current_path = format!("{}.{}", current_path, field_name);
+
+                        match &current_type {
+                            TypeInfo::Custom { fields, .. } => {
+                                // Check if the field exists in the custom type
+                                if let Some(field_info) = fields.get(field_name) {
+                                    if let Some(field_type) = &field_info.type_info {
+                                        // Update current_type for the next iteration
+                                        current_type = field_type.clone();
+                                    } else if let Some(default_value) = &field_info.default_value {
+                                        // Infer type from default value if available
+                                        current_type =
+                                            self.infer_expression_type(default_value, ctx)?;
+                                    } else {
+                                        return Err(TypeCheckError::type_inference_error(
+                                            format!(
+                                                "Cannot infer type for field {} in path {}",
+                                                field_name, current_path
+                                            ),
+                                            Default::default(),
+                                        ));
+                                    }
+                                } else {
+                                    return Err(TypeCheckError::undefined_variable(
+                                        format!(
+                                            "Field {} not found in type at path {}",
+                                            field_name, current_path
+                                        ),
+                                        Default::default(),
+                                    ));
+                                }
+                            }
+                            _ => {
+                                return Err(TypeCheckError::type_inference_error(
+                                    format!(
+                                        "Cannot access field {} on non-custom type at path {}",
+                                        field_name, current_path
+                                    ),
+                                    Default::default(),
+                                ));
+                            }
+                        }
+                    }
+
+                    // Return the final type after traversing the entire path
+                    Ok(current_type)
+                } else if let Some(type_info) = ctx.scope.get_type(&path.0.join(".")) {
+                    // Try to get the full path directly from the scope
+                    // This handles cases where the full path is registered as a variable
                     Ok(type_info.clone())
                 } else {
+                    // Root variable doesn't exist
                     Err(TypeCheckError::undefined_variable(
-                        path.0.join("."),
+                        path.0[0].clone(),
                         Default::default(),
                     ))
                 }
