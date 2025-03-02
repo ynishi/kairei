@@ -145,7 +145,7 @@ impl DefaultVisitor {
             } => self
                 .function_checker
                 .check_function_call(function, arguments, ctx),
-            Expression::Think { args, .. } => {
+            Expression::Think { args, with_block } => {
                 // Check argument types
                 for arg in args {
                     match arg {
@@ -154,7 +154,27 @@ impl DefaultVisitor {
                         }
                     }
                 }
+
+                // Check if there's a custom provider specified in the with_block
+                if let Some(with_attrs) = with_block {
+                    if let Some(_provider) = &with_attrs.provider {
+                        // If a custom provider is specified, check if it's registered
+                        // For now, we still return Result<String, Error> as the default
+                        // This can be extended in the future to support provider-specific return types
+                    }
+
+                    // Check plugin configurations if present
+                    for config in with_attrs.plugins.values() {
+                        // Validate plugin configuration values
+                        for value in config.values() {
+                            // We don't need to do anything with the result, just ensure it's valid
+                            self.expression_checker.infer_literal_type(value, ctx)?;
+                        }
+                    }
+                }
+
                 // Think expressions return Result<String, Error>
+                // In Normal mode, we infer this type for all Think expressions
                 Ok(TypeInfo::Result {
                     ok_type: Box::new(TypeInfo::Simple("String".to_string())),
                     err_type: Box::new(TypeInfo::Simple("Error".to_string())),
