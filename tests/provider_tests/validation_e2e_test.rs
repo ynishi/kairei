@@ -20,7 +20,7 @@ fn test_validation_e2e_flow() {
     .unwrap();
 
     // 1. Type checking phase
-    let type_checker = TypeCheckerValidator::default();
+    let type_checker = TypeCheckerValidator;
     let type_check_result = type_checker.validate(&config);
     assert!(
         type_check_result.is_ok(),
@@ -28,7 +28,7 @@ fn test_validation_e2e_flow() {
     );
 
     // 2. Evaluation phase
-    let evaluator = EvaluatorValidator::default();
+    let evaluator = EvaluatorValidator;
     let eval_result = evaluator.validate(&config);
     assert!(
         eval_result.is_ok(),
@@ -78,7 +78,7 @@ fn test_validation_e2e_flow() {
         "Collector should have errors for invalid config"
     );
     assert!(
-        collector.errors.len() > 0,
+        !collector.errors.is_empty(),
         "Collector should have at least one error for invalid config"
     );
 
@@ -108,7 +108,7 @@ fn test_validation_e2e_with_multiple_errors() {
     .unwrap();
 
     // Use a collecting validator to collect all errors
-    let evaluator = EvaluatorValidator::default();
+    let evaluator = EvaluatorValidator;
     let collector = evaluator.validate_collecting(&config);
 
     // Verify that errors were collected
@@ -120,7 +120,7 @@ fn test_validation_e2e_with_multiple_errors() {
     // Note: The actual implementation might not collect errors for all fields,
     // so we just check that at least one error was collected
     assert!(
-        collector.errors.len() >= 1,
+        !collector.errors.is_empty(),
         "Collector should have at least one error for config with invalid values"
     );
 
@@ -157,7 +157,7 @@ fn test_validation_e2e_with_warnings() {
     .unwrap();
 
     // Use a collecting validator to collect all warnings
-    let evaluator = EvaluatorValidator::default();
+    let evaluator = EvaluatorValidator;
     let collector = evaluator.validate_collecting(&config);
 
     // Note: The actual implementation might not generate warnings for these specific fields,
@@ -189,7 +189,7 @@ fn test_validation_e2e_error_collection_order() {
     .unwrap();
 
     // Use a collecting validator to collect all errors
-    let evaluator = EvaluatorValidator::default();
+    let evaluator = EvaluatorValidator;
     let collector = evaluator.validate_collecting(&config);
 
     // Verify that errors are collected

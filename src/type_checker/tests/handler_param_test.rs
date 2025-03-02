@@ -11,9 +11,12 @@ fn test_handler_parameters_used_in_block() -> TypeCheckResult<()> {
     let mut ctx = TypeContext::new();
 
     // Register core types
-    ctx.scope.insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
-    ctx.scope.insert_type("Int".to_string(), TypeInfo::Simple("Int".to_string()));
-    ctx.scope.insert_type("Error".to_string(), TypeInfo::Simple("Error".to_string()));
+    ctx.scope
+        .insert_type("String".to_string(), TypeInfo::Simple("String".to_string()));
+    ctx.scope
+        .insert_type("Int".to_string(), TypeInfo::Simple("Int".to_string()));
+    ctx.scope
+        .insert_type("Error".to_string(), TypeInfo::Simple("Error".to_string()));
     ctx.scope.insert_type(
         "return_type".to_string(),
         TypeInfo::Result {

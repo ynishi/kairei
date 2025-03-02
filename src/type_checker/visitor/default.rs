@@ -489,9 +489,10 @@ impl TypeVisitor for DefaultVisitor {
                             ));
                         }
                     }
-                    
+
                     // Add parameter to scope for use in handler block
-                    ctx.scope.insert_type(param.name.clone(), param.type_info.clone());
+                    ctx.scope
+                        .insert_type(param.name.clone(), param.type_info.clone());
                 }
                 self.visit_handler(handler, ctx)?;
             }
@@ -545,9 +546,10 @@ impl TypeVisitor for DefaultVisitor {
                             ));
                         }
                     }
-                    
+
                     // Add parameter to scope for use in handler block
-                    ctx.scope.insert_type(param.name.clone(), param.type_info.clone());
+                    ctx.scope
+                        .insert_type(param.name.clone(), param.type_info.clone());
                 }
                 self.visit_handler_block(&handler.block, ctx)?;
             }
@@ -578,9 +580,10 @@ impl TypeVisitor for DefaultVisitor {
                             ));
                         }
                     }
-                    
+
                     // Add parameter to scope for use in handler block
-                    ctx.scope.insert_type(param.name.clone(), param.type_info.clone());
+                    ctx.scope
+                        .insert_type(param.name.clone(), param.type_info.clone());
                 }
                 self.visit_handler_block(&handler.block, ctx)?;
             }
@@ -611,9 +614,10 @@ impl TypeVisitor for DefaultVisitor {
                             ));
                         }
                     }
-                    
+
                     // Add parameter to scope for use in handler block
-                    ctx.scope.insert_type(param.name.clone(), param.type_info.clone());
+                    ctx.scope
+                        .insert_type(param.name.clone(), param.type_info.clone());
                 }
                 self.visit_handler_block(&handler.block, ctx)?;
             }
@@ -669,9 +673,10 @@ impl TypeVisitor for DefaultVisitor {
     ) -> TypeCheckResult<()> {
         // Register parameters in scope before checking handler block
         for param in &handler.parameters {
-            ctx.scope.insert_type(param.name.clone(), param.type_info.clone());
+            ctx.scope
+                .insert_type(param.name.clone(), param.type_info.clone());
         }
-        
+
         self.visit_handler_block(&handler.block, ctx)
     }
 
