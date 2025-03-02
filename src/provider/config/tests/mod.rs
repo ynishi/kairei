@@ -26,6 +26,8 @@ pub mod proptest;
 mod error_types_tests;
 
 mod errors_tests;
+// Include documentation reference tests
+mod doc_references_tests;
 
 #[test]
 fn test_plugin_config_validation() {
