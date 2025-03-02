@@ -190,7 +190,7 @@ fn test_custom_type_type_inference() -> TypeCheckResult<()> {
 
 #[test]
 fn test_nested_custom_type_field_access() -> TypeCheckResult<()> {
-    let mut visitor = DefaultVisitor::new();
+    let visitor = DefaultVisitor::new();
     let mut ctx = TypeContext::new();
 
     // Define nested custom types
@@ -282,7 +282,7 @@ fn test_nested_custom_type_field_access() -> TypeCheckResult<()> {
 
 #[test]
 fn test_state_access_with_type_inference() -> TypeCheckResult<()> {
-    let mut visitor = DefaultVisitor::new();
+    let visitor = DefaultVisitor::new();
     let mut ctx = TypeContext::new();
 
     // Define a custom type with a field that needs type inference
