@@ -87,7 +87,7 @@
 ///    - Provide more detailed error messages
 ///    - Include suggestions for fixing type errors
 use crate::{
-    ast::{BinaryOperator, Literal, TypeInfo},
+    ast::{BinaryOperator, Expression, Literal, TypeInfo},
     type_checker::{error::TypeCheckErrorMeta, TypeCheckError, TypeCheckResult, TypeContext},
 };
 
@@ -103,6 +103,9 @@ pub(crate) trait ExpressionTypeChecker {
     fn is_numeric(&self, type_info: &TypeInfo) -> bool;
     fn is_float(&self, type_info: &TypeInfo) -> bool;
     fn is_boolean(&self, type_info: &TypeInfo) -> bool;
+    fn is_string(&self, type_info: &TypeInfo) -> bool;
+    #[allow(dead_code)]
+    fn infer_type(&self, expr: &Expression, ctx: &TypeContext) -> TypeCheckResult<TypeInfo>;
 }
 
 pub(crate) struct DefaultExpressionChecker;
@@ -207,14 +210,36 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
         use BinaryOperator::*;
 
         match op {
-            Add | Subtract | Multiply | Divide => {
+            Add => {
+                // Handle string concatenation with Add operator
+                if self.is_string(left) && self.is_string(right) {
+                    return Ok(TypeInfo::Simple("String".to_string()));
+                } else if !self.is_numeric(left) || !self.is_numeric(right) {
+                    return Err(TypeCheckError::InvalidOperatorType {
+                        operator: op.to_string(),
+                        left_type: left.clone(),
+                        right_type: right.clone(),
+                        meta: TypeCheckErrorMeta::default()
+                            .with_help("Only numeric types are supported for this operation")
+                            .with_suggestion("Use Int or Float types"),
+                    });
+                }
+
+                // If either operand is Float, result is Float
+                if self.is_float(left) || self.is_float(right) {
+                    Ok(TypeInfo::Simple("Float".to_string()))
+                } else {
+                    Ok(TypeInfo::Simple("Int".to_string()))
+                }
+            }
+            Subtract | Multiply | Divide => {
                 if !self.is_numeric(left) || !self.is_numeric(right) {
                     return Err(TypeCheckError::InvalidOperatorType {
                         operator: op.to_string(),
                         left_type: left.clone(),
                         right_type: right.clone(),
                         meta: TypeCheckErrorMeta::default()
-                            .with_help("Only numeric types are supported")
+                            .with_help("Only numeric types are supported for this operation")
                             .with_suggestion("Use Int or Float types"),
                     });
                 }
@@ -225,7 +250,22 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
                     Ok(TypeInfo::Simple("Int".to_string()))
                 }
             }
-            Equal | NotEqual | LessThan | GreaterThan | LessThanEqual | GreaterThanEqual => {
+            Equal | NotEqual => {
+                // Any types can be compared for equality
+                Ok(TypeInfo::Simple("Boolean".to_string()))
+            }
+            LessThan | GreaterThan | LessThanEqual | GreaterThanEqual => {
+                // Only numeric types can be compared
+                if !self.is_numeric(left) || !self.is_numeric(right) {
+                    return Err(TypeCheckError::InvalidOperatorType {
+                        operator: op.to_string(),
+                        left_type: left.clone(),
+                        right_type: right.clone(),
+                        meta: TypeCheckErrorMeta::default()
+                            .with_help("Only numeric types can be compared")
+                            .with_suggestion("Use Int or Float types for comparison"),
+                    });
+                }
                 Ok(TypeInfo::Simple("Boolean".to_string()))
             }
             And | Or => {
@@ -235,7 +275,7 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
                         left_type: left.clone(),
                         right_type: right.clone(),
                         meta: TypeCheckErrorMeta::default()
-                            .with_help("Only boolean types are supported")
+                            .with_help("Only boolean types are supported for logical operations")
                             .with_suggestion("Use Boolean type"),
                     });
                 }
@@ -263,6 +303,49 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
             type_info,
             TypeInfo::Simple(name) if name == "Boolean"
         )
+    }
+
+    fn is_string(&self, type_info: &TypeInfo) -> bool {
+        matches!(
+            type_info,
+            TypeInfo::Simple(name) if name == "String"
+        )
+    }
+
+    fn infer_type(&self, expr: &Expression, ctx: &TypeContext) -> TypeCheckResult<TypeInfo> {
+        match expr {
+            Expression::Literal(lit) => self.infer_literal_type(lit, ctx),
+            Expression::Variable(name) => {
+                if let Some(type_info) = ctx.scope.get_type(name) {
+                    Ok(type_info.clone())
+                } else {
+                    Err(TypeCheckError::undefined_variable(
+                        name.clone(),
+                        Default::default(),
+                    ))
+                }
+            }
+            Expression::BinaryOp { op, left, right } => {
+                let left_type = self.infer_type(left, ctx)?;
+                let right_type = self.infer_type(right, ctx)?;
+                self.infer_binary_op_type(&left_type, &right_type, op)
+            }
+            Expression::FunctionCall {
+                function: _,
+                arguments: _,
+            } => {
+                // For nested function calls, we need to use the function checker
+                // This will be passed in from the DefaultVisitor
+                Err(TypeCheckError::type_inference_error(
+                    "Function calls not supported in this context".to_string(),
+                    Default::default(),
+                ))
+            }
+            _ => Err(TypeCheckError::type_inference_error(
+                "Unsupported expression type".to_string(),
+                Default::default(),
+            )),
+        }
     }
 }
 

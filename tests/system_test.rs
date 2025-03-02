@@ -77,7 +77,7 @@ async fn test_system_lifecycle() -> SystemResult<()> {
         name: agent_name.to_string(),
         ..Default::default()
     };
-    system.register_agent_ast(&agent_name, &test_ast).await?;
+    system.register_agent_ast(agent_name, &test_ast).await?;
 
     // スケールアップテスト
     //

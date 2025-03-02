@@ -182,13 +182,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
-            registry
-                .get_registered_feature(&NativeFeatureType::Ticker)
-                .await
-                .is_some(),
-            true
-        );
+        assert!(registry
+            .get_registered_feature(&NativeFeatureType::Ticker)
+            .await
+            .is_some());
     }
 
     #[tokio::test]
@@ -215,13 +212,10 @@ mod tests {
         let registry = setup_test_registry().await;
         registry.register().await.unwrap();
 
-        assert_eq!(
-            registry
-                .get_registered_feature(&NativeFeatureType::Ticker)
-                .await
-                .is_some(),
-            true
-        );
+        assert!(registry
+            .get_registered_feature(&NativeFeatureType::Ticker)
+            .await
+            .is_some());
     }
 
     #[tokio::test]

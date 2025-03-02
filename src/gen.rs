@@ -906,13 +906,13 @@ mod tests {
     #[test]
     fn test_literal() {
         let int_literal = Literal::Integer(42);
-        let float_literal = Literal::Float(3.14);
+        let float_literal = Literal::Float(std::f64::consts::PI);
         let string_literal = Literal::String("hello".to_string());
         let bool_literal = Literal::Boolean(true);
         let null_literal = Literal::Null;
 
         let expected_int = quote! { 42i64 };
-        let expected_float = quote! { 3.14f64 };
+        let expected_float = quote! { std::f64::consts::PIf64 };
         let expected_string = quote! { "hello" };
         let expected_bool = quote! { true };
         let expected_null = quote! { None };

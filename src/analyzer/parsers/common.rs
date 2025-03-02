@@ -373,6 +373,8 @@ fn parse_hour() -> impl Parser<Token, String> {
 
 #[cfg(test)]
 mod tests {
+    use std::f64;
+
     use super::*;
     use crate::tokenizer::literal::StringPart;
 
@@ -478,10 +480,10 @@ mod tests {
         assert_eq!(result, 42);
 
         // Float
-        let input = vec![Token::Literal(Literal::Float(3.14))];
+        let input = vec![Token::Literal(Literal::Float(f64::consts::PI))];
         let (rest, result) = parse_f64().parse(&input, 0).unwrap();
         assert_eq!(rest, 1);
-        assert_eq!(result, 3.14);
+        assert_eq!(result, std::f64::consts::PI);
 
         // u64
         let input = vec![Token::Literal(Literal::Integer(42))];
@@ -776,10 +778,10 @@ mod tests {
 
     #[test]
     fn test_parse_f64() {
-        let input = &[Token::Literal(Literal::Float(3.14))];
+        let input = &[Token::Literal(Literal::Float(std::f64::consts::PI))];
         let (rest, result) = parse_f64().parse(input, 0).unwrap();
         assert_eq!(rest, 1);
-        assert_eq!(result, 3.14);
+        assert_eq!(result, std::f64::consts::PI);
     }
 
     #[test]

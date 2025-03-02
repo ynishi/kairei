@@ -310,7 +310,7 @@ mod tests {
         let metrics = MetricsFeature::new(context, config);
 
         assert_eq!(metrics.status().await, NativeFeatureStatus::Inactive);
-        assert_eq!(metrics.running.load(Ordering::SeqCst), false);
+        assert!(!metrics.running.load(Ordering::SeqCst));
     }
 
     #[tokio::test]
@@ -322,12 +322,12 @@ mod tests {
         // メトリクス収集を開始
         metrics.start().await.unwrap();
         assert_eq!(metrics.status().await, NativeFeatureStatus::Active);
-        assert_eq!(metrics.running.load(Ordering::SeqCst), true);
+        assert!(metrics.running.load(Ordering::SeqCst));
 
         // 停止
         metrics.stop().await.unwrap();
         assert_eq!(metrics.status().await, NativeFeatureStatus::Inactive);
-        assert_eq!(metrics.running.load(Ordering::SeqCst), false);
+        assert!(!metrics.running.load(Ordering::SeqCst));
     }
 
     #[tokio::test]

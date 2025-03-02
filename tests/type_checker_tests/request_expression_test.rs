@@ -1,18 +1,19 @@
 use kairei::{
     ast::{
-        AnswerDef, Expression, HandlerBlock, Literal, MicroAgentDef, RequestHandler, RequestType,
-        Root, Statement, TypeInfo,
+        AnswerDef, Expression, HandlerBlock, Literal, MicroAgentDef, RequestAttributes,
+        RequestHandler, RequestType, Root, Statement, TypeInfo,
     },
     type_checker::{visitor::DefaultVisitor, TypeCheckError, TypeContext, TypeVisitor},
     Argument,
 };
+use std::time::Duration;
 
 #[test]
-fn test_think_expression_type_checking() {
+fn test_request_expression_type_checking() {
     let mut ctx = TypeContext::new();
     let mut visitor = DefaultVisitor::new();
 
-    // Create AST that matches the original failing case
+    // Create AST with a Request expression
     let ast = Root {
         world_def: None,
         micro_agent_defs: vec![MicroAgentDef {
@@ -26,16 +27,18 @@ fn test_think_expression_type_checking() {
                     request_type: RequestType::Custom("PlanTrip".to_string()),
                     parameters: vec![],
                     return_type: TypeInfo::Result {
-                        ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+                        ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
                         err_type: Box::new(TypeInfo::Simple("Error".to_string())),
                     },
                     constraints: None,
                     block: HandlerBlock {
-                        statements: vec![Statement::Return(Expression::Think {
-                            args: vec![Argument::Positional(Expression::Literal(Literal::String(
-                                "Tokyo".to_string(),
-                            )))],
-                            with_block: None,
+                        statements: vec![Statement::Return(Expression::Request {
+                            agent: "WeatherAgent".to_string(),
+                            request_type: RequestType::Custom("GetWeather".to_string()),
+                            parameters: vec![Argument::Positional(Expression::Literal(
+                                Literal::String("Tokyo".to_string()),
+                            ))],
+                            options: None,
                         })],
                     },
                 }],
@@ -44,7 +47,7 @@ fn test_think_expression_type_checking() {
         }],
     };
 
-    // This should now pass with our fix
+    // This should pass with our implementation
     assert!(visitor.visit_root(&mut ast.clone(), &mut ctx).is_ok());
 
     // Test with incorrect return type to verify error handling
@@ -61,11 +64,11 @@ fn test_think_expression_type_checking() {
 }
 
 #[test]
-fn test_think_expression_in_assignment() {
+fn test_request_expression_in_assignment() {
     let mut ctx = TypeContext::new();
     let mut visitor = DefaultVisitor::new();
 
-    // Create AST with a variable assignment from a Think expression
+    // Create AST with a variable assignment from a Request expression
     let ast = Root {
         world_def: None,
         micro_agent_defs: vec![MicroAgentDef {
@@ -79,22 +82,27 @@ fn test_think_expression_in_assignment() {
                     request_type: RequestType::Custom("PlanTrip".to_string()),
                     parameters: vec![],
                     return_type: TypeInfo::Result {
-                        ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+                        ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
                         err_type: Box::new(TypeInfo::Simple("Error".to_string())),
                     },
                     constraints: None,
                     block: HandlerBlock {
                         statements: vec![
                             Statement::Assignment {
-                                target: vec![Expression::Variable("plan".to_string())],
-                                value: Expression::Think {
-                                    args: vec![Argument::Positional(Expression::Literal(
+                                target: vec![Expression::Variable("weather".to_string())],
+                                value: Expression::Request {
+                                    agent: "WeatherAgent".to_string(),
+                                    request_type: RequestType::Custom("GetWeather".to_string()),
+                                    parameters: vec![Argument::Positional(Expression::Literal(
                                         Literal::String("Tokyo".to_string()),
                                     ))],
-                                    with_block: None,
+                                    options: Some(RequestAttributes {
+                                        timeout: Some(Duration::from_secs(5)),
+                                        retry: Some(3),
+                                    }),
                                 },
                             },
-                            Statement::Return(Expression::Variable("plan".to_string())),
+                            Statement::Return(Expression::Variable("weather".to_string())),
                         ],
                     },
                 }],
