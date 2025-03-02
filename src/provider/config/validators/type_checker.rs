@@ -19,18 +19,30 @@ impl ProviderConfigValidator for TypeCheckerValidator {
         &self,
         config: &HashMap<String, serde_json::Value>,
     ) -> Result<(), ProviderConfigError> {
-        // Check required properties
-        let required_props = match config.get("type") {
-            Some(serde_json::Value::String(plugin_type)) => match plugin_type.as_str() {
-                "memory" => vec!["type"],
-                "rag" => vec!["type", "chunk_size", "max_tokens"],
-                "search" => vec!["type", "max_results"],
-                _ => vec!["type"],
-            },
-            _ => {
-                return Err(SchemaError::missing_field("type").into());
-            }
+        // Check for either "type" or "provider_type" field
+        let plugin_type = if let Some(serde_json::Value::String(t)) = config.get("type") {
+            t.as_str()
+        } else if let Some(serde_json::Value::String(t)) = config.get("provider_type") {
+            t.as_str()
+        } else {
+            return Err(SchemaError::missing_field("type or provider_type").into());
         };
+        
+        // Check required properties based on the plugin type
+        let required_props = match plugin_type {
+            "memory" => vec![],  // No specific requirements for memory besides the type
+            "rag" => vec!["chunk_size", "max_tokens"],
+            "search" => vec!["max_results"],
+            _ => vec![],  // No specific requirements for unknown types
+        };
+        
+        // Add either "type" or "provider_type" to required fields
+        let mut final_props = required_props.clone();
+        if config.contains_key("type") {
+            final_props.push("type");
+        } else if config.contains_key("provider_type") {
+            final_props.push("provider_type");
+        }
 
         // Convert HashMap to serde_json::Map for validation functions
         let mut json_map = serde_json::Map::new();
@@ -39,33 +51,39 @@ impl ProviderConfigValidator for TypeCheckerValidator {
         }
         let json_obj = serde_json::Value::Object(json_map);
 
-        check_required_properties(&json_obj, &required_props).map_err(ProviderConfigError::from)?;
+        check_required_properties(&json_obj, &final_props).map_err(ProviderConfigError::from)?;
 
-        // Check property types
-        if let Some(serde_json::Value::String(plugin_type)) = config.get("type") {
-            match plugin_type.as_str() {
-                "memory" => {
-                    if let Some(_ttl) = config.get("ttl") {
-                        check_property_type(&json_obj, "ttl", "number")
-                            .map_err(ProviderConfigError::from)?;
-                    }
-                }
-                "rag" => {
-                    check_property_type(&json_obj, "chunk_size", "number")
-                        .map_err(ProviderConfigError::from)?;
-                    check_property_type(&json_obj, "max_tokens", "number")
-                        .map_err(ProviderConfigError::from)?;
-                    if let Some(_similarity) = config.get("similarity_threshold") {
-                        check_property_type(&json_obj, "similarity_threshold", "number")
-                            .map_err(ProviderConfigError::from)?;
-                    }
-                }
-                "search" => {
-                    check_property_type(&json_obj, "max_results", "number")
+        // Check property types based on plugin type
+        match plugin_type {
+            "memory" => {
+                if let Some(_ttl) = config.get("ttl") {
+                    check_property_type(&json_obj, "ttl", "number")
                         .map_err(ProviderConfigError::from)?;
                 }
-                _ => {}
             }
+            "rag" => {
+                check_property_type(&json_obj, "chunk_size", "number")
+                    .map_err(ProviderConfigError::from)?;
+                check_property_type(&json_obj, "max_tokens", "number")
+                    .map_err(ProviderConfigError::from)?;
+                if let Some(_similarity) = config.get("similarity_threshold") {
+                    check_property_type(&json_obj, "similarity_threshold", "number")
+                        .map_err(ProviderConfigError::from)?;
+                }
+            }
+            "search" => {
+                check_property_type(&json_obj, "max_results", "number")
+                    .map_err(ProviderConfigError::from)?;
+            }
+            // Handle the OpenAIChat and other provider types
+            "OpenAIChat" | "OpenAIAssistant" | "SimpleExpert" => {
+                // Common configuration for LLM-based providers
+                if let Some(_) = config.get("common_config") {
+                    check_property_type(&json_obj, "common_config", "object")
+                        .map_err(ProviderConfigError::from)?;
+                }
+            }
+            _ => {}
         }
 
         Ok(())
@@ -101,9 +119,18 @@ impl ProviderConfigValidator for TypeCheckerValidator {
     ) -> Vec<ProviderConfigError> {
         let mut warnings = Vec::new();
 
+        // Get plugin type from either "type" or "provider_type" field
+        let plugin_type = if let Some(serde_json::Value::String(t)) = config.get("type") {
+            Some(t.as_str())
+        } else if let Some(serde_json::Value::String(t)) = config.get("provider_type") {
+            Some(t.as_str())
+        } else {
+            None
+        };
+
         // Check for deprecated fields based on provider type
-        if let Some(serde_json::Value::String(plugin_type)) = config.get("type") {
-            match plugin_type.as_str() {
+        if let Some(plugin_type) = plugin_type {
+            match plugin_type {
                 "memory" => {
                     // Check for deprecated fields in memory configuration
                     if config.contains_key("legacy_mode") {
@@ -190,6 +217,18 @@ mod tests {
 
         assert!(validator.validate_schema(&config).is_ok());
     }
+    
+    #[test]
+    fn test_validate_schema_valid_memory_with_provider_type() {
+        let validator = TypeCheckerValidator;
+        let config = serde_json::from_value(json!({
+            "provider_type": "memory",
+            "ttl": 3600
+        }))
+        .unwrap();
+
+        assert!(validator.validate_schema(&config).is_ok());
+    }
 
     #[test]
     fn test_validate_schema_valid_rag() {
@@ -204,6 +243,22 @@ mod tests {
 
         assert!(validator.validate_schema(&config).is_ok());
     }
+    
+    #[test]
+    fn test_validate_schema_valid_llm_provider() {
+        let validator = TypeCheckerValidator;
+        let config = serde_json::from_value(json!({
+            "provider_type": "OpenAIChat",
+            "common_config": {
+                "model": "gpt-4",
+                "temperature": 0.7,
+                "max_tokens": 500
+            }
+        }))
+        .unwrap();
+
+        assert!(validator.validate_schema(&config).is_ok());
+    }
 
     #[test]
     fn test_validate_schema_missing_required() {
@@ -212,6 +267,19 @@ mod tests {
             "type": "rag",
             "chunk_size": 512
             // missing max_tokens
+        }))
+        .unwrap();
+
+        assert!(validator.validate_schema(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_schema_missing_type() {
+        let validator = TypeCheckerValidator;
+        let config = serde_json::from_value(json!({
+            // missing type or provider_type
+            "chunk_size": 512,
+            "max_tokens": 1000
         }))
         .unwrap();
 
