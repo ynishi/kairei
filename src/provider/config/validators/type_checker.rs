@@ -27,6 +27,8 @@
 //! The type checker validator is typically used during the initialization phase
 //! of providers to ensure that configurations are valid before they are used.
 
+use tracing::instrument;
+
 use crate::provider::config::{
     errors::{ErrorContext, ErrorSeverity, ProviderConfigError, SchemaError, ValidationError},
     validation::{check_property_type, check_required_properties},
@@ -140,6 +142,7 @@ impl ProviderConfigValidator for TypeCheckerValidator {
     ///
     /// * `Ok(())` if the schema is valid
     /// * `Err(ProviderConfigError)` if the schema is invalid, with details about the error
+    #[instrument(skip(self))]
     fn validate_schema(
         &self,
         config: &HashMap<String, serde_json::Value>,

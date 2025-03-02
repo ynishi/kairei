@@ -196,7 +196,7 @@ async fn setup_travel_planner() -> System {
 
 #[tokio::test]
 async fn test_travel_planner() {
-    if should_run_external_api_tests() {
+    if !should_run_external_api_tests() {
         return;
     }
 
@@ -249,7 +249,9 @@ async fn test_hotel_finder() {
     // 必須要素の確認
     assert!(result_str.contains("hotel")); // ホテル情報が含まれている
     assert!(result_str.contains("Tokyo")); // 場所の確認
-    assert!(result_str.contains("2024") && (result_str.contains("06") || result_str.contains("June"))); // 日付の確認
+    assert!(
+        result_str.contains("2024") && (result_str.contains("06") || result_str.contains("June"))
+    ); // 日付の確認
     assert!(result_str.to_lowercase().contains("price")); // 価格情報の存在確認
 }
 
@@ -289,6 +291,8 @@ async fn test_flight_finder() {
     // 必須要素の確認
     assert!(result_str.contains("flight")); // フライト情報が含まれている
     assert!(result_str.contains("Tokyo")); // 場所の確認
-    assert!(result_str.contains("2024") && (result_str.contains("06") || result_str.contains("June"))); // 日付の確認
+    assert!(
+        result_str.contains("2024") && (result_str.contains("06") || result_str.contains("June"))
+    ); // 日付の確認
     assert!(result_str.to_lowercase().contains("price")); // 価格情報の存在確認
 }
