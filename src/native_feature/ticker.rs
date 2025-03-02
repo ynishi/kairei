@@ -172,7 +172,7 @@ mod tests {
         let ticker = Ticker::new(context.clone(), config);
 
         assert_eq!(ticker.status().await, NativeFeatureStatus::Inactive);
-        assert_eq!(ticker.running.load(Ordering::SeqCst), false);
+        assert!(!ticker.running.load(Ordering::SeqCst));
     }
 
     #[tokio::test]
@@ -191,7 +191,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         assert_eq!(ticker.status().await, NativeFeatureStatus::Active);
-        assert_eq!(ticker.running.load(Ordering::SeqCst), true);
+        assert!(ticker.running.load(Ordering::SeqCst));
 
         ticker.stop().await.unwrap();
 
@@ -199,7 +199,7 @@ mod tests {
         let _ = task.await;
 
         assert_eq!(ticker.status().await, NativeFeatureStatus::Inactive);
-        assert_eq!(ticker.running.load(Ordering::SeqCst), false);
+        assert!(!ticker.running.load(Ordering::SeqCst));
     }
 
     #[tokio::test]

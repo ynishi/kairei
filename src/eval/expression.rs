@@ -935,12 +935,14 @@ mod tests {
         assert!(matches!(result, Value::Integer(42)));
 
         // Float
-        let expr = Expression::Literal(Literal::Float(3.14));
+        let expr = Expression::Literal(Literal::Float(std::f64::consts::PI));
         let result = evaluator
             .eval_expression(&expr, context.clone())
             .await
             .unwrap();
-        assert!(matches!(result, Value::Float(f) if (f - 3.14).abs() < f64::EPSILON));
+        assert!(
+            matches!(result, Value::Float(f) if (f - std::f64::consts::PI).abs() < f64::EPSILON)
+        );
 
         // String
         let expr = Expression::Literal(Literal::String("hello".to_string()));
@@ -1172,7 +1174,7 @@ mod tests {
         // Less than
         let expr = Expression::BinaryOp {
             op: BinaryOperator::LessThan,
-            left: Box::new(Expression::Literal(Literal::Float(3.14))),
+            left: Box::new(Expression::Literal(Literal::Float(std::f64::consts::PI))),
             right: Box::new(Expression::Literal(Literal::Float(3.15))),
         };
         let result = evaluator

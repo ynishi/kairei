@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn test_validate_schema_valid_memory() {
-        let validator = TypeCheckerValidator::default();
+        let validator = TypeCheckerValidator;
         let config = serde_json::from_value(json!({
             "type": "memory",
             "ttl": 3600
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_validate_schema_valid_rag() {
-        let validator = TypeCheckerValidator::default();
+        let validator = TypeCheckerValidator;
         let config = serde_json::from_value(json!({
             "type": "rag",
             "chunk_size": 512,
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_validate_schema_missing_required() {
-        let validator = TypeCheckerValidator::default();
+        let validator = TypeCheckerValidator;
         let config = serde_json::from_value(json!({
             "type": "rag",
             "chunk_size": 512
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_validate_schema_invalid_type() {
-        let validator = TypeCheckerValidator::default();
+        let validator = TypeCheckerValidator;
         let config = serde_json::from_value(json!({
             "type": "rag",
             "chunk_size": "not a number", // should be a number

@@ -1184,7 +1184,7 @@ mod tests {
         let input = vec!['(', '1', ')', '(', '2', ')'];
         let left = Satisfy::new(|x: &char| if *x == '(' { Some(()) } else { None });
         let parser = Satisfy::new(|x: &char| {
-            if x.is_digit(10) {
+            if x.is_ascii_digit() {
                 x.to_digit(10).map(|n| n as i32)
             } else {
                 None

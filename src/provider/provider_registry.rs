@@ -519,7 +519,7 @@ mod tests {
         let secret = ProviderSecret::default();
 
         registry
-            .register_provider_with(&name, &config, &secret, Arc::new(provider))
+            .register_provider_with(name, &config, &secret, Arc::new(provider))
             .await
             .unwrap();
 

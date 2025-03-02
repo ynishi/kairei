@@ -87,7 +87,7 @@ mod tests {
     #[test]
     fn test_timestamp_from_timestamp() {
         let timestamp = Timestamp::now();
-        let timestamp2 = Timestamp::from(timestamp.clone());
+        let timestamp2 = timestamp.clone();
         assert_eq!(timestamp.0, timestamp2.0);
     }
 
