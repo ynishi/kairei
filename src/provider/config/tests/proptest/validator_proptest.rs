@@ -33,7 +33,7 @@ fn provider_config_strategy() -> impl Strategy<Value = HashMap<String, Value>> {
             capabilities.insert(provider_type.to_string(), Value::Bool(true));
 
             // Convert HashMap<String, Value> to serde_json::Map<String, Value>
-            let capabilities_map = serde_json::Map::from_iter(capabilities.into_iter());
+            let capabilities_map = serde_json::Map::from_iter(capabilities);
 
             config.insert("capabilities".to_string(), Value::Object(capabilities_map));
 
@@ -140,7 +140,7 @@ fn provider_config_with_missing_fields_strategy() -> impl Strategy<Value = HashM
                     capabilities.insert(provider_type.to_string(), Value::Bool(true));
 
                     // Convert HashMap<String, Value> to serde_json::Map<String, Value>
-                    let capabilities_map = serde_json::Map::from_iter(capabilities.into_iter());
+                    let capabilities_map = serde_json::Map::from_iter(capabilities);
 
                     config.insert("capabilities".to_string(), Value::Object(capabilities_map));
                 }
@@ -193,7 +193,7 @@ fn provider_config_with_invalid_values_strategy() -> impl Strategy<Value = HashM
             capabilities.insert(provider_type.to_string(), Value::Bool(true));
 
             // Convert HashMap<String, Value> to serde_json::Map<String, Value>
-            let capabilities_map = serde_json::Map::from_iter(capabilities.into_iter());
+            let capabilities_map = serde_json::Map::from_iter(capabilities);
 
             config.insert("capabilities".to_string(), Value::Object(capabilities_map));
 
