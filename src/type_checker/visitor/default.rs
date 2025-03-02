@@ -511,6 +511,9 @@ impl TypeVisitor for DefaultVisitor {
         agent: &mut MicroAgentDef,
         ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
+        // Create an isolated scope for the micro agent
+        ctx.enter_isolated_scope();
+
         // Visit state definition if present
         if let Some(state) = &mut agent.state {
             self.visit_state(state, ctx)?;
@@ -519,16 +522,27 @@ impl TypeVisitor for DefaultVisitor {
         // Visit lifecycle handlers if present
         if let Some(lifecycle) = &agent.lifecycle {
             if let Some(init) = &lifecycle.on_init {
-                self.visit_handler_block(init, ctx)?;
+                // Create an isolated scope for the init handler
+                ctx.enter_isolated_scope();
+                let result = self.visit_handler_block(init, ctx);
+                ctx.exit_isolated_scope();
+                result?;
             }
             if let Some(destroy) = &lifecycle.on_destroy {
-                self.visit_handler_block(destroy, ctx)?;
+                // Create an isolated scope for the destroy handler
+                ctx.enter_isolated_scope();
+                let result = self.visit_handler_block(destroy, ctx);
+                ctx.exit_isolated_scope();
+                result?;
             }
         }
 
         // Visit answer handlers if present
         if let Some(answer) = &agent.answer {
             for handler in &answer.handlers {
+                // Create an isolated scope for each answer handler
+                ctx.enter_isolated_scope();
+
                 // Register handler return type in scope
                 ctx.scope.insert_type(
                     "handler_return_type".to_string(),
@@ -539,6 +553,7 @@ impl TypeVisitor for DefaultVisitor {
                 for param in &handler.parameters {
                     if let Some(existing_type) = ctx.scope.get_type(&param.name) {
                         if existing_type != param.type_info {
+                            ctx.exit_isolated_scope();
                             return Err(TypeCheckError::type_mismatch(
                                 existing_type.clone(),
                                 param.type_info.clone(),
@@ -551,13 +566,19 @@ impl TypeVisitor for DefaultVisitor {
                     ctx.scope
                         .insert_type(param.name.clone(), param.type_info.clone());
                 }
-                self.visit_handler_block(&handler.block, ctx)?;
+
+                let result = self.visit_handler_block(&handler.block, ctx);
+                ctx.exit_isolated_scope();
+                result?;
             }
         }
 
         // Visit observe handlers if present
         if let Some(observe) = &agent.observe {
             for handler in &observe.handlers {
+                // Create an isolated scope for each observe handler
+                ctx.enter_isolated_scope();
+
                 // 既存の型定義がない場合のみデフォルト値を設定
                 if ctx.scope.get_type("return_type").is_none() {
                     ctx.scope.insert_type(
@@ -585,13 +606,18 @@ impl TypeVisitor for DefaultVisitor {
                     ctx.scope
                         .insert_type(param.name.clone(), param.type_info.clone());
                 }
-                self.visit_handler_block(&handler.block, ctx)?;
+                let result = self.visit_handler_block(&handler.block, ctx);
+                ctx.exit_isolated_scope();
+                result?;
             }
         }
 
         // Visit react handlers if present
         if let Some(react) = &agent.react {
             for handler in &react.handlers {
+                // Create an isolated scope for each react handler
+                ctx.enter_isolated_scope();
+
                 // 既存の型定義がない場合のみデフォルト値を設定
                 if ctx.scope.get_type("return_type").is_none() {
                     ctx.scope.insert_type(
@@ -607,6 +633,7 @@ impl TypeVisitor for DefaultVisitor {
                 for param in &handler.parameters {
                     if let Some(existing_type) = ctx.scope.get_type(&param.name) {
                         if existing_type != param.type_info {
+                            ctx.exit_isolated_scope();
                             return Err(TypeCheckError::type_mismatch(
                                 existing_type.clone(),
                                 param.type_info.clone(),
@@ -619,9 +646,14 @@ impl TypeVisitor for DefaultVisitor {
                     ctx.scope
                         .insert_type(param.name.clone(), param.type_info.clone());
                 }
-                self.visit_handler_block(&handler.block, ctx)?;
+                let result = self.visit_handler_block(&handler.block, ctx);
+                ctx.exit_isolated_scope();
+                result?;
             }
         }
+
+        // Exit the isolated scope for the micro agent
+        ctx.exit_isolated_scope();
 
         Ok(())
     }
@@ -671,13 +703,21 @@ impl TypeVisitor for DefaultVisitor {
         handler: &HandlerDef,
         ctx: &mut TypeContext,
     ) -> TypeCheckResult<()> {
+        // Create an isolated scope for the handler
+        ctx.enter_isolated_scope();
+
         // Register parameters in scope before checking handler block
         for param in &handler.parameters {
             ctx.scope
                 .insert_type(param.name.clone(), param.type_info.clone());
         }
 
-        self.visit_handler_block(&handler.block, ctx)
+        let result = self.visit_handler_block(&handler.block, ctx);
+
+        // Exit the isolated scope to clean up
+        ctx.exit_isolated_scope();
+
+        result
     }
 
     fn visit_handler_block(
@@ -759,9 +799,20 @@ impl TypeVisitor for DefaultVisitor {
                 Ok(())
             }
             Statement::Block(statements) => {
+                // Create a checkpoint before entering the block
+                let checkpoint = ctx.create_scope_checkpoint();
+
+                // Enter a new scope for the block
+                ctx.scope.enter_scope();
+
+                // Visit all statements in the block
                 for stmt in statements {
                     self.visit_statement(stmt, ctx)?;
                 }
+
+                // Restore the checkpoint after exiting the block
+                ctx.restore_scope_checkpoint(checkpoint);
+
                 Ok(())
             }
             Statement::WithError {
@@ -769,9 +820,18 @@ impl TypeVisitor for DefaultVisitor {
                 error_handler_block,
             } => {
                 self.visit_statement(statement, ctx)?;
+
+                // Create a checkpoint before entering the error handler block
+                let checkpoint = ctx.create_scope_checkpoint();
+                ctx.scope.enter_scope();
+
                 for stmt in &error_handler_block.error_handler_statements {
                     self.visit_statement(stmt, ctx)?;
                 }
+
+                // Restore the checkpoint after exiting the error handler block
+                ctx.restore_scope_checkpoint(checkpoint);
+
                 Ok(())
             }
             Statement::If {
@@ -781,15 +841,34 @@ impl TypeVisitor for DefaultVisitor {
             } => {
                 // Check condition is boolean
                 self.check_condition(condition, ctx)?;
-                // Check blocks
+
+                // Create a checkpoint before entering the then block
+                let checkpoint = ctx.create_scope_checkpoint();
+
+                // Enter a new scope for the then block
+                ctx.scope.enter_scope();
+
+                // Check then block
                 for stmt in then_block {
                     self.visit_statement(stmt, ctx)?;
                 }
+
+                // Restore checkpoint before potentially entering else block
+                ctx.restore_scope_checkpoint(checkpoint);
+
+                // Handle else block if present
                 if let Some(else_stmts) = else_block {
+                    // Create a new scope for the else block
+                    ctx.scope.enter_scope();
+
                     for stmt in else_stmts {
                         self.visit_statement(stmt, ctx)?;
                     }
+
+                    // Exit the else block scope
+                    ctx.scope.exit_scope();
                 }
+
                 Ok(())
             }
             Statement::Emit { parameters, .. } => {

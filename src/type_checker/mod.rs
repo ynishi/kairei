@@ -18,6 +18,7 @@ pub use plugin_interface::TypeCheckerPlugin;
 pub use scope::TypeScope;
 
 use crate::ast;
+use crate::ast::TypeInfo;
 
 /// KAIREI Type Checker System
 ///
@@ -174,6 +175,41 @@ impl TypeContext {
     /// Clear all errors
     pub fn clear(&mut self) {
         self.errors.clear();
+    }
+
+    /// Create a scope checkpoint for later restoration
+    pub fn create_scope_checkpoint(&self) -> usize {
+        self.scope.create_checkpoint()
+    }
+
+    /// Restore a previously created scope checkpoint
+    pub fn restore_scope_checkpoint(&mut self, checkpoint: usize) {
+        self.scope.restore_checkpoint(checkpoint);
+    }
+
+    /// Enter an isolated scope
+    pub fn enter_isolated_scope(&mut self) {
+        self.scope.enter_isolated_scope();
+    }
+
+    /// Exit an isolated scope and clean up
+    pub fn exit_isolated_scope(&mut self) {
+        self.scope.exit_isolated_scope();
+    }
+
+    /// Get a type from the current scope only (not parent scopes)
+    pub fn get_type_from_current_scope(&self, name: &str) -> Option<TypeInfo> {
+        self.scope.get_type_from_current_scope(name)
+    }
+
+    /// Get the scope at a specific level
+    pub fn get_scope_at_level(&self, level: usize) -> Option<&scope::TypeScopeLayer> {
+        self.scope.get_scope_at_level(level)
+    }
+
+    /// Insert a type at a specific scope level
+    pub fn insert_type_at_level(&mut self, level: usize, name: String, ty: TypeInfo) {
+        self.scope.insert_type_at_level(level, name, ty);
     }
 }
 
