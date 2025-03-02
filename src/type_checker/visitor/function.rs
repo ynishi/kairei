@@ -108,7 +108,7 @@
 ///    - Function signature caching
 ///    - Optimized type checking for common cases
 use crate::{
-    ast::{Expression, TypeInfo},
+    ast::{Argument, Expression, TypeInfo},
     type_checker::{error::TypeCheckError, TypeCheckResult, TypeContext},
 };
 
@@ -144,6 +144,100 @@ impl DefaultFunctionChecker {
         }
     }
 
+    // Add a method to infer expression types that can handle function calls
+    #[allow(unreachable_patterns)]
+    pub fn infer_expression_type(
+        &self,
+        expr: &Expression,
+        ctx: &TypeContext,
+    ) -> TypeCheckResult<TypeInfo> {
+        match expr {
+            Expression::Literal(lit) => self.expression_checker.infer_literal_type(lit, ctx),
+            Expression::Variable(name) => {
+                if let Some(type_info) = ctx.scope.get_type(name) {
+                    Ok(type_info.clone())
+                } else {
+                    Err(TypeCheckError::undefined_variable(
+                        name.clone(),
+                        Default::default(),
+                    ))
+                }
+            }
+            Expression::BinaryOp { op, left, right } => {
+                let left_type = self.infer_expression_type(left, ctx)?;
+                let right_type = self.infer_expression_type(right, ctx)?;
+                self.expression_checker
+                    .infer_binary_op_type(&left_type, &right_type, op)
+            }
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => self.check_function_call(function, arguments, ctx),
+            Expression::Think { args, .. } => {
+                // Check argument types
+                for arg in args {
+                    match arg {
+                        Argument::Named { value, .. } | Argument::Positional(value) => {
+                            self.infer_expression_type(value, ctx)?;
+                        }
+                    }
+                }
+                // Think expressions return Result<String, Error>
+                Ok(TypeInfo::Result {
+                    ok_type: Box::new(TypeInfo::Simple("String".to_string())),
+                    err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                })
+            }
+            Expression::StateAccess(path) => {
+                // For state access, we need to look up the type in the scope
+                if let Some(type_info) = ctx.scope.get_type(&path.0.join(".")) {
+                    Ok(type_info.clone())
+                } else {
+                    Err(TypeCheckError::undefined_variable(
+                        path.0.join("."),
+                        Default::default(),
+                    ))
+                }
+            }
+            Expression::Ok(expr) => {
+                let ok_type = self.infer_expression_type(expr, ctx)?;
+                Ok(TypeInfo::Result {
+                    ok_type: Box::new(ok_type),
+                    err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                })
+            }
+            Expression::Err(expr) => {
+                let err_type = self.infer_expression_type(expr, ctx)?;
+                Ok(TypeInfo::Result {
+                    ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
+                    err_type: Box::new(err_type),
+                })
+            }
+            Expression::Request { .. } => {
+                // Request expressions typically return Result<T, Error>
+                // For simplicity, we'll assume Any as the success type
+                Ok(TypeInfo::Result {
+                    ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
+                    err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                })
+            }
+            Expression::Await(exprs) => {
+                // Check all expressions in the await
+                for expr in exprs {
+                    self.infer_expression_type(expr, ctx)?;
+                }
+                // Await expressions typically return the same type as the inner expression
+                // For simplicity, we'll assume Any
+                Ok(TypeInfo::Simple("Any".to_string()))
+            }
+            // Handle any other expression types
+            other => Err(TypeCheckError::type_inference_error(
+                format!("Unsupported expression type: {:?}", other),
+                Default::default(),
+            )),
+        }
+    }
+
     fn get_function_signature(
         &self,
         function: &str,
@@ -154,6 +248,33 @@ impl DefaultFunctionChecker {
         })
     }
 
+    fn get_parameter_types(
+        &self,
+        function: &str,
+        ctx: &TypeContext,
+    ) -> TypeCheckResult<Vec<TypeInfo>> {
+        // Check if there's a specific parameter type definition
+        let param_key = format!("{}.params", function);
+        if let Some(param_type) = ctx.scope.get_type(&param_key) {
+            match param_type {
+                TypeInfo::Array(elem_type) => {
+                    // If it's an array, return the element type as a single parameter
+                    Ok(vec![(*elem_type).clone()])
+                }
+                _ => {
+                    // For other types, return as is
+                    Ok(vec![param_type.clone()])
+                }
+            }
+        } else {
+            // Fall back to extracting from function signature
+            let func_type = self.get_function_signature(function, ctx)?;
+            let (param_types, _) = self.extract_parameter_types(&func_type)?;
+            Ok(param_types)
+        }
+    }
+
+    #[allow(unreachable_patterns)]
     fn extract_parameter_types(
         &self,
         type_info: &TypeInfo,
@@ -164,9 +285,31 @@ impl DefaultFunctionChecker {
                 let param_types = match &**ok_type {
                     TypeInfo::Simple(_) => vec![(**ok_type).clone()],
                     TypeInfo::Array(elem_type) => vec![(**elem_type).clone()],
-                    _ => {
+                    TypeInfo::Map(key_type, value_type) => {
+                        vec![(**key_type).clone(), (**value_type).clone()]
+                    }
+                    TypeInfo::Custom { fields, .. } => {
+                        // For custom types, extract field types as parameters
+                        fields
+                            .values()
+                            .filter_map(|field| field.type_info.clone())
+                            .collect()
+                    }
+                    TypeInfo::Result {
+                        ok_type: inner_ok,
+                        err_type: inner_err,
+                    } => {
+                        // For nested Result types
+                        vec![(**inner_ok).clone(), (**inner_err).clone()]
+                    }
+                    TypeInfo::Option(inner_type) => {
+                        // For Option types
+                        vec![(**inner_type).clone()]
+                    }
+                    // Default case for unsupported types
+                    other => {
                         return Err(TypeCheckError::type_inference_error(
-                            "Invalid function parameter type".to_string(),
+                            format!("Invalid function parameter type: {:?}", other),
                             Default::default(),
                         ))
                     }
@@ -209,25 +352,37 @@ impl DefaultFunctionChecker {
 
         // Check each argument type
         for (i, (arg, expected_type)) in arguments.iter().zip(expected_types.iter()).enumerate() {
-            match arg {
-                Expression::Literal(lit) => {
-                    let arg_type = self.expression_checker.infer_literal_type(lit, ctx)?;
-                    if arg_type != *expected_type {
-                        return Err(TypeCheckError::invalid_argument_type(
-                            function.to_string(),
-                            format!("arg{}", i),
-                            expected_type.clone(),
-                            arg_type,
-                            Default::default(),
-                        ));
-                    }
-                }
-                _ => {
-                    return Err(TypeCheckError::type_inference_error(
-                        format!("Unsupported argument type for function {}", function),
-                        Default::default(),
-                    ))
-                }
+            // Use infer_expression_type to handle all expression types including nested function calls
+            let arg_type = self.infer_expression_type(arg, ctx)?;
+
+            // Special handling for Result types - if the expected type is a Result, we can accept it directly
+            // If the expected type is not a Result but the argument is, we can extract the ok_type
+            let compatible = match (expected_type, &arg_type) {
+                // If both are Result types, check compatibility of ok and err types
+                (
+                    TypeInfo::Result {
+                        ok_type: expected_ok,
+                        err_type: expected_err,
+                    },
+                    TypeInfo::Result {
+                        ok_type: actual_ok,
+                        err_type: actual_err,
+                    },
+                ) => **expected_ok == **actual_ok && **expected_err == **actual_err,
+                // If expected is not Result but arg is, check if ok_type matches expected
+                (expected, TypeInfo::Result { ok_type, .. }) => **ok_type == *expected,
+                // Default case - direct equality check
+                _ => arg_type == *expected_type,
+            };
+
+            if !compatible {
+                return Err(TypeCheckError::invalid_argument_type(
+                    function.to_string(),
+                    format!("arg{}", i),
+                    expected_type.clone(),
+                    arg_type,
+                    Default::default(),
+                ));
             }
         }
 
@@ -242,11 +397,12 @@ impl FunctionTypeChecker for DefaultFunctionChecker {
         arguments: &[Expression],
         ctx: &TypeContext,
     ) -> TypeCheckResult<TypeInfo> {
-        // Get function signature
+        // Get function signature for return type
         let func_type = self.get_function_signature(function, ctx)?;
+        let (_, return_type) = self.extract_parameter_types(&func_type)?;
 
-        // Extract parameter types and return type
-        let (param_types, return_type) = self.extract_parameter_types(&func_type)?;
+        // Get parameter types (either from specific param definition or function signature)
+        let param_types = self.get_parameter_types(function, ctx)?;
 
         // Check argument types
         self.check_argument_types(function, arguments, &param_types, ctx)?;
