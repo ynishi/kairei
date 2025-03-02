@@ -32,3 +32,17 @@
   - **event/**: Event-driven communication
 - **docs/**: Design documentation
 - **examples/**: Example KAIREI applications
+
+## Issue Creation Process
+1. Draft issue content in the .claude_workspace directory first
+2. Create the issue using: `gh issue create --title "Title" --body-file .claude_workspace/your_file.md --label "${label name}"`
+  - label for implementation: enhancement
+  - label for research, design: design
+3. To create follow-up issues for future enhancements, use the process above with descriptive titles and detailed background/goals
+
+## Claude Workspace
+The `.claude_workspace/` directory is a dedicated workspace for Claude to:
+- Draft files safely without affecting the main codebase
+- Store temporary content like issue drafts, documentation, etc.
+- Test ideas before implementing them in the main repository
+- The directory is ignored by git (via .gitignore)
