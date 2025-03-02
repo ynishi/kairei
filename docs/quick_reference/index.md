@@ -245,6 +245,90 @@ sequenceDiagram
     end
 ```
 
+## Provider Configuration Validation
+
+KAIREI uses a comprehensive validation system for provider configurations:
+
+### Provider Types and Requirements
+
+#### Memory Provider
+
+**Required Fields**:
+- `type`: Must be "memory"
+
+**Optional Fields**:
+- `ttl`: Time-to-live in seconds (number, must be > 0)
+
+**Capabilities**:
+- Requires `memory` capability
+
+**Example**:
+```json
+{
+  "type": "memory",
+  "ttl": 3600,
+  "capabilities": {
+    "memory": true
+  }
+}
+```
+
+#### RAG Provider
+
+**Required Fields**:
+- `type`: Must be "rag"
+- `chunk_size`: Size of text chunks (number, must be > 0)
+- `max_tokens`: Maximum tokens to process (number, must be > 0)
+
+**Optional Fields**:
+- `similarity_threshold`: Threshold for similarity matching (number, between 0.0 and 1.0)
+
+**Capabilities**:
+- Requires `rag` capability
+
+#### Search Provider
+
+**Required Fields**:
+- `type`: Must be "search"
+- `max_results`: Maximum number of search results (number, must be > 0)
+
+**Capabilities**:
+- Requires `search` capability
+
+### Validation Process
+
+KAIREI uses a two-phase validation approach:
+
+1. **Compile-Time Validation** (`TypeCheckerValidator`):
+   - Schema structure and types
+   - Required fields
+   - Deprecated fields (warnings)
+
+2. **Runtime Validation** (`EvaluatorValidator`):
+   - Provider-specific constraints
+   - Capability requirements
+   - Dependencies
+   - Suboptimal configurations (warnings)
+
+### Common Validation Errors and Fixes
+
+| Error | Example | Fix |
+|-------|---------|-----|
+| Missing Required Field | `{ "ttl": 3600 }` (Missing "type") | Add the missing field: `"type": "memory"` |
+| Invalid Type | `{ "type": "memory", "ttl": "3600" }` (String instead of number) | Change to number: `"ttl": 3600` |
+| Invalid Value | `{ "type": "memory", "ttl": 0 }` (Must be > 0) | Use positive value: `"ttl": 3600` |
+| Missing Capability | `{ "type": "memory", "capabilities": {} }` (Missing capability) | Add capability: `"memory": true` |
+
+### Validation Best Practices
+
+1. **Use Both Validators**: Always use both `TypeCheckerValidator` and `EvaluatorValidator`
+2. **Collect All Errors**: Use `validate_collecting` to get all validation errors at once
+3. **Pay Attention to Warnings**: Address warnings to improve performance and quality
+4. **Use Templates**: Start with example configurations as templates
+5. **Validate Incrementally**: Validate after each significant change
+
+For detailed information, see the [Provider Configuration Validation Reference](../reference/provider_config_validation.md).
+
 ## Further Resources
 
 - [KAIREI Documentation](../README.md)
