@@ -224,7 +224,7 @@ fn test_function_call_with_variable_arguments() -> TypeCheckResult<()> {
 fn test_function_call_with_nested_function_call() -> TypeCheckResult<()> {
     use crate::type_checker::visitor::default::DefaultVisitor;
 
-    let mut visitor = DefaultVisitor::new();
+    let visitor = DefaultVisitor::new();
     let mut ctx = TypeContext::new();
 
     // Register two test functions
@@ -269,7 +269,7 @@ fn test_function_call_with_nested_function_call() -> TypeCheckResult<()> {
 fn test_function_call_with_binary_op_argument() -> TypeCheckResult<()> {
     use crate::type_checker::visitor::default::DefaultVisitor;
 
-    let mut visitor = DefaultVisitor::new();
+    let visitor = DefaultVisitor::new();
     let mut ctx = TypeContext::new();
 
     // Register a test function
@@ -308,7 +308,7 @@ fn test_function_call_with_complex_parameter_types() -> TypeCheckResult<()> {
     use crate::type_checker::visitor::default::DefaultVisitor;
     use std::collections::HashMap;
 
-    let mut visitor = DefaultVisitor::new();
+    let visitor = DefaultVisitor::new();
     let mut ctx = TypeContext::new();
 
     // Register a test function with a complex parameter type (Map)
@@ -354,7 +354,7 @@ fn test_function_call_with_complex_parameter_types() -> TypeCheckResult<()> {
 fn test_function_call_with_generic_return_type() -> TypeCheckResult<()> {
     use crate::type_checker::visitor::default::DefaultVisitor;
 
-    let mut visitor = DefaultVisitor::new();
+    let visitor = DefaultVisitor::new();
     let mut ctx = TypeContext::new();
 
     // Register a test function with a generic return type
