@@ -33,8 +33,7 @@ fn provider_config_strategy() -> impl Strategy<Value = HashMap<String, Value>> {
             capabilities.insert(provider_type.to_string(), Value::Bool(true));
 
             // Convert HashMap<String, Value> to serde_json::Map<String, Value>
-            let capabilities_map =
-                serde_json::Map::from_iter(capabilities.into_iter().map(|(k, v)| (k, v)));
+            let capabilities_map = serde_json::Map::from_iter(capabilities.into_iter());
 
             config.insert("capabilities".to_string(), Value::Object(capabilities_map));
 
@@ -45,7 +44,7 @@ fn provider_config_strategy() -> impl Strategy<Value = HashMap<String, Value>> {
 proptest! {
     #[test]
     fn test_type_checker_validator_with_arbitrary_configs(config in provider_config_strategy()) {
-        let validator = TypeCheckerValidator::default();
+        let validator = TypeCheckerValidator;
 
         // Type checker should validate the schema
         let result = validator.validate(&config);
@@ -60,7 +59,7 @@ proptest! {
 
     #[test]
     fn test_evaluator_validator_with_arbitrary_configs(config in provider_config_strategy()) {
-        let validator = EvaluatorValidator::default();
+        let validator = EvaluatorValidator;
 
         // Evaluator should validate the provider-specific config
         let result = validator.validate_provider_specific(&config);
@@ -141,8 +140,7 @@ fn provider_config_with_missing_fields_strategy() -> impl Strategy<Value = HashM
                     capabilities.insert(provider_type.to_string(), Value::Bool(true));
 
                     // Convert HashMap<String, Value> to serde_json::Map<String, Value>
-                    let capabilities_map =
-                        serde_json::Map::from_iter(capabilities.into_iter().map(|(k, v)| (k, v)));
+                    let capabilities_map = serde_json::Map::from_iter(capabilities.into_iter());
 
                     config.insert("capabilities".to_string(), Value::Object(capabilities_map));
                 }
@@ -155,7 +153,7 @@ fn provider_config_with_missing_fields_strategy() -> impl Strategy<Value = HashM
 proptest! {
     #[test]
     fn test_validator_with_missing_fields(config in provider_config_with_missing_fields_strategy()) {
-        let type_checker = TypeCheckerValidator::default();
+        let type_checker = TypeCheckerValidator;
 
         // Collect validation results
         let type_checker_collector = type_checker.validate_collecting(&config);
@@ -195,8 +193,7 @@ fn provider_config_with_invalid_values_strategy() -> impl Strategy<Value = HashM
             capabilities.insert(provider_type.to_string(), Value::Bool(true));
 
             // Convert HashMap<String, Value> to serde_json::Map<String, Value>
-            let capabilities_map =
-                serde_json::Map::from_iter(capabilities.into_iter().map(|(k, v)| (k, v)));
+            let capabilities_map = serde_json::Map::from_iter(capabilities.into_iter());
 
             config.insert("capabilities".to_string(), Value::Object(capabilities_map));
 
@@ -207,7 +204,7 @@ fn provider_config_with_invalid_values_strategy() -> impl Strategy<Value = HashM
 proptest! {
     #[test]
     fn test_validator_with_invalid_values(config in provider_config_with_invalid_values_strategy()) {
-        let evaluator = EvaluatorValidator::default();
+        let evaluator = EvaluatorValidator;
 
         // Collect validation results
         let collector = evaluator.validate_collecting(&config);
@@ -244,7 +241,7 @@ proptest! {
         // so we don't assert on the exact number of errors
         if invalid_fields > 0 && collector.has_errors() {
             // If there are errors, just verify that we have at least one
-            prop_assert!(collector.errors.len() >= 1);
+            prop_assert!(!collector.errors.is_empty());
         }
     }
 }
