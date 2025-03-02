@@ -120,7 +120,7 @@ impl DefaultVisitor {
         Ok(())
     }
 
-    fn infer_type(&self, expr: &Expression, ctx: &TypeContext) -> TypeCheckResult<TypeInfo> {
+    pub fn infer_type(&self, expr: &Expression, ctx: &TypeContext) -> TypeCheckResult<TypeInfo> {
         match expr {
             Expression::Literal(lit) => self.expression_checker.infer_literal_type(lit, ctx),
             Expression::Variable(name) => {

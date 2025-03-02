@@ -87,7 +87,7 @@
 ///    - Provide more detailed error messages
 ///    - Include suggestions for fixing type errors
 use crate::{
-    ast::{BinaryOperator, Literal, TypeInfo},
+    ast::{BinaryOperator, Expression, Literal, TypeInfo},
     type_checker::{error::TypeCheckErrorMeta, TypeCheckError, TypeCheckResult, TypeContext},
 };
 
@@ -103,6 +103,8 @@ pub(crate) trait ExpressionTypeChecker {
     fn is_numeric(&self, type_info: &TypeInfo) -> bool;
     fn is_float(&self, type_info: &TypeInfo) -> bool;
     fn is_boolean(&self, type_info: &TypeInfo) -> bool;
+    #[allow(dead_code)]
+    fn infer_type(&self, expr: &Expression, ctx: &TypeContext) -> TypeCheckResult<TypeInfo>;
 }
 
 pub(crate) struct DefaultExpressionChecker;
@@ -263,6 +265,42 @@ impl ExpressionTypeChecker for DefaultExpressionChecker {
             type_info,
             TypeInfo::Simple(name) if name == "Boolean"
         )
+    }
+
+    fn infer_type(&self, expr: &Expression, ctx: &TypeContext) -> TypeCheckResult<TypeInfo> {
+        match expr {
+            Expression::Literal(lit) => self.infer_literal_type(lit, ctx),
+            Expression::Variable(name) => {
+                if let Some(type_info) = ctx.scope.get_type(name) {
+                    Ok(type_info.clone())
+                } else {
+                    Err(TypeCheckError::undefined_variable(
+                        name.clone(),
+                        Default::default(),
+                    ))
+                }
+            }
+            Expression::BinaryOp { op, left, right } => {
+                let left_type = self.infer_type(left, ctx)?;
+                let right_type = self.infer_type(right, ctx)?;
+                self.infer_binary_op_type(&left_type, &right_type, op)
+            }
+            Expression::FunctionCall {
+                function: _,
+                arguments: _,
+            } => {
+                // For nested function calls, we need to use the function checker
+                // This will be passed in from the DefaultVisitor
+                Err(TypeCheckError::type_inference_error(
+                    "Function calls not supported in this context".to_string(),
+                    Default::default(),
+                ))
+            }
+            _ => Err(TypeCheckError::type_inference_error(
+                "Unsupported expression type".to_string(),
+                Default::default(),
+            )),
+        }
     }
 }
 
