@@ -19,6 +19,12 @@ use std::collections::HashMap;
 pub fn config_to_map(config: &ProviderConfig) -> HashMap<String, Value> {
     let mut map = HashMap::new();
 
+    // Add provider type
+    map.insert(
+        "provider_type".to_string(),
+        Value::from(config.provider_type.to_string()),
+    );
+
     // Add common config
     map.insert(
         "temperature".to_string(),

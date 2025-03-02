@@ -1,6 +1,6 @@
 use crate::provider::config::{
-    ErrorContext, ErrorSeverity, ProviderConfigError, ProviderError, SchemaError, SourceLocation,
-    ValidationError,
+    ConfigError, ErrorContext, ErrorSeverity, ProviderConfigError, ProviderError, SchemaError,
+    SourceLocation, ValidationError,
 };
 
 #[test]
@@ -92,8 +92,7 @@ fn test_schema_error_creation() {
         _ => panic!("Expected InvalidType variant"),
     }
 
-    let invalid_structure =
-        SchemaError::invalid_structure("test_field", "Field must be an object");
+    let invalid_structure = SchemaError::invalid_structure("test_field", "Field must be an object");
     match invalid_structure {
         SchemaError::InvalidStructure { message, context } => {
             assert_eq!(message, "Field must be an object");
@@ -224,7 +223,7 @@ fn test_error_code_generation() {
 
     let generic_error = ProviderConfigError::generic("Generic error message");
     assert_eq!(generic_error.error_code(), "GENERIC_0001");
-    
+
     let legacy_error = ConfigError::MissingField("test_field".to_string());
     let provider_config_error: ProviderConfigError = legacy_error.into();
     assert_eq!(provider_config_error.error_code(), "LEGACY_0001");
@@ -235,25 +234,26 @@ fn test_error_display() {
     let schema_error = SchemaError::missing_field("test_field");
     assert_eq!(
         schema_error.to_string(),
-        "Missing required field in field 'test_field'"
+        "Missing required field in field 'test_field' (see: https://github.com/ynishi/kairei/blob/main/docs/reference/provider_config_validation.md#1-provider-configuration-overview)"
     );
 
     let validation_error = ValidationError::invalid_value("test_field", "Value must be positive");
+    println!("{}", validation_error);
     assert_eq!(
         validation_error.to_string(),
-        "Invalid value in field 'test_field': Value must be positive"
+        "Invalid value in field 'test_field': Value must be positive (see: https://github.com/ynishi/kairei/blob/main/docs/reference/provider_config_validation.md#3-error-handling-guide)"
     );
 
     let provider_error =
         ProviderError::initialization("test_field", "Failed to initialize provider");
     assert_eq!(
         provider_error.to_string(),
-        "Provider initialization error in field 'test_field': Failed to initialize provider"
+        "Provider initialization error in field 'test_field': Failed to initialize provider (see: https://github.com/ynishi/kairei/blob/main/docs/reference/provider_config_validation.md#5-troubleshooting-guide)"
     );
 
     let provider_config_error: ProviderConfigError = schema_error.into();
     assert_eq!(
         provider_config_error.to_string(),
-        "Schema error: Missing required field in field 'test_field'"
+        "Schema error: Missing required field in field 'test_field' (see: https://github.com/ynishi/kairei/blob/main/docs/reference/provider_config_validation.md#1-provider-configuration-overview)"
     );
 }

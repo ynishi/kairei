@@ -300,6 +300,16 @@ fn parse_function_call() -> impl Parser<Token, ast::Expression> {
 
 fn parse_think() -> impl Parser<Token, ast::Expression> {
     with_context(
+        choice(vec![
+            Box::new(parse_think_multiple()),
+            Box::new(parse_think_single()),
+        ]),
+        "think",
+    )
+}
+
+pub fn parse_think_single() -> impl Parser<Token, ast::Expression> {
+    with_context(
         map(
             tuple3(
                 as_unit(parse_think_keyword()),
@@ -308,7 +318,40 @@ fn parse_think() -> impl Parser<Token, ast::Expression> {
             ),
             |(_, args, with_block)| ast::Expression::Think { args, with_block },
         ),
-        "think",
+        "think single",
+    )
+}
+
+pub fn parse_think_multiple() -> impl Parser<Token, ast::Expression> {
+    with_context(
+        map(
+            preceded(
+                as_unit(parse_think_keyword()),
+                tuple2(
+                    delimited(
+                        as_unit(parse_open_paren()),
+                        separated_list(
+                            tuple3(
+                                parse_identifier(),
+                                as_unit(parse_colon()),
+                                parse_expression(),
+                            ),
+                            as_unit(parse_comma()),
+                        ),
+                        as_unit(parse_close_paren()),
+                    ),
+                    optional(parse_think_attributes()),
+                ),
+            ),
+            |(params, with_block)| {
+                let args = params
+                    .into_iter()
+                    .map(|(name, _, value)| ast::Argument::Named { name, value })
+                    .collect();
+                ast::Expression::Think { args, with_block }
+            },
+        ),
+        "think multiple",
     )
 }
 
@@ -539,7 +582,7 @@ fn parse_await() -> impl Parser<Token, ast::Expression> {
     )
 }
 
-fn parse_await_single() -> impl Parser<Token, ast::Expression> {
+pub fn parse_await_single() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
             preceded(as_unit(parse_await_keyword()), parse_expression()),
@@ -549,7 +592,7 @@ fn parse_await_single() -> impl Parser<Token, ast::Expression> {
     )
 }
 
-fn parse_await_multiple() -> impl Parser<Token, ast::Expression> {
+pub fn parse_await_multiple() -> impl Parser<Token, ast::Expression> {
     with_context(
         map(
             preceded(

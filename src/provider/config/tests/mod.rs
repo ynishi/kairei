@@ -25,6 +25,7 @@ pub mod proptest;
 // Include expanded error type tests
 mod error_types_tests;
 
+mod errors_tests;
 // Include documentation reference tests
 mod doc_references_tests;
 

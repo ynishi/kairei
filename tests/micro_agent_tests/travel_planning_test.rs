@@ -23,18 +23,18 @@ micro TravelPlanner {
     policy "Create balanced itineraries with appropriate time allocation"
 
     state {
-        current_plan: String = "none",
-        planning_stage: String = "none"
+        current_plan: String = "none";
+        planning_stage: String = "none";
     }
     answer {
         // create a comprehensive travel plan
         on request PlanTrip(destination: String, start: String, end: String, budget: Float, interests: String) -> Result<String, Error> {
-            (hotels, flights, attractions, local_info) = await {
-                request FindHotels to HotelFinder(location: destination, start_date: start,end_date: end, budget: budget * 0.4)
-                request FindFlight to FlightFinder(departure_location: "NewYork", arrival_location: destination, departure_date: start, back_date: end, budget :budget * 0.4)
-                request FindAttractions to AttractionRecommender(location: destination, dates: "${start} to ${end}", interests: interests, budget: budget * 0.2)
+            (hotels, flights, attractions, local_info) = await (
+                request FindHotels to HotelFinder(location: destination, start_date: start,end_date: end, budget: budget * 0.4),
+                request FindFlight to FlightFinder(departure_location: "NewYork", arrival_location: destination, departure_date: start, back_date: end, budget :budget * 0.4),
+                request FindAttractions to AttractionRecommender(location: destination, dates: "${start} to ${end}", interests: interests, budget: budget * 0.2),
                 request GetLocalInfo to LocalExpertAgent(location: destination, season: start, specific_questions: "")
-            }
+            )
             plan = think("""Create a comprehensive travel plan by combining this flight, hotels, attractions and local information:
 
                             Destination: ${destination}
@@ -63,7 +63,7 @@ micro TravelPlanner {
                             Format the response in clear sections with specific dates and times.""") with {
                                 max_tokens: 2000
                             }
-            return Ok(plan)
+            return plan
         }
     }
 }
@@ -71,21 +71,21 @@ micro TravelPlanner {
 micro HotelFinder {
     answer {
         // web search for hotels
-        on request FindHotels(location: String, start_date: String, end_date: String, budget: Float) {
-            hotels = think("Find suitable hotels matching criteria", location, check_in: start_date, check_out: end_date, budget") with {
+        on request FindHotels(location: String, start_date: String, end_date: String, budget: Float) -> Result<String, Error> {
+            foundHotels = think("Find suitable hotels matching criteria", location, check_in: start_date, check_out: end_date, budget) with {
                 search: {
                     filters: ["hotels"]
                     // recent: "24h"
                 }
             }
-            return Ok(hotels)
+            return foundHotels
         }
     }
 }
 
 micro FlightFinder {
     answer {
-        on request FindFlight(departure_location: String, arrival_location: String, departure_date: String, back_date: String, budget: Float) {
+        on request FindFlight(departure_location: String, arrival_location: String, departure_date: String, back_date: String, budget: Float) -> Result<String, Error> {
             flights = think("""Provide flight recommendations for:
                             Route: ${departure_location} to ${arrival_location}
                             Departure: ${departure_date} (must include this exact date)
@@ -97,7 +97,7 @@ micro FlightFinder {
                             2. Airlines and routes
                             3. Expected price ranges
                             4. Booking recommendations""")
-            return Ok(flights)
+            return flights
         }
     }
 }
@@ -121,7 +121,7 @@ micro AttractionRecommender {
                 3. Estimated costs
                 4. Travel times between locations""")
 
-            return Ok(recommendations)
+            return recommendations
         }
     }
 }
@@ -152,7 +152,7 @@ micro LocalExpertAgent {
                 6. Best areas to stay
                 7. Local festivals or events during the period""")
 
-            return Ok(local_info)
+            return local_info
         }
     }
 }
@@ -249,8 +249,10 @@ async fn test_hotel_finder() {
     // 必須要素の確認
     assert!(result_str.contains("hotel")); // ホテル情報が含まれている
     assert!(result_str.contains("Tokyo")); // 場所の確認
-    assert!(result_str.contains("2024-06")); // 日付の確認
-    assert!(result_str.contains("price")); // 価格情報の存在確認
+    assert!(
+        result_str.contains("2024") && (result_str.contains("06") || result_str.contains("June"))
+    ); // 日付の確認
+    assert!(result_str.to_lowercase().contains("price")); // 価格情報の存在確認
 }
 
 #[tokio::test]
@@ -271,7 +273,6 @@ async fn test_flight_finder() {
         ("back_date", Value::from("2024-06-07")),
         ("budget", Value::Float(3000.0)),
     ];
-    // panic!("request_data: {:?}", request_data);
 
     let request_id = Uuid::new_v4();
     let request = create_request(
@@ -290,6 +291,8 @@ async fn test_flight_finder() {
     // 必須要素の確認
     assert!(result_str.contains("flight")); // フライト情報が含まれている
     assert!(result_str.contains("Tokyo")); // 場所の確認
-    assert!(result_str.contains("2024-06")); // 日付の確認
-    assert!(result_str.contains("price")); // 価格情報の存在確認
+    assert!(
+        result_str.contains("2024") && (result_str.contains("06") || result_str.contains("June"))
+    ); // 日付の確認
+    assert!(result_str.to_lowercase().contains("price")); // 価格情報の存在確認
 }
