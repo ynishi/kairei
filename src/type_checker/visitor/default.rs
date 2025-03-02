@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Expression, FieldInfo, HandlerBlock, HandlerDef, MicroAgentDef, Root, StateDef, Statement,
+        Expression, FieldInfo, HandlerBlock, HandlerDef, MicroAgentDef, RequestType, Root, StateDef, Statement,
         TypeInfo,
     },
     type_checker::{visitor::common::TypeVisitor, TypeCheckError, TypeCheckResult, TypeContext},
@@ -180,7 +180,12 @@ impl DefaultVisitor {
                     err_type: Box::new(TypeInfo::Simple("Error".to_string())),
                 })
             }
-            Expression::Request { parameters, .. } => {
+            Expression::Request {
+                parameters,
+                agent,
+                request_type,
+                options,
+            } => {
                 // Check parameter types
                 for param in parameters {
                     match param {
@@ -189,9 +194,45 @@ impl DefaultVisitor {
                         }
                     }
                 }
-                // Request expressions return Result<Any, Error>
+
+                // Validate agent name (in a real implementation, we would check if the agent exists)
+                // For now, we just ensure it's not empty
+                if agent.is_empty() {
+                    return Err(TypeCheckError::type_inference_error(
+                        "Agent name cannot be empty".to_string(),
+                        Default::default(),
+                    ));
+                }
+
+                // Validate request type (in a real implementation, we would check if the request type is valid)
+                // For now, we just ensure it's not empty for custom request types
+                match request_type {
+                    RequestType::Custom(name) if name.is_empty() => {
+                        return Err(TypeCheckError::type_inference_error(
+                            "Request type name cannot be empty".to_string(),
+                            Default::default(),
+                        ));
+                    }
+                    _ => {}
+                }
+
+                // Check request options if present
+                if let Some(req_options) = options {
+                    // Validate timeout if specified
+                    if let Some(_timeout) = &req_options.timeout {
+                        // Timeout is a Duration, no need for additional validation
+                    }
+
+                    // Validate retry count if specified
+                    if let Some(_retry) = &req_options.retry {
+                        // Retry is a u32, no need for additional validation
+                    }
+                }
+
+                // Request expressions return Result<String, Error> in Normal mode
+                // This matches the return type of Think expressions for consistency
                 Ok(TypeInfo::Result {
-                    ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
+                    ok_type: Box::new(TypeInfo::Simple("String".to_string())),
                     err_type: Box::new(TypeInfo::Simple("Error".to_string())),
                 })
             }
