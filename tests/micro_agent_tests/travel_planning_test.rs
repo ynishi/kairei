@@ -138,7 +138,7 @@ micro LocalExpertAgent {
                 6. Best areas to stay
                 7. Local festivals or events during the period""")
 
-            return Ok(local_info)
+            return local_info
         }
     }
 }
