@@ -32,3 +32,4 @@ config.json
 
 
 *.profraw
+.devin_workspace/
