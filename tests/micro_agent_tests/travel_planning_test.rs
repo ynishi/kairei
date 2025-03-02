@@ -29,7 +29,7 @@ micro TravelPlanner {
     answer {
         // create a comprehensive travel plan
         on request PlanTrip(destination: String, start: String, end: String, budget: Float, interests: String) -> Result<String, Error> {
-            (hotels, flights, attractions, local_info) = await {
+            (hotels, flights, attractions, local_info) = await (
                 request FindHotels to HotelFinder(location: destination, start_date: start,end_date: end, budget: budget * 0.4),
                 request FindFlight to FlightFinder(departure_location: "NewYork", arrival_location: destination, departure_date: start, back_date: end, budget :budget * 0.4),
                 request FindAttractions to AttractionRecommender(location: destination, dates: "${start} to ${end}", interests: interests, budget: budget * 0.2),
@@ -63,7 +63,7 @@ micro TravelPlanner {
                             Format the response in clear sections with specific dates and times.""") with {
                                 max_tokens: 2000
                             }
-            return Ok(plan)
+            return plan
         }
     }
 }
@@ -83,7 +83,7 @@ micro FlightFinder {
                             2. Airlines and routes
                             3. Expected price ranges
                             4. Booking recommendations""")
-            return Ok(flights)
+            return flights
         }
     }
 }
@@ -107,7 +107,7 @@ micro AttractionRecommender {
                 3. Estimated costs
                 4. Travel times between locations""")
 
-            return Ok(recommendations)
+            return recommendations
         }
     }
 }
