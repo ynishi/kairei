@@ -4,12 +4,84 @@
 //! validation, including schema errors, validation errors, and provider-specific errors.
 //! It also provides utilities for error formatting, source location tracking, and
 //! error metadata.
+//!
+//! # Error Hierarchy
+//!
+//! The error system is organized into a hierarchical structure:
+//!
+//! - [`ProviderConfigError`]: Top-level error type that encompasses all validation errors
+//!   - [`SchemaError`]: Errors related to schema validation (missing fields, invalid types)
+//!   - [`ValidationError`]: Errors related to value validation (invalid values, constraint violations)
+//!   - [`ProviderError`]: Provider-specific errors (initialization, capabilities)
+//!
+//! # Error Context
+//!
+//! Each error includes rich contextual information through the [`ErrorContext`] struct:
+//!
+//! - Source location tracking (file, line, column, field)
+//! - Error severity levels (Critical, Error, Warning, Info)
+//! - Documentation references for troubleshooting
+//! - Suggestions for fixing the error
+//! - Error codes for reference
+//!
+//! # Error Collection
+//!
+//! Errors can be collected during validation using the `validate_collecting` method
+//! from the `ProviderConfigValidator` trait, which returns a vector of all validation
+//! errors instead of stopping at the first error.
+//!
+//! # Examples
+//!
+//! Creating and handling schema errors:
+//!
+//! ```rust,ignore
+//! use kairei::provider::config::errors::{SchemaError, ProviderConfigError};
+//!
+//! // Create a missing field error
+//! let error = SchemaError::missing_field("type");
+//! let provider_error: ProviderConfigError = error.into();
+//!
+//! // Get the error code
+//! let code = provider_error.error_code(); // "SCHEMA_0001"
+//!
+//! // Handle the error
+//! match provider_error {
+//!     ProviderConfigError::Schema(schema_error) => {
+//!         println!("Schema validation failed: {}", schema_error);
+//!     },
+//!     _ => println!("Other error type"),
+//! }
+//! ```
 
 use crate::provider::config::base::ConfigError;
 use crate::provider::config::doc_references;
 use thiserror::Error;
 
-/// Represents the location in source code where an error occurred
+/// Represents the location in source code where an error occurred.
+///
+/// The `SourceLocation` struct tracks where an error occurred in the source code,
+/// including the file path, line number, column number, and field name. This
+/// information helps developers pinpoint the exact location of validation errors
+/// in their provider configurations.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use kairei::provider::config::errors::SourceLocation;
+///
+/// // Create a source location with just a field name
+/// let location = SourceLocation::new_with_field("type");
+///
+/// // Create a source location with file and line information
+/// let mut location = SourceLocation::new();
+/// location.file = Some("config.json".to_string());
+/// location.line = Some(42);
+/// location.column = Some(10);
+/// location.field = Some("ttl".to_string());
+///
+/// // Display the location
+/// println!("Error {}", location); // Output: "Error in field 'ttl' at config.json:42:10"
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SourceLocation {
     /// File path where the error occurred
@@ -61,7 +133,32 @@ impl std::fmt::Display for SourceLocation {
     }
 }
 
-/// Represents the severity level of an error
+/// Represents the severity level of an error.
+///
+/// The `ErrorSeverity` enum defines different levels of severity for validation errors,
+/// allowing developers to prioritize and filter errors based on their impact.
+///
+/// # Severity Levels
+///
+/// - `Critical`: Errors that prevent the system from functioning at all
+/// - `Error`: Standard errors that affect functionality but don't completely break the system
+/// - `Warning`: Issues that should be addressed but don't affect core functionality
+/// - `Info`: Informational messages about potential issues or optimization opportunities
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use kairei::provider::config::errors::{ErrorContext, ErrorSeverity};
+///
+/// // Create an error context with warning severity
+/// let context = ErrorContext::new_with_field("ttl")
+///     .with_severity(ErrorSeverity::Warning);
+///
+/// // Check severity level
+/// if let ErrorSeverity::Warning = context.severity {
+///     println!("This is a warning, not a critical error");
+/// }
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorSeverity {
     /// Critical errors that prevent the system from functioning
@@ -91,7 +188,36 @@ impl std::fmt::Display for ErrorSeverity {
     }
 }
 
-/// Provides additional context for errors
+/// Provides additional context for errors.
+///
+/// The `ErrorContext` struct enriches error information with contextual details
+/// such as location, severity, documentation references, suggestions, error codes,
+/// and additional context. This rich error context helps developers understand,
+/// diagnose, and fix validation issues more effectively.
+///
+/// # Builder Pattern
+///
+/// The struct implements a builder pattern for easy construction:
+///
+/// ```rust,ignore
+/// use kairei::provider::config::errors::{ErrorContext, ErrorSeverity};
+///
+/// let context = ErrorContext::new_with_field("ttl")
+///     .with_severity(ErrorSeverity::Warning)
+///     .with_documentation("https://docs.example.com/validation#ttl")
+///     .with_suggestion("Consider using a TTL value between 60 and 3600 seconds")
+///     .with_error_code("W001")
+///     .with_additional_context("TTL values below 60 seconds may impact performance");
+/// ```
+///
+/// # Error Context Components
+///
+/// - `location`: Source location information (file, line, column, field)
+/// - `severity`: Error severity level (Critical, Error, Warning, Info)
+/// - `documentation`: Link to relevant documentation
+/// - `suggestion`: Suggested fix for the error
+/// - `error_code`: Unique error code for reference
+/// - `additional_context`: Additional information about the error
 #[derive(Debug, Clone, Default)]
 pub struct ErrorContext {
     /// Location in source code where the error occurred
@@ -156,7 +282,41 @@ impl ErrorContext {
     }
 }
 
-/// Errors related to schema validation
+/// Errors related to schema validation.
+///
+/// The `SchemaError` enum represents errors that occur during schema validation
+/// of provider configurations. These errors typically indicate structural issues
+/// with the configuration, such as missing required fields, invalid types, or
+/// invalid structure.
+///
+/// # Error Types
+///
+/// - `MissingField`: A required field is missing from the configuration
+/// - `InvalidType`: A field has an incorrect type (e.g., string instead of number)
+/// - `InvalidStructure`: The overall structure of the configuration is invalid
+///
+/// # Factory Methods
+///
+/// The enum provides factory methods for creating specific error types:
+///
+/// - `missing_field(field)`: Creates a MissingField error for the specified field
+/// - `invalid_type(field, expected, actual)`: Creates an InvalidType error
+/// - `invalid_structure(field, message)`: Creates an InvalidStructure error
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use kairei::provider::config::errors::SchemaError;
+///
+/// // Create a missing field error
+/// let error = SchemaError::missing_field("type");
+///
+/// // Create an invalid type error
+/// let error = SchemaError::invalid_type("ttl", "number", "string");
+///
+/// // Create an invalid structure error
+/// let error = SchemaError::invalid_structure("capabilities", "Invalid capabilities structure");
+/// ```
 #[derive(Debug, Error, Clone)]
 pub enum SchemaError {
     /// A required field is missing
@@ -236,7 +396,47 @@ impl SchemaError {
     }
 }
 
-/// Errors related to value validation
+/// Errors related to value validation.
+///
+/// The `ValidationError` enum represents errors that occur during value validation
+/// of provider configurations. These errors typically indicate issues with the
+/// values of configuration fields, such as invalid values, constraint violations,
+/// or dependency errors.
+///
+/// # Error Types
+///
+/// - `InvalidValue`: A field has a value that is invalid (e.g., negative number for a positive-only field)
+/// - `ConstraintViolation`: A constraint on the configuration was violated (e.g., mutually exclusive fields)
+/// - `DependencyError`: A dependency requirement was not satisfied
+///
+/// # Factory Methods
+///
+/// The enum provides factory methods for creating specific error types:
+///
+/// - `invalid_value(field, message)`: Creates an InvalidValue error
+/// - `constraint_violation(field, message)`: Creates a ConstraintViolation error
+/// - `dependency_error(field, message)`: Creates a DependencyError error
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use kairei::provider::config::errors::ValidationError;
+///
+/// // Create an invalid value error
+/// let error = ValidationError::invalid_value("ttl", "TTL must be greater than 0");
+///
+/// // Create a constraint violation error
+/// let error = ValidationError::constraint_violation(
+///     "max_tokens",
+///     "max_tokens must be less than model_context_size"
+/// );
+///
+/// // Create a dependency error
+/// let error = ValidationError::dependency_error(
+///     "dependencies[0].version",
+///     "Dependency version must be in format x.y.z"
+/// );
+/// ```
 #[derive(Debug, Error, Clone)]
 pub enum ValidationError {
     /// A field has an invalid value
@@ -315,7 +515,50 @@ impl ValidationError {
     }
 }
 
-/// Errors related to provider configuration
+/// Errors related to provider configuration.
+///
+/// The `ProviderError` enum represents errors that are specific to providers,
+/// such as initialization errors, capability errors, and configuration errors.
+/// These errors typically indicate issues with the provider itself rather than
+/// with the schema or values of the configuration.
+///
+/// # Error Types
+///
+/// - `Initialization`: Errors that occur during provider initialization
+/// - `Capability`: Errors related to provider capabilities
+/// - `Configuration`: Errors in provider configuration
+///
+/// # Factory Methods
+///
+/// The enum provides factory methods for creating specific error types:
+///
+/// - `initialization(field, message)`: Creates an Initialization error
+/// - `capability(field, message)`: Creates a Capability error
+/// - `configuration(field, message)`: Creates a Configuration error
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use kairei::provider::config::errors::ProviderError;
+///
+/// // Create an initialization error
+/// let error = ProviderError::initialization(
+///     "provider",
+///     "Failed to initialize memory provider"
+/// );
+///
+/// // Create a capability error
+/// let error = ProviderError::capability(
+///     "capabilities.memory",
+///     "Memory provider requires memory capability"
+/// );
+///
+/// // Create a configuration error
+/// let error = ProviderError::configuration(
+///     "config",
+///     "Invalid memory provider configuration"
+/// );
+/// ```
 #[derive(Debug, Error, Clone)]
 pub enum ProviderError {
     /// Error during provider initialization
@@ -393,11 +636,62 @@ impl ProviderError {
     }
 }
 
-/// Top-level error type for provider configuration
+/// Top-level error type for provider configuration validation.
 ///
-/// This is the main error type for provider configuration validation. It includes
-/// schema errors, validation errors, provider-specific errors, and a Legacy variant
-/// for backward compatibility with the existing ConfigError type.
+/// This is the main error type for provider configuration validation. It encompasses
+/// all types of validation errors, including schema errors, validation errors,
+/// provider-specific errors, and a Legacy variant for backward compatibility with
+/// the existing ConfigError type.
+///
+/// # Error Hierarchy
+///
+/// The `ProviderConfigError` enum serves as the top-level error type in the validation
+/// error hierarchy:
+///
+/// - `Schema`: Errors related to schema validation (missing fields, invalid types)
+/// - `Validation`: Errors related to value validation (invalid values, constraint violations)
+/// - `Provider`: Provider-specific errors (initialization, capabilities)
+/// - `Generic`: Generic errors with a simple message
+/// - `Legacy`: Legacy ConfigError for backward compatibility
+///
+/// # Error Collection
+///
+/// Errors can be collected during validation using the `validate_collecting` method
+/// from the `ProviderConfigValidator` trait, which returns a vector of `ProviderConfigError`
+/// objects instead of stopping at the first error.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use kairei::provider::config::errors::{ProviderConfigError, SchemaError};
+/// use kairei::provider::config::validator::ProviderConfigValidator;
+/// use kairei::provider::config::validators::type_checker::TypeCheckerValidator;
+/// use std::collections::HashMap;
+/// use serde_json::json;
+///
+/// // Create a validator
+/// let validator = TypeCheckerValidator;
+///
+/// // Create an invalid configuration
+/// let config = serde_json::from_value(json!({
+///     // Missing required "type" field
+/// })).unwrap();
+///
+/// // Validate the configuration
+/// match validator.validate(&config) {
+///     Ok(()) => println!("Configuration is valid"),
+///     Err(error) => {
+///         println!("Validation error: {}", error);
+///         println!("Error code: {}", error.error_code());
+///     }
+/// }
+///
+/// // Collect all validation errors
+/// let errors = validator.validate_collecting(&config);
+/// for error in errors {
+///     println!("Validation error: {}", error);
+/// }
+/// ```
 #[derive(Debug, Error, Clone)]
 pub enum ProviderConfigError {
     /// Schema validation errors

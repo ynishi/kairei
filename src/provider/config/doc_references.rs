@@ -5,23 +5,42 @@
 //! framework.
 
 /// Base URL for provider configuration documentation
-pub const DOC_BASE_URL: &str = "https://kairei.dev/docs/provider/config";
+pub const DOC_BASE_URL: &str =
+    "https://github.com/ynishi/kairei/blob/main/docs/reference/provider_config_validation.md";
+
+/// Section anchors for provider configuration documentation
+pub mod anchors {
+    /// Schema validation section
+    pub const SCHEMA: &str = "#1-provider-configuration-overview";
+
+    /// Validation process section
+    pub const VALIDATION: &str = "#2-validation-process";
+
+    /// Error handling section
+    pub const ERROR_HANDLING: &str = "#3-error-handling-guide";
+
+    /// Common scenarios section
+    pub const COMMON_SCENARIOS: &str = "#4-common-validation-scenarios";
+
+    /// Troubleshooting section
+    pub const TROUBLESHOOTING: &str = "#5-troubleshooting-guide";
+}
 
 /// Documentation reference for schema validation
 pub mod schema {
     /// Documentation reference for missing field errors
     pub fn missing_field() -> String {
-        format!("{}/schema#missing-field", super::DOC_BASE_URL)
+        format!("{}{}", super::DOC_BASE_URL, super::anchors::SCHEMA)
     }
 
     /// Documentation reference for invalid type errors
     pub fn invalid_type() -> String {
-        format!("{}/schema#invalid-type", super::DOC_BASE_URL)
+        format!("{}{}", super::DOC_BASE_URL, super::anchors::SCHEMA)
     }
 
     /// Documentation reference for invalid structure errors
     pub fn invalid_structure() -> String {
-        format!("{}/schema#invalid-structure", super::DOC_BASE_URL)
+        format!("{}{}", super::DOC_BASE_URL, super::anchors::SCHEMA)
     }
 
     /// Get documentation reference for schema errors
@@ -39,17 +58,17 @@ pub mod schema {
 pub mod validation {
     /// Documentation reference for invalid value errors
     pub fn invalid_value() -> String {
-        format!("{}/validation#invalid-value", super::DOC_BASE_URL)
+        format!("{}{}", super::DOC_BASE_URL, super::anchors::ERROR_HANDLING)
     }
 
     /// Documentation reference for constraint violation errors
     pub fn constraint_violation() -> String {
-        format!("{}/validation#constraint-violation", super::DOC_BASE_URL)
+        format!("{}{}", super::DOC_BASE_URL, super::anchors::ERROR_HANDLING)
     }
 
     /// Documentation reference for dependency errors
     pub fn dependency_error() -> String {
-        format!("{}/validation#dependency-error", super::DOC_BASE_URL)
+        format!("{}{}", super::DOC_BASE_URL, super::anchors::ERROR_HANDLING)
     }
 
     /// Get documentation reference for validation errors
@@ -67,17 +86,17 @@ pub mod validation {
 pub mod provider {
     /// Documentation reference for initialization errors
     pub fn initialization() -> String {
-        format!("{}/provider#initialization", super::DOC_BASE_URL)
+        format!("{}{}", super::DOC_BASE_URL, super::anchors::TROUBLESHOOTING)
     }
 
     /// Documentation reference for capability errors
     pub fn capability() -> String {
-        format!("{}/provider#capability", super::DOC_BASE_URL)
+        format!("{}{}", super::DOC_BASE_URL, super::anchors::TROUBLESHOOTING)
     }
 
     /// Documentation reference for configuration errors
     pub fn configuration() -> String {
-        format!("{}/provider#configuration", super::DOC_BASE_URL)
+        format!("{}{}", super::DOC_BASE_URL, super::anchors::TROUBLESHOOTING)
     }
 
     /// Get documentation reference for provider errors
