@@ -4,8 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - 'src/**'
-      - 'tests/**'
+      - 'kairei-core/src/**'
+      - 'kairei-core/tests/**'
+      - 'kairei-http/src/**'
+      - 'kairei-http/tests/**'
 
 jobs:
   detect-scope-expansion:
@@ -73,8 +75,16 @@ Please review design documentation before implementation.
               totalChanges: files.data.reduce((acc, file) => acc + file.changes, 0),
               componentsAffected: new Set(
                 files.data
-                  .map(f => f.filename.split('/')[1])
-                  .filter(c => ['tokenizer', 'parser', 'type_checker', 'runtime', 'system'].includes(c))
+                  .map(f => {
+                    const parts = f.filename.split('/');
+                    if (parts[0] === 'kairei-core' && parts.length > 2) {
+                      return parts[2]; // Return the component name for kairei-core
+                    } else if (parts[0] === 'kairei-http') {
+                      return 'http'; // Return 'http' for kairei-http
+                    }
+                    return null;
+                  })
+                  .filter(c => c && ['tokenizer', 'parser', 'type_checker', 'runtime', 'system', 'http'].includes(c))
               ).size
             };
             

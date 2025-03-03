@@ -4,8 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - 'src/**'
-      - 'tests/**'
+      - 'kairei-core/src/**'
+      - 'kairei-core/tests/**'
+      - 'kairei-http/src/**'
+      - 'kairei-http/tests/**'
 
 jobs:
   analyze-changes:
@@ -38,11 +40,12 @@ jobs:
             
             // Define component patterns
             const components = {
-              'tokenizer': /src\/tokenizer/,
-              'parser': /src\/parser/,
-              'type_checker': /src\/type_checker/,
-              'runtime': /src\/runtime/,
-              'system': /src\/system/
+              'tokenizer': /kairei-core\/src\/tokenizer/,
+              'parser': /kairei-core\/src\/parser/,
+              'type_checker': /kairei-core\/src\/type_checker/,
+              'runtime': /kairei-core\/src\/runtime/,
+              'system': /kairei-core\/src\/system/,
+              'http': /kairei-http\/src/
             };
             
             // Analyze which components are affected
