@@ -371,7 +371,7 @@ Warnings indicate non-critical issues that should be addressed but don't prevent
 
 For detailed API documentation, refer to the RustDoc documentation for the following modules:
 
-- `kairei::provider::config::validator`: Core validation trait and utilities
-- `kairei::provider::config::validators::type_checker`: Compile-time type checking
-- `kairei::provider::config::validators::evaluator`: Runtime validation
-- `kairei::provider::config::errors`: Error types and handling
+- `kairei_core::provider::config::validator`: Core validation trait and utilities
+- `kairei_core::provider::config::validators::type_checker`: Compile-time type checking
+- `kairei_core::provider::config::validators::evaluator`: Runtime validation
+- `kairei_core::provider::config::errors`: Error types and handling

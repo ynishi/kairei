@@ -1,4 +1,4 @@
-use kairei::{
+use kairei_core::{
     analyzer::Parser, core::types::generate_event_enum, preprocessor::Preprocessor,
     tokenizer::token::Token,
 };
@@ -76,14 +76,14 @@ fn generate_main(code: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
 
 #[tokio::main]
 async fn main() {
-    use kairei::ast::CodeGen;
+    use kairei_core::ast::CodeGen;
 
-    let result = kairei::tokenizer::token::Tokenizer::new()
+    let result = kairei_core::tokenizer::token::Tokenizer::new()
         .tokenize(EXAMPLE)
         .unwrap();
-    let preprocessor = kairei::preprocessor::TokenPreprocessor::default();
+    let preprocessor = kairei_core::preprocessor::TokenPreprocessor::default();
     let tokens: Vec<Token> = preprocessor.process(result);
-    let (_, agent_def) = kairei::analyzer::parsers::agent::parse_agent_def()
+    let (_, agent_def) = kairei_core::analyzer::parsers::agent::parse_agent_def()
         .parse(tokens.as_slice(), 0)
         .unwrap();
 
