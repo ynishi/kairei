@@ -2,16 +2,25 @@ use crate::models::events::{
     AgentRequestPayload, AgentRequestResponse, EventRequest, EventResponse, EventStatus,
     RequestStatus,
 };
-use axum::{extract::Path, http::StatusCode, response::Json};
+use crate::session::manager::SessionManager;
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::Json,
+};
 use serde_json::json;
 use uuid::Uuid;
 
 /// Send an event
 ///
 /// Sends an event to one or more agents.
-pub async fn send_event(Json(payload): Json<EventRequest>) -> Json<EventResponse> {
+pub async fn send_event(
+    State(session_manager): State<SessionManager>,
+    Json(payload): Json<EventRequest>,
+) -> Json<EventResponse> {
     // In a real implementation, this would send the event to the
-    // specified agents using kairei-core. For now, we'll return mock data.
+    // specified agents using kairei-core with the session manager.
+    // For now, we'll return mock data.
 
     let event_id = format!(
         "evt-{}",
@@ -31,11 +40,13 @@ pub async fn send_event(Json(payload): Json<EventRequest>) -> Json<EventResponse
 ///
 /// Sends a request to a specific agent and returns the result.
 pub async fn send_agent_request(
+    State(session_manager): State<SessionManager>,
     Path(agent_id): Path<String>,
     Json(payload): Json<AgentRequestPayload>,
 ) -> Result<Json<AgentRequestResponse>, StatusCode> {
     // In a real implementation, this would send the request to the
-    // specified agent using kairei-core. For now, we'll return mock data.
+    // specified agent using kairei-core with the session manager.
+    // For now, we'll return mock data.
 
     // Simulate agent not found
     if agent_id.contains("not-found") {

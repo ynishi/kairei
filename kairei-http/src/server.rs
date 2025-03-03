@@ -4,6 +4,8 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 
 use crate::routes::create_api_router;
+use crate::session::manager::{SessionConfig, SessionManager};
+use kairei_core::config::{SecretConfig, SystemConfig};
 
 /// Server configuration
 #[derive(Debug, Clone)]
@@ -13,6 +15,12 @@ pub struct ServerConfig {
 
     /// Port to listen on
     pub port: u16,
+
+    /// System configuration
+    pub system_config: Option<SystemConfig>,
+
+    /// Secret configuration
+    pub secret_config: Option<SecretConfig>,
 }
 
 impl Default for ServerConfig {
@@ -20,6 +28,8 @@ impl Default for ServerConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 3000,
+            system_config: None,
+            secret_config: None,
         }
     }
 }
@@ -32,8 +42,18 @@ pub async fn start_server(config: ServerConfig) -> Result<(), Box<dyn std::error
         .allow_methods(Any)
         .allow_headers(Any);
 
-    // Create the router with all routes
+    // Create the session manager
+    let session_config = SessionConfig {
+        system_config: config.system_config.unwrap_or_default(),
+        secret_config: config.secret_config.unwrap_or_default(),
+    };
+    let session_manager = SessionManager::new(session_config);
+
+    info!("Initialized session manager");
+
+    // Create the router with all routes and add the session manager as state
     let app = create_api_router()
+        .with_state(session_manager)
         .layer(TraceLayer::new_for_http())
         .layer(cors);
 
