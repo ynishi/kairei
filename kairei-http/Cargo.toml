@@ -20,4 +20,5 @@ uuid = {version = "1.15", features = ["v4", "serde"] }
 hyper = "1.6.0"
 reqwest = {version = "0.12", features = ["json"] }
 tower-service = "0.3.3"
+async-trait = "0.1.77"
 

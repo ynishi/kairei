@@ -9,14 +9,6 @@ pub struct AgentCreationRequest {
     /// DSL code defining the agent
     pub dsl_code: String,
 
-    /// Optional agent creation options
-    #[serde(default)]
-    pub options: AgentCreationOptions,
-}
-
-/// Agent creation options
-#[derive(Debug, Deserialize, Default)]
-pub struct AgentCreationOptions {
     /// Whether to automatically start the agent after creation
     #[serde(default)]
     pub auto_start: bool,

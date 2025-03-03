@@ -1,76 +1,66 @@
-use crate::models::events::{
-    AgentRequestPayload, AgentRequestResponse, EventRequest, EventResponse, EventStatus,
-    RequestStatus,
+use axum::{
+    extract::{Path, State},
+    response::Json,
 };
-use axum::{extract::Path, http::StatusCode, response::Json};
-use serde_json::json;
-use uuid::Uuid;
+use std::sync::Arc;
+
+use crate::{
+    error::AppError,
+    integration::KaireiSystem,
+    models::events::{
+        AgentRequestPayload, AgentRequestResponse, EventRequest, EventResponse, EventStatus,
+        RequestStatus,
+    },
+};
 
 /// Send an event
 ///
 /// Sends an event to one or more agents.
-pub async fn send_event(Json(payload): Json<EventRequest>) -> Json<EventResponse> {
-    // In a real implementation, this would send the event to the
-    // specified agents using kairei-core. For now, we'll return mock data.
+pub async fn send_event(
+    State(kairei_system): State<Arc<KaireiSystem>>,
+    Json(payload): Json<EventRequest>,
+) -> Result<Json<EventResponse>, AppError> {
+    // Clone target_agents before using it
+    let target_agents = payload.target_agents.clone();
+    let target_count = target_agents.len().max(1); // If no targets specified, assume broadcast
 
-    let event_id = format!(
-        "evt-{}",
-        Uuid::new_v4().to_string().split('-').next().unwrap()
-    );
+    // Send the event using the core API
+    let event_id = kairei_system
+        .event_api
+        .send_typed_event(payload.event_type, payload.payload, target_agents)
+        .await?;
 
     let response = EventResponse {
         event_id,
         status: EventStatus::Delivered,
-        delivered_to: payload.target_agents.len().max(1), // If no targets specified, assume broadcast
+        delivered_to: target_count,
     };
 
-    Json(response)
+    Ok(Json(response))
 }
 
 /// Send a request to an agent
 ///
 /// Sends a request to a specific agent and returns the result.
 pub async fn send_agent_request(
+    State(kairei_system): State<Arc<KaireiSystem>>,
     Path(agent_id): Path<String>,
     Json(payload): Json<AgentRequestPayload>,
-) -> Result<Json<AgentRequestResponse>, StatusCode> {
-    // In a real implementation, this would send the request to the
-    // specified agent using kairei-core. For now, we'll return mock data.
+) -> Result<Json<AgentRequestResponse>, AppError> {
+    // Send the request using the core API
+    let result = kairei_system
+        .event_api
+        .send_agent_request(&agent_id, payload.request_type, payload.parameters)
+        .await?;
 
-    // Simulate agent not found
-    if agent_id.contains("not-found") {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    let request_id = format!(
-        "req-{}",
-        Uuid::new_v4().to_string().split('-').next().unwrap()
-    );
-
-    // Mock response for GetWeather request
-    let result = if payload.request_type == "GetWeather" {
-        let location = payload
-            .parameters
-            .get("location")
-            .and_then(|v| v.as_str())
-            .unwrap_or("Unknown");
-
-        Some(json!({
-            "temperature": 25.5,
-            "conditions": "Sunny",
-            "humidity": 60,
-            "location": location
-        }))
-    } else {
-        Some(json!({
-            "message": "Request processed successfully"
-        }))
-    };
-
+    // Create the response
     let response = AgentRequestResponse {
-        request_id,
+        request_id: format!(
+            "req-{}",
+            uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
+        ),
         status: RequestStatus::Completed,
-        result,
+        result: Some(result),
         error: None,
     };
 

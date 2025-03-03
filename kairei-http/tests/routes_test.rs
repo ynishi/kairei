@@ -4,12 +4,21 @@ use axum::{
 };
 use kairei_http::routes;
 use serde_json::json;
+// Arc is used in the create_mock_kairei_system function
 use tower::ServiceExt;
+
+// Import the create_mock_kairei_system function directly
+#[path = "mocks.rs"]
+mod mocks;
+use mocks::create_mock_kairei_system;
 
 #[tokio::test]
 async fn test_system_info_route() {
+    // Create a mock KaireiSystem
+    let kairei_system = create_mock_kairei_system();
+
     // Create the router
-    let app = routes::create_api_router();
+    let app = routes::create_api_router(kairei_system);
 
     // Create a request to the system info endpoint
     let request = Request::builder()
@@ -39,8 +48,11 @@ async fn test_system_info_route() {
 
 #[tokio::test]
 async fn test_create_agent_route() {
+    // Create a mock KaireiSystem
+    let kairei_system = create_mock_kairei_system();
+
     // Create the router
-    let app = routes::create_api_router();
+    let app = routes::create_api_router(kairei_system);
 
     // Create a request to create an agent
     let request_body = json!({
@@ -78,8 +90,11 @@ async fn test_create_agent_route() {
 
 #[tokio::test]
 async fn test_get_agent_details_route() {
+    // Create a mock KaireiSystem
+    let kairei_system = create_mock_kairei_system();
+
     // Create the router
-    let app = routes::create_api_router();
+    let app = routes::create_api_router(kairei_system);
 
     // Create a request to get agent details
     let request = Request::builder()
@@ -110,8 +125,11 @@ async fn test_get_agent_details_route() {
 
 #[tokio::test]
 async fn test_send_event_route() {
+    // Create a mock KaireiSystem
+    let kairei_system = create_mock_kairei_system();
+
     // Create the router
-    let app = routes::create_api_router();
+    let app = routes::create_api_router(kairei_system);
 
     // Create a request to send an event
     let request_body = json!({
@@ -151,8 +169,11 @@ async fn test_send_event_route() {
 
 #[tokio::test]
 async fn test_send_agent_request_route() {
+    // Create a mock KaireiSystem
+    let kairei_system = create_mock_kairei_system();
+
     // Create the router
-    let app = routes::create_api_router();
+    let app = routes::create_api_router(kairei_system);
 
     // Create a request to send a request to an agent
     let request_body = json!({

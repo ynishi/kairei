@@ -54,6 +54,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let config = ServerConfig {
                 host: cli.host,
                 port: cli.port,
+                system_config: None,
+                secret_config: None,
             };
 
             println!(

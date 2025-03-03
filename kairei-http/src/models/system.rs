@@ -31,6 +31,9 @@ pub enum SystemStatus {
 
     /// System is in maintenance mode
     Maintenance,
+
+    /// System is stopped
+    Stopped,
 }
 
 /// System statistics model

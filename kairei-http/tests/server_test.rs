@@ -19,6 +19,8 @@ fn test_server_config_custom() {
     let config = ServerConfig {
         host: "0.0.0.0".to_string(),
         port: 8080,
+        system_config: None,
+        secret_config: None,
     };
 
     // Verify the custom values
@@ -32,6 +34,8 @@ async fn test_server_address_parsing() {
     let config = ServerConfig {
         host: "127.0.0.1".to_string(),
         port: 8081,
+        system_config: None,
+        secret_config: None,
     };
 
     // Parse the socket address
@@ -52,6 +56,8 @@ async fn test_server_startup() {
     let config = ServerConfig {
         host: "127.0.0.1".to_string(),
         port,
+        system_config: None,
+        secret_config: None,
     };
 
     // Start the server with a timeout

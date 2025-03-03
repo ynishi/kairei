@@ -85,6 +85,7 @@
 
 pub mod agent_registry;
 pub mod analyzer;
+pub mod api;
 pub mod ast;
 pub mod ast_registry;
 pub mod config;
@@ -99,6 +100,7 @@ pub mod preprocessor;
 pub mod provider;
 pub mod runtime;
 pub mod system;
+pub mod system_api_impl;
 pub mod timestamp;
 pub mod tokenizer;
 pub mod type_checker;
