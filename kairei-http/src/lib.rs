@@ -2,6 +2,7 @@
 //!
 //! This crate provides an HTTP API for interacting with the Kairei agent system.
 
+pub mod auth;
 pub mod handlers;
 pub mod models;
 pub mod routes;

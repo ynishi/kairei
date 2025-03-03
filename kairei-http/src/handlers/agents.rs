@@ -2,7 +2,7 @@ use crate::models::agents::{
     AgentCreationRequest, AgentCreationResponse, AgentDetails, AgentStatistics, AgentStatus,
     ValidationResult,
 };
-use crate::session::manager::SessionManager;
+use crate::server::AppState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -12,13 +12,13 @@ use axum::{
 /// Create a new agent
 ///
 /// Creates a new agent from the provided DSL code.
+#[axum::debug_handler]
 pub async fn create_agent(
-    State(session_manager): State<SessionManager>,
+    State(_state): State<AppState>,
     Json(payload): Json<AgentCreationRequest>,
 ) -> (StatusCode, Json<AgentCreationResponse>) {
     // In a real implementation, this would create an actual agent
     // using kairei-core with the session manager. For now, we'll return mock data.
-
     let agent_id = format!("{}-001", payload.name.to_lowercase());
 
     let response = AgentCreationResponse {
@@ -36,8 +36,9 @@ pub async fn create_agent(
 /// Get agent details
 ///
 /// Returns details about a specific agent.
+#[axum::debug_handler]
 pub async fn get_agent_details(
-    State(session_manager): State<SessionManager>,
+    State(_state): State<AppState>,
     Path(agent_id): Path<String>,
 ) -> Result<Json<AgentDetails>, StatusCode> {
     // In a real implementation, this would fetch the agent from

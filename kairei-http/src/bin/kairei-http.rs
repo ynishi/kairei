@@ -56,6 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 port: cli.port,
                 system_config: None,
                 secret_config: None,
+                enable_auth: false, // Disable auth by default for CLI
             };
 
             println!(

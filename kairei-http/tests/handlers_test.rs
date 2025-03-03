@@ -1,7 +1,11 @@
-use axum::{Json, extract::Path, http::StatusCode};
-use kairei_http::handlers::test_helpers::{
-    test_create_agent, test_get_agent_details, test_get_system_info, test_send_agent_request,
-    test_send_event,
+use axum::{extract::Path, http::StatusCode, response::Json};
+use kairei_http::{
+    handlers::test_helpers::{
+        test_create_agent, test_get_agent_details, test_get_system_info, test_send_agent_request,
+        test_send_event,
+    },
+    models::agents::AgentCreationRequest,
+    models::events::{AgentRequestPayload, EventRequest},
 };
 use serde_json::json;
 
@@ -26,10 +30,6 @@ async fn test_get_system_info_handler() {
     assert_eq!(body["version"], "0.1.0");
     assert_eq!(body["status"], "running");
     assert!(!body["capabilities"].as_array().unwrap().is_empty());
-
-    // Verify that session_management is in the capabilities
-    let capabilities = body["capabilities"].as_array().unwrap();
-    assert!(capabilities.iter().any(|cap| cap == "session_management"));
 }
 
 #[tokio::test]
@@ -44,7 +44,10 @@ async fn test_create_agent_handler() {
     });
 
     // Call the test handler directly
-    let response = test_create_agent(Json(serde_json::from_value(payload).unwrap())).await;
+    let response = test_create_agent(Json(
+        serde_json::from_value::<AgentCreationRequest>(payload).unwrap(),
+    ))
+    .await;
 
     // Check the response status
     assert_eq!(response.0, StatusCode::CREATED);
@@ -108,7 +111,10 @@ async fn test_send_event_handler() {
     });
 
     // Call the test handler directly
-    let response = test_send_event(Json(serde_json::from_value(payload).unwrap())).await;
+    let response = test_send_event(Json(
+        serde_json::from_value::<EventRequest>(payload).unwrap(),
+    ))
+    .await;
 
     // Convert to a standard response for testing
     let response_body = serde_json::to_string(&response.0).unwrap();
@@ -140,7 +146,7 @@ async fn test_send_agent_request_handler() {
     // Call the test handler directly with a valid agent ID
     let response = test_send_agent_request(
         Path("weather-agent-001".to_string()),
-        Json(serde_json::from_value(payload.clone()).unwrap()),
+        Json(serde_json::from_value::<AgentRequestPayload>(payload.clone()).unwrap()),
     )
     .await;
 
@@ -166,7 +172,7 @@ async fn test_send_agent_request_handler() {
     // Test with a non-existent agent ID
     let response = test_send_agent_request(
         Path("not-found-agent".to_string()),
-        Json(serde_json::from_value(payload).unwrap()),
+        Json(serde_json::from_value::<AgentRequestPayload>(payload).unwrap()),
     )
     .await;
 

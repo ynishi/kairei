@@ -21,6 +21,7 @@ fn test_server_config_custom() {
         port: 8080,
         system_config: None,
         secret_config: None,
+        enable_auth: false,
     };
 
     // Verify the custom values
@@ -36,6 +37,7 @@ async fn test_server_address_parsing() {
         port: 8081,
         system_config: None,
         secret_config: None,
+        enable_auth: false,
     };
 
     // Parse the socket address
@@ -58,6 +60,7 @@ async fn test_server_startup() {
         port,
         system_config: None,
         secret_config: None,
+        enable_auth: false,
     };
 
     // Start the server with a timeout

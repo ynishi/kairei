@@ -2,16 +2,15 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use kairei_http::routes;
-use kairei_http::session::manager::SessionManager;
+use kairei_http::{handlers::test_helpers::create_test_state, routes};
 use serde_json::json;
 use tower::ServiceExt;
 
 #[tokio::test]
 async fn test_system_info_route() {
-    // Create the router with a session manager
+    // Create the router with a test state
     let app = routes::create_api_router()
-        .with_state(SessionManager::default())
+        .with_state(create_test_state())
         .into_service();
 
     // Create a request to the system info endpoint
@@ -42,9 +41,9 @@ async fn test_system_info_route() {
 
 #[tokio::test]
 async fn test_create_agent_route() {
-    // Create the router with a session manager
+    // Create the router with a test state
     let app = routes::create_api_router()
-        .with_state(SessionManager::default())
+        .with_state(create_test_state())
         .into_service();
 
     // Create a request to create an agent
@@ -83,9 +82,9 @@ async fn test_create_agent_route() {
 
 #[tokio::test]
 async fn test_get_agent_details_route() {
-    // Create the router with a session manager
+    // Create the router with a test state
     let app = routes::create_api_router()
-        .with_state(SessionManager::default())
+        .with_state(create_test_state())
         .into_service();
 
     // Create a request to get agent details
@@ -117,9 +116,9 @@ async fn test_get_agent_details_route() {
 
 #[tokio::test]
 async fn test_send_event_route() {
-    // Create the router with a session manager
+    // Create the router with a test state
     let app = routes::create_api_router()
-        .with_state(SessionManager::default())
+        .with_state(create_test_state())
         .into_service();
 
     // Create a request to send an event
@@ -160,9 +159,9 @@ async fn test_send_event_route() {
 
 #[tokio::test]
 async fn test_send_agent_request_route() {
-    // Create the router with a session manager
+    // Create the router with a test state
     let app = routes::create_api_router()
-        .with_state(SessionManager::default())
+        .with_state(create_test_state())
         .into_service();
 
     // Create a request to send a request to an agent

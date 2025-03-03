@@ -1,3 +1,4 @@
+use crate::auth::AuthStore;
 use crate::models::agents::{
     AgentCreationRequest, AgentCreationResponse, AgentDetails, AgentStatistics, AgentStatus,
     ValidationResult,
@@ -7,9 +8,22 @@ use crate::models::events::{
     RequestStatus,
 };
 use crate::models::system::{SystemInfo, SystemStatistics, SystemStatus};
+use crate::server::AppState;
+use crate::session::manager::SessionManager;
 use axum::{extract::Path, http::StatusCode, response::Json};
 use serde_json::json;
 use uuid::Uuid;
+
+/// Create a test AppState for testing
+pub fn create_test_state() -> AppState {
+    let session_manager = SessionManager::default();
+    let auth_store = AuthStore::default();
+
+    AppState {
+        session_manager,
+        auth_store,
+    }
+}
 
 /// Test version of get_system_info that doesn't require State
 pub async fn test_get_system_info() -> Json<SystemInfo> {

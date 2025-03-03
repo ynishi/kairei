@@ -1,13 +1,14 @@
 use crate::models::system::{SystemInfo, SystemStatistics, SystemStatus};
-use crate::session::manager::SessionManager;
+use crate::server::AppState;
 use axum::{extract::State, response::Json};
 
 /// Get system information
 ///
 /// Returns information about the current state of the system.
-pub async fn get_system_info(State(session_manager): State<SessionManager>) -> Json<SystemInfo> {
+#[axum::debug_handler]
+pub async fn get_system_info(State(state): State<AppState>) -> Json<SystemInfo> {
     // Get the number of active sessions
-    let session_count = session_manager.session_count();
+    let _session_count = state.session_manager.session_count();
 
     // In a real implementation, this would fetch more actual system information
     // from kairei-core. For now, we'll return mostly mock data but include the
@@ -19,6 +20,7 @@ pub async fn get_system_info(State(session_manager): State<SessionManager>) -> J
             "agent_management".to_string(),
             "event_processing".to_string(),
             "session_management".to_string(),
+            "user_authentication".to_string(),
         ],
         statistics: SystemStatistics {
             agent_count: 5,

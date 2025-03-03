@@ -2,7 +2,7 @@ use crate::models::events::{
     AgentRequestPayload, AgentRequestResponse, EventRequest, EventResponse, EventStatus,
     RequestStatus,
 };
-use crate::session::manager::SessionManager;
+use crate::server::AppState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -14,8 +14,9 @@ use uuid::Uuid;
 /// Send an event
 ///
 /// Sends an event to one or more agents.
+#[axum::debug_handler]
 pub async fn send_event(
-    State(session_manager): State<SessionManager>,
+    State(_state): State<AppState>,
     Json(payload): Json<EventRequest>,
 ) -> Json<EventResponse> {
     // In a real implementation, this would send the event to the
@@ -39,8 +40,9 @@ pub async fn send_event(
 /// Send a request to an agent
 ///
 /// Sends a request to a specific agent and returns the result.
+#[axum::debug_handler]
 pub async fn send_agent_request(
-    State(session_manager): State<SessionManager>,
+    State(_state): State<AppState>,
     Path(agent_id): Path<String>,
     Json(payload): Json<AgentRequestPayload>,
 ) -> Result<Json<AgentRequestResponse>, StatusCode> {
