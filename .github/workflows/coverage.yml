@@ -34,11 +34,11 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin --force
 
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
+      - name: Generate coverage report for kairei-core
+        run: cd kairei-core && cargo tarpaulin --out Xml
 
-      - name: Generate coverage report
-        run: cargo tarpaulin --out Xml
+      - name: Generate coverage report for kairei-http
+        run: cd kairei-http && cargo tarpaulin --out Xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
