@@ -1,6 +1,8 @@
 {
     "cSpell.words": [
         "dashmap",
-        "kairei"
+        "kairei",
+        "serde",
+        "thiserror"
     ]
 }

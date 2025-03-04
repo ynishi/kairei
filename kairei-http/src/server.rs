@@ -7,7 +7,6 @@ use tracing::info;
 use crate::auth::{AuthStore, auth_middleware};
 use crate::routes::create_api_router;
 use crate::session::manager::{SessionConfig, SessionManager};
-use kairei_core::config::{SecretConfig, SystemConfig};
 
 /// Server configuration
 #[derive(Debug, Clone)]
@@ -18,12 +17,6 @@ pub struct ServerConfig {
     /// Port to listen on
     pub port: u16,
 
-    /// System configuration
-    pub system_config: Option<SystemConfig>,
-
-    /// Secret configuration
-    pub secret_config: Option<SecretConfig>,
-
     /// Enable authentication
     pub enable_auth: bool,
 }
@@ -33,8 +26,6 @@ impl Default for ServerConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 3000,
-            system_config: None,
-            secret_config: None,
             enable_auth: false,
         }
     }
@@ -58,10 +49,7 @@ pub async fn start_server(config: ServerConfig) -> Result<(), Box<dyn std::error
         .allow_headers(Any);
 
     // Create the session manager
-    let session_config = SessionConfig {
-        system_config: config.system_config.unwrap_or_default(),
-        secret_config: config.secret_config.unwrap_or_default(),
-    };
+    let session_config = SessionConfig::default();
     let session_manager = SessionManager::new(session_config);
 
     // Create the auth store

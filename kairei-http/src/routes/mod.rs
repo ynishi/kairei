@@ -12,8 +12,5 @@ pub fn create_api_router() -> Router<AppState> {
 
 /// Create the v1 API router with state
 fn api_v1_router() -> Router<AppState> {
-    Router::new()
-        .merge(system::routes())
-        .merge(agents::routes())
-        .merge(events::routes())
+    Router::new().merge(system::routes())
 }

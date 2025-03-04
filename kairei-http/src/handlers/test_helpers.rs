@@ -45,8 +45,8 @@ pub fn create_test_user_with_api_key(
     app_state.auth_store.add_api_key(api_key, user.user_id);
 }
 
-/// Test version of get_system_info that doesn't require State
-pub async fn test_get_system_info() -> Json<SystemInfo> {
+/// Test version of get_system that doesn't require State
+pub async fn test_get_system() -> Json<SystemInfo> {
     let info = SystemInfo {
         version: "0.1.0".to_string(),
         status: SystemStatus::Running,

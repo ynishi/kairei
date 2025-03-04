@@ -1,4 +1,31 @@
+use std::collections::HashMap;
+
+use kairei_core::config::SystemConfig;
 use serde::{Deserialize, Serialize};
+
+/// Requests
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct CreateSystemRequest {
+    /// System name
+    pub name: String,
+
+    /// System description
+    pub description: Option<String>,
+
+    /// System config
+    pub config: SystemConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateSystemResponse {
+    /// System ID
+    pub system_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListSystemsResponse {
+    pub system_statuses: HashMap<String, kairei_core::system::SystemStatus>,
+}
 
 /// System information response model
 #[derive(Debug, Serialize, Deserialize)]

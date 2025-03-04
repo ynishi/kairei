@@ -2,7 +2,7 @@ use axum::{extract::Path, http::StatusCode, response::Json};
 use kairei_http::{
     handlers::test_helpers::{
         create_test_state, create_test_user_with_api_key, test_create_agent,
-        test_get_agent_details, test_get_system_info, test_send_agent_request, test_send_event,
+        test_get_agent_details, test_get_system, test_send_agent_request, test_send_event,
     },
     models::agents::AgentCreationRequest,
     models::events::{AgentRequestPayload, EventRequest},
@@ -44,9 +44,9 @@ async fn test_create_custom_user() {
 }
 
 #[tokio::test]
-async fn test_get_system_info_handler() {
+async fn test_get_system_handler() {
     // Call the test handler directly
-    let response = test_get_system_info().await;
+    let response = test_get_system().await;
 
     // Convert to a standard response for testing
     let response_body = serde_json::to_string(&response.0).unwrap();

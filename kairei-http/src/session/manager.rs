@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use dashmap::DashMap;
 use kairei_core::{
@@ -10,106 +10,146 @@ use tokio::sync::RwLock;
 pub type SessionId = String;
 pub type UserId = String;
 
-/// Composite key for user sessions
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UserSessionKey {
-    /// User ID
-    pub user_id: UserId,
-    /// Session ID
-    pub session_id: SessionId,
-}
-
-impl UserSessionKey {
-    /// Create a new user session key
-    pub fn new(user_id: impl Into<UserId>, session_id: impl Into<SessionId>) -> Self {
-        Self {
-            user_id: user_id.into(),
-            session_id: session_id.into(),
-        }
-    }
-}
-
 /// Configuration for the session manager
-#[derive(Clone, Default)]
-pub struct SessionConfig {
+#[derive(Clone)]
+pub struct SessionData {
     pub system_config: SystemConfig,
     pub secret_config: SecretConfig,
+    pub system: Arc<RwLock<System>>,
+    pub user_id: UserId,
 }
+
+pub type SessionConfig = HashMap<String, String>;
 
 /// Manages user sessions and their associated Kairei systems
 #[derive(Clone, Default)]
 pub struct SessionManager {
-    sessions: Arc<DashMap<UserSessionKey, Arc<RwLock<System>>>>,
-    config: SessionConfig,
+    sessions: Arc<DashMap<SessionId, SessionData>>,
+    users: Arc<DashMap<UserId, Vec<SessionId>>>,
+    _config: SessionConfig,
 }
 
 impl SessionManager {
     /// Create a new session manager with the given configuration
     pub fn new(config: SessionConfig) -> Self {
         Self {
-            sessions: Arc::new(DashMap::new()),
-            config,
+            _config: config,
+            ..Default::default()
         }
     }
 
-    /// Get or create a session for the given user and session ID
-    pub async fn get_or_create_user_session(
+    // session data creation is user matter
+    pub async fn create_session(
         &self,
         user_id: &UserId,
-        session_id: &SessionId,
-    ) -> Arc<RwLock<System>> {
-        let key = UserSessionKey::new(user_id, session_id);
+        data: SessionData,
+    ) -> Result<SessionId, String> {
+        let session_id = uuid::Uuid::new_v4().to_string();
+        self.sessions.insert(session_id.clone(), data);
+        self.users
+            .entry(user_id.clone())
+            .or_default()
+            .push(session_id.clone());
+        Ok(session_id)
+    }
 
-        if let Some(system) = self.sessions.get(&key) {
-            return system.clone();
+    pub async fn get_session(&self, session_id: &SessionId) -> Option<SessionData> {
+        self.sessions
+            .get(session_id)
+            .map(|data| data.value().clone())
+    }
+
+    pub async fn get_sessions(&self, user_id: &UserId) -> Vec<(SessionId, SessionData)> {
+        let session_ids = self.users.get(user_id).map(|sessions| sessions.clone());
+        session_ids
+            .map(|ids| {
+                ids.into_iter()
+                    .filter_map(|id| {
+                        self.sessions
+                            .get(&id)
+                            .map(|data| (id, data.value().clone()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub async fn remove_session(&self, session_id: &SessionId) -> Result<(), String> {
+        if let Some(data) = self.sessions.remove(session_id) {
+            // remove session from users
+            if let Some(mut sessions) = self.users.get_mut(&data.1.user_id) {
+                sessions.retain(|id| id != session_id)
+            }
+            Ok(())
+        } else {
+            Err("Session not found".to_string())
         }
+    }
 
-        // Create new system for session
+    pub async fn remove_sessions(&self, user_id: &UserId) {
+        if let Some(sessions) = self.users.remove(user_id) {
+            for session_id in sessions.1 {
+                self.sessions.remove(&session_id);
+            }
+        }
+    }
+}
+
+// test for session manager
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kairei_core::config::SystemConfig;
+
+    #[tokio::test]
+    async fn test_session_manager() {
+        let manager = SessionManager::default();
+        let user_id = "test_user".to_string();
+        let system_config = SystemConfig::default();
+        let secret_config = SecretConfig::default();
         let system = Arc::new(RwLock::new(
-            System::new(&self.config.system_config, &self.config.secret_config).await,
+            System::new(&system_config, &secret_config).await,
         ));
-        self.sessions.insert(key, system.clone());
-        system
-    }
 
-    /// Get or create a session for the given session ID (for backward compatibility)
-    pub async fn get_or_create_session(&self, session_id: &SessionId) -> Arc<RwLock<System>> {
-        // Use a default user ID for backward compatibility
-        self.get_or_create_user_session(&"default".to_string(), session_id)
+        let session_data = SessionData {
+            system_config: system_config.clone(),
+            secret_config: secret_config.clone(),
+            system,
+            user_id: user_id.clone(),
+        };
+
+        let session_id = manager
+            .create_session(&user_id, session_data.clone())
             .await
-    }
+            .unwrap();
 
-    /// Remove a user session
-    pub async fn remove_user_session(&self, user_id: &UserId, session_id: &SessionId) {
-        let key = UserSessionKey::new(user_id, session_id);
-        self.sessions.remove(&key);
-    }
+        let session = manager.get_session(&session_id).await.unwrap();
+        assert_eq!(
+            format!("{:?}", session.system_config),
+            format!("{:?}", system_config.clone())
+        );
+        assert_eq!(
+            format!("{:?}", session.secret_config),
+            format!("{:?}", &secret_config.clone())
+        );
+        assert_eq!(session.user_id, user_id);
 
-    /// Remove a session (for backward compatibility)
-    pub async fn remove_session(&self, session_id: &SessionId) {
-        self.remove_user_session(&"default".to_string(), session_id)
-            .await;
-    }
+        let sessions = manager.get_sessions(&user_id).await;
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].0, session_id);
+        assert_eq!(
+            format!("{:?}", sessions[0].1.system_config),
+            format!("{:?}", system_config)
+        );
+        assert_eq!(
+            format!("{:?}", sessions[0].1.secret_config),
+            format!("{:?}", secret_config)
+        );
 
-    /// Get all sessions for a user
-    pub fn get_user_sessions(&self, user_id: &UserId) -> Vec<(SessionId, Arc<RwLock<System>>)> {
-        self.sessions
-            .iter()
-            .filter(|entry| entry.key().user_id == *user_id)
-            .map(|entry| (entry.key().session_id.clone(), entry.value().clone()))
-            .collect()
-    }
+        manager.remove_session(&session_id).await.unwrap();
+        assert!(manager.get_session(&session_id).await.is_none());
 
-    /// Get the number of active sessions
-    pub fn session_count(&self) -> usize {
-        self.sessions.len()
-    }
-
-    /// Get the number of active sessions for a user
-    pub fn user_session_count(&self, user_id: &UserId) -> usize {
-        self.sessions
-            .iter()
-            .filter(|entry| entry.key().user_id == *user_id)
-            .count()
+        manager.remove_sessions(&user_id).await;
+        assert!(manager.get_sessions(&user_id).await.is_empty());
     }
 }

@@ -20,8 +20,6 @@ fn test_server_config_custom() {
     let config = ServerConfig {
         host: "0.0.0.0".to_string(),
         port: 8080,
-        system_config: None,
-        secret_config: None,
         enable_auth: true,
     };
 
@@ -37,8 +35,6 @@ async fn test_server_address_parsing() {
     let config = ServerConfig {
         host: "127.0.0.1".to_string(),
         port: 8081,
-        system_config: None,
-        secret_config: None,
         enable_auth: false,
     };
 
@@ -60,8 +56,6 @@ async fn test_server_startup_with_auth() {
     let config = ServerConfig {
         host: "127.0.0.1".to_string(),
         port,
-        system_config: None,
-        secret_config: None,
         enable_auth: true,
     };
 
@@ -112,8 +106,6 @@ async fn test_server_startup() {
     let config = ServerConfig {
         host: "127.0.0.1".to_string(),
         port,
-        system_config: None,
-        secret_config: None,
         enable_auth: false,
     };
 

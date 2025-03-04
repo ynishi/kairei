@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::{
     collections::HashMap,
@@ -872,7 +873,7 @@ pub struct ScaleStatus {
 }
 
 // システム全体の状態
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SystemStatus {
     pub started_at: DateTime<Utc>,
     pub running: bool,

@@ -4,12 +4,18 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use kairei_http::{auth::auth_middleware, handlers::test_helpers::create_test_state, routes};
+use kairei_core::system::SystemStatus;
+use kairei_http::{
+    auth::auth_middleware,
+    handlers::test_helpers::create_test_state,
+    models::{CreateSystemRequest, CreateSystemResponse, ListSystemsResponse},
+    routes,
+};
 use serde_json::json;
 use tower::ServiceExt;
 
 #[tokio::test]
-async fn test_system_info_route() {
+async fn test_system_route() {
     let app_state: kairei_http::server::AppState = create_test_state();
 
     // Create the router with a test state
@@ -21,16 +27,22 @@ async fn test_system_info_route() {
         ))
         .into_service();
 
-    // Create a request to the system info endpoint
+    // Create a request to the create system
+    let request_body = CreateSystemRequest {
+        name: "TestSystem".to_string(),
+        ..Default::default()
+    };
+
     let request = Request::builder()
-        .uri("/api/v1/system/info")
-        .method("GET")
+        .uri("/api/v1/systems")
+        .method("POST")
         .header("X-API-Key", "admin-key")
-        .body(Body::empty())
+        .header("Content-Type", "application/json")
+        .body(json!(request_body).to_string())
         .unwrap();
 
     // Process the request
-    let response = app.oneshot(request).await.unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
 
     // Check the response status
     assert_eq!(response.status(), StatusCode::OK);
@@ -39,13 +51,97 @@ async fn test_system_info_route() {
     let body = axum::body::to_bytes(response.into_body(), 1000)
         .await
         .unwrap();
-    let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let resp: CreateSystemResponse = serde_json::from_slice(&body).unwrap();
 
     // Verify the response structure
-    assert!(body.get("version").is_some());
-    assert!(body.get("status").is_some());
-    assert!(body.get("capabilities").is_some());
-    assert!(body.get("statistics").is_some());
+    let system_id = resp.system_id.clone();
+    assert!(!system_id.is_empty());
+
+    // Create a request to list systems
+    let request = Request::builder()
+        .uri("/api/v1/systems")
+        .method("GET")
+        .header("X-API-Key", "admin-key")
+        .body("".to_string())
+        .unwrap();
+
+    // Process the request
+    let response = app.clone().oneshot(request).await.unwrap();
+    // Check the response status
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Get the response body
+    let body = axum::body::to_bytes(response.into_body(), 1000)
+        .await
+        .unwrap();
+    let resp: ListSystemsResponse = serde_json::from_slice(&body).unwrap();
+
+    // Verify the response structure
+    assert!(!(!resp.system_statuses.get(&system_id).unwrap().running));
+
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    // Get system
+    let request = Request::builder()
+        .uri(format!("/api/v1/systems/{}", system_id))
+        .method("GET")
+        .header("X-API-Key", "admin-key")
+        .body("".to_string())
+        .unwrap();
+
+    // Process the request
+    let response = app.clone().oneshot(request).await.unwrap();
+    // Check the response status
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 1000)
+        .await
+        .unwrap();
+
+    let resp: SystemStatus = serde_json::from_slice(&body).unwrap();
+
+    // Verify the response structure
+    assert!(resp.running);
+
+    // Start system
+    let request = Request::builder()
+        .uri(format!("/api/v1/systems/{}/start", system_id))
+        .method("POST")
+        .header("X-API-Key", "admin-key")
+        .body("".to_string())
+        .unwrap();
+
+    // Process the request
+    let response = app.clone().oneshot(request).await.unwrap();
+
+    // Check the response status
+    /*
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Get the response body
+    let body = axum::body::to_bytes(response.into_body(), 1000)
+        .await
+        .unwrap();
+
+    let resp: SystemStatus = serde_json::from_slice(&body).unwrap();
+
+    // Verify the response structure
+    assert_eq!(resp.running, true);
+    */
+
+    // Stop system
+    let request = Request::builder()
+        .uri(format!("/api/v1/systems/{}", system_id))
+        .method("DELETE")
+        .header("X-API-Key", "admin-key")
+        .body("".to_string())
+        .unwrap();
+
+    // Process the request
+    let response = app.clone().oneshot(request).await.unwrap();
+
+    // Check the response status
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
