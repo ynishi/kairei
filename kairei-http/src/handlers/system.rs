@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::auth::{AuthAdmin, AuthUser};
-use crate::models::{CreateSystemRequest, CreateSystemResponse, ListSystemsResponse};
+use crate::models::{
+    CreateSystemRequest, CreateSystemResponse, ListSystemsResponse, StartSystemRequest,
+};
 use crate::server::AppState;
 use crate::session::data::SessionDataBuilder;
 use axum::extract::Path;
@@ -120,6 +122,7 @@ pub async fn start_system(
     State(state): State<AppState>,
     auth: AuthAdmin,
     Path(system_id): Path<String>,
+    Json(payload): Json<StartSystemRequest>,
 ) -> Result<(), StatusCode> {
     if !auth.user().is_admin() {
         return Err(StatusCode::FORBIDDEN);
@@ -127,18 +130,47 @@ pub async fn start_system(
 
     if let Some(data) = state.session_manager.get_session(&system_id).await {
         let mut system = data.system.write().await;
-        system
-            .initialize(Root {
+        let root_def = if let Some(dsl) = &payload.dsl {
+            system.parse_dsl(dsl).await.map_err(|e| {
+                tracing::error!("Failed to load DSL: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+        } else {
+            Root {
                 world_def: None,
                 micro_agent_defs: vec![],
-            })
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to initialize system: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+            }
+        };
+
+        system.initialize(root_def).await.map_err(|e| {
+            tracing::error!("Failed to initialize system: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
         system.start().await.map_err(|e| {
             tracing::error!("Failed to start system: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        Ok(())
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+// Shutdown the system
+#[axum::debug_handler]
+pub async fn shutdown_system(
+    State(state): State<AppState>,
+    auth: AuthAdmin,
+    Path(system_id): Path<String>,
+) -> Result<(), StatusCode> {
+    if !auth.user().is_admin() {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    if let Some(data) = state.session_manager.get_session(&system_id).await {
+        let system = data.system.write().await;
+        system.emergency_shutdown().await.map_err(|e| {
+            tracing::error!("Failed to initialize system: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
         Ok(())

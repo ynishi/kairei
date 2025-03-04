@@ -30,6 +30,11 @@ pub struct ListSystemsResponse {
     pub system_statuses: HashMap<String, kairei_core::system::SystemStatus>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StartSystemRequest {
+    pub dsl: Option<String>,
+}
+
 /// System information response model
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SystemInfo {

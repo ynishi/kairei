@@ -152,7 +152,27 @@ async fn test_system_route() {
     // Verify the response structure
     assert!(resp.running);
 
-    // Stop system
+    let request = Request::builder()
+        .uri(format!("/api/v1/systems/{}/shutdown", system_id))
+        .method("POST")
+        .header("X-API-Key", "admin-key")
+        .body("".to_string())
+        .unwrap();
+
+    // Process the request
+    let response = app.clone().oneshot(request).await.unwrap();
+
+    // Check the response status
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Get the response body
+    let body = axum::body::to_bytes(response.into_body(), 1000)
+        .await
+        .unwrap();
+
+    assert!(body.is_empty());
+
+    // Remove system
     let request = Request::builder()
         .uri(format!("/api/v1/systems/{}", system_id))
         .method("DELETE")
