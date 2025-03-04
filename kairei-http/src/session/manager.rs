@@ -1,23 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
+use anyhow::{Context, Result, bail};
 use dashmap::DashMap;
-use kairei_core::{
-    config::{SecretConfig, SystemConfig},
-    system::System,
-};
-use tokio::sync::RwLock;
+
+use super::data::{SessionData, SessionDataBuilder};
 
 pub type SessionId = String;
 pub type UserId = String;
-
-/// Configuration for the session manager
-#[derive(Clone)]
-pub struct SessionData {
-    pub system_config: SystemConfig,
-    pub secret_config: SecretConfig,
-    pub system: Arc<RwLock<System>>,
-    pub user_id: UserId,
-}
+pub type SystemId = String;
 
 pub type SessionConfig = HashMap<String, String>;
 
@@ -42,15 +32,21 @@ impl SessionManager {
     pub async fn create_session(
         &self,
         user_id: &UserId,
-        data: SessionData,
-    ) -> Result<SessionId, String> {
+        builder: SessionDataBuilder,
+    ) -> Result<(SessionId, SystemId)> {
         let session_id = uuid::Uuid::new_v4().to_string();
+        let data = builder
+            .user_id(user_id.clone())
+            .system_id(session_id.clone())
+            .build()
+            .with_context(|| "Failed to build session data")?;
+        let system_id = data.system_id.clone();
         self.sessions.insert(session_id.clone(), data);
         self.users
             .entry(user_id.clone())
             .or_default()
             .push(session_id.clone());
-        Ok(session_id)
+        Ok((session_id, system_id))
     }
 
     pub async fn get_session(&self, session_id: &SessionId) -> Option<SessionData> {
@@ -74,7 +70,7 @@ impl SessionManager {
             .unwrap_or_default()
     }
 
-    pub async fn remove_session(&self, session_id: &SessionId) -> Result<(), String> {
+    pub async fn remove_session(&self, session_id: &SessionId) -> Result<()> {
         if let Some(data) = self.sessions.remove(session_id) {
             // remove session from users
             if let Some(mut sessions) = self.users.get_mut(&data.1.user_id) {
@@ -82,7 +78,7 @@ impl SessionManager {
             }
             Ok(())
         } else {
-            Err("Session not found".to_string())
+            bail!("Session not found".to_string())
         }
     }
 
@@ -99,7 +95,11 @@ impl SessionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kairei_core::config::SystemConfig;
+    use kairei_core::{
+        config::{SecretConfig, SystemConfig},
+        system::System,
+    };
+    use tokio::sync::RwLock;
 
     #[tokio::test]
     async fn test_session_manager() {
@@ -111,15 +111,13 @@ mod tests {
             System::new(&system_config, &secret_config).await,
         ));
 
-        let session_data = SessionData {
-            system_config: system_config.clone(),
-            secret_config: secret_config.clone(),
-            system,
-            user_id: user_id.clone(),
-        };
+        let session_data_builder = SessionDataBuilder::new()
+            .system_config(system_config.clone())
+            .secret_config(secret_config.clone())
+            .system(system.clone());
 
-        let session_id = manager
-            .create_session(&user_id, session_data.clone())
+        let (session_id, _) = manager
+            .create_session(&user_id, session_data_builder.clone())
             .await
             .unwrap();
 

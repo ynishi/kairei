@@ -20,6 +20,9 @@ pub struct CreateSystemRequest {
 pub struct CreateSystemResponse {
     /// System ID
     pub system_id: String,
+
+    /// Session ID
+    pub session_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

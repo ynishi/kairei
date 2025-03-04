@@ -4,11 +4,12 @@ use std::sync::Arc;
 use crate::auth::{AuthAdmin, AuthUser};
 use crate::models::{CreateSystemRequest, CreateSystemResponse, ListSystemsResponse};
 use crate::server::AppState;
-use crate::session::manager::SessionData;
+use crate::session::data::SessionDataBuilder;
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::{extract::State, response::Json};
 use kairei_core::Root;
+use kairei_core::config::ProviderSecretConfig;
 use kairei_core::system::{System, SystemStatus};
 use tokio::sync::RwLock;
 
@@ -19,35 +20,40 @@ pub async fn create_system(
     auth: AuthUser,
     Json(payload): Json<CreateSystemRequest>,
 ) -> Result<Json<CreateSystemResponse>, StatusCode> {
-    println!("create_system");
     if !auth.user().is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
     // todo extract secret from user
-    let secret = kairei_core::config::SecretConfig::default();
+    let mut secret = kairei_core::config::SecretConfig::default();
+    secret.providers.insert(
+        "default_provider".to_string(),
+        ProviderSecretConfig {
+            ..Default::default()
+        },
+    );
 
     let config = payload.config.clone();
 
     // impl create system using kairei-core with the session manager
     let system: System = System::new(&config, &secret).await;
 
-    let session_data = SessionData {
-        system_config: config,
-        secret_config: secret,
-        system: Arc::new(RwLock::new(system)),
-        user_id: auth.user().user_id.clone(),
-    };
+    let session_data_builder = SessionDataBuilder::new()
+        .system_config(config)
+        .secret_config(secret)
+        .system(Arc::new(RwLock::new(system)));
 
-    let session_id = state
+    let (session_id, system_id) = state
         .session_manager
-        .create_session(&auth.user().user_id, session_data)
-        .await;
-    if session_id.is_err() {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
+        .create_session(&auth.user().user_id, session_data_builder)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to create system: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     Ok(Json(CreateSystemResponse {
-        system_id: session_id.unwrap(),
+        system_id,
+        session_id,
     }))
 }
 
@@ -128,12 +134,10 @@ pub async fn start_system(
             })
             .await
             .map_err(|e| {
-                println!("Failed to initialize system: {}", e);
                 tracing::error!("Failed to initialize system: {}", e);
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
         system.start().await.map_err(|e| {
-            println!("Failed to start system: {}", e);
             tracing::error!("Failed to start system: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;

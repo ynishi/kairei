@@ -1,10 +1,14 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use kairei_core::system::SystemStatus;
+use kairei_core::{
+    config::{ProviderConfig, ProviderConfigs, SystemConfig},
+    provider::provider::ProviderType,
+    system::SystemStatus,
+};
 use kairei_http::{
     auth::auth_middleware,
     handlers::test_helpers::create_test_state,
@@ -13,6 +17,26 @@ use kairei_http::{
 };
 use serde_json::json;
 use tower::ServiceExt;
+
+fn create_test_system_config() -> SystemConfig {
+    SystemConfig {
+        provider_configs: {
+            let mut providers = HashMap::new();
+            providers.insert(
+                "default_provider".to_string(),
+                ProviderConfig {
+                    provider_type: ProviderType::SimpleExpert,
+                    ..Default::default()
+                },
+            );
+            ProviderConfigs {
+                providers,
+                ..Default::default()
+            }
+        },
+        ..Default::default()
+    }
+}
 
 #[tokio::test]
 async fn test_system_route() {
@@ -30,6 +54,7 @@ async fn test_system_route() {
     // Create a request to the create system
     let request_body = CreateSystemRequest {
         name: "TestSystem".to_string(),
+        config: create_test_system_config(),
         ..Default::default()
     };
 
@@ -52,6 +77,8 @@ async fn test_system_route() {
         .await
         .unwrap();
     let resp: CreateSystemResponse = serde_json::from_slice(&body).unwrap();
+
+    std::thread::sleep(std::time::Duration::from_millis(100));
 
     // Verify the response structure
     let system_id = resp.system_id.clone();
@@ -77,9 +104,7 @@ async fn test_system_route() {
     let resp: ListSystemsResponse = serde_json::from_slice(&body).unwrap();
 
     // Verify the response structure
-    assert!(!(!resp.system_statuses.get(&system_id).unwrap().running));
-
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert!(resp.system_statuses.get(&system_id).unwrap().running);
 
     // Get system
     let request = Request::builder()
@@ -115,7 +140,6 @@ async fn test_system_route() {
     let response = app.clone().oneshot(request).await.unwrap();
 
     // Check the response status
-    /*
     assert_eq!(response.status(), StatusCode::OK);
 
     // Get the response body
@@ -123,11 +147,10 @@ async fn test_system_route() {
         .await
         .unwrap();
 
-    let resp: SystemStatus = serde_json::from_slice(&body).unwrap();
+    assert!(body.is_empty());
 
     // Verify the response structure
-    assert_eq!(resp.running, true);
-    */
+    assert!(resp.running);
 
     // Stop system
     let request = Request::builder()

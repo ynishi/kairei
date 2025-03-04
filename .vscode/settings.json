@@ -3,6 +3,7 @@
         "dashmap",
         "kairei",
         "serde",
+        "serper",
         "thiserror"
     ]
 }
