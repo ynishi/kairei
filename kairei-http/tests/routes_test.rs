@@ -1,22 +1,31 @@
+use std::sync::Arc;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use kairei_http::{handlers::test_helpers::create_test_state, routes};
+use kairei_http::{auth::auth_middleware, handlers::test_helpers::create_test_state, routes};
 use serde_json::json;
 use tower::ServiceExt;
 
 #[tokio::test]
 async fn test_system_info_route() {
+    let app_state: kairei_http::server::AppState = create_test_state();
+
     // Create the router with a test state
     let app = routes::create_api_router()
-        .with_state(create_test_state())
+        .with_state(app_state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(app_state.auth_store.clone()),
+            auth_middleware,
+        ))
         .into_service();
 
     // Create a request to the system info endpoint
     let request = Request::builder()
         .uri("/api/v1/system/info")
         .method("GET")
+        .header("X-API-Key", "admin-key")
         .body(Body::empty())
         .unwrap();
 
@@ -42,8 +51,13 @@ async fn test_system_info_route() {
 #[tokio::test]
 async fn test_create_agent_route() {
     // Create the router with a test state
+    let app_state: kairei_http::server::AppState = create_test_state();
     let app = routes::create_api_router()
-        .with_state(create_test_state())
+        .with_state(app_state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(app_state.auth_store.clone()),
+            auth_middleware,
+        ))
         .into_service();
 
     // Create a request to create an agent
@@ -56,9 +70,10 @@ async fn test_create_agent_route() {
     });
 
     let request = Request::builder()
-        .uri("/api/v1/agents")
+        .uri("/api/v1/users/admin/agents")
         .method("POST")
         .header("Content-Type", "application/json")
+        .header("X-API-Key", "admin-key")
         .body(Body::from(request_body.to_string()))
         .unwrap();
 
@@ -83,14 +98,20 @@ async fn test_create_agent_route() {
 #[tokio::test]
 async fn test_get_agent_details_route() {
     // Create the router with a test state
+    let app_state: kairei_http::server::AppState = create_test_state();
     let app = routes::create_api_router()
-        .with_state(create_test_state())
+        .with_state(app_state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(app_state.auth_store.clone()),
+            auth_middleware,
+        ))
         .into_service();
 
     // Create a request to get agent details
     let request = Request::builder()
         .uri("/api/v1/agents/test-agent-001")
         .method("GET")
+        .header("X-API-Key", "admin-key")
         .body(Body::empty())
         .unwrap();
 
@@ -117,8 +138,13 @@ async fn test_get_agent_details_route() {
 #[tokio::test]
 async fn test_send_event_route() {
     // Create the router with a test state
+    let app_state: kairei_http::server::AppState = create_test_state();
     let app = routes::create_api_router()
-        .with_state(create_test_state())
+        .with_state(app_state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(app_state.auth_store.clone()),
+            auth_middleware,
+        ))
         .into_service();
 
     // Create a request to send an event
@@ -136,6 +162,7 @@ async fn test_send_event_route() {
         .uri("/api/v1/events")
         .method("POST")
         .header("Content-Type", "application/json")
+        .header("X-API-Key", "admin-key")
         .body(Body::from(request_body.to_string()))
         .unwrap();
 
@@ -160,8 +187,13 @@ async fn test_send_event_route() {
 #[tokio::test]
 async fn test_send_agent_request_route() {
     // Create the router with a test state
+    let app_state: kairei_http::server::AppState = create_test_state();
     let app = routes::create_api_router()
-        .with_state(create_test_state())
+        .with_state(app_state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(app_state.auth_store.clone()),
+            auth_middleware,
+        ))
         .into_service();
 
     // Create a request to send a request to an agent
@@ -176,6 +208,7 @@ async fn test_send_agent_request_route() {
         .uri("/api/v1/events/agents/weather-agent-001/request")
         .method("POST")
         .header("Content-Type", "application/json")
+        .header("X-API-Key", "admin-key")
         .body(Body::from(request_body.to_string()))
         .unwrap();
 

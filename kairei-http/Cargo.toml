@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = { version = "0.8.1", features = ["json", "macros"] }
+async-trait = "0.1.87"
+axum = { version = "0.8.1", features = ["json", "macros", "tokio"] }
 clap = { version = "4.5.31", features = ["derive"] }
 dashmap = "6.1.0"
 kairei-core = { path = "../kairei-core" }

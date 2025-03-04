@@ -3,7 +3,7 @@ use dashmap::DashMap;
 use std::sync::Arc;
 
 /// A simple in-memory store for API keys and users
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AuthStore {
     /// Maps API keys to user IDs
     api_keys: Arc<DashMap<String, String>>,

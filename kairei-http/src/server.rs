@@ -1,9 +1,10 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::auth::AuthStore;
+use crate::auth::{AuthStore, auth_middleware};
 use crate::routes::create_api_router;
 use crate::session::manager::{SessionConfig, SessionManager};
 use kairei_core::config::{SecretConfig, SystemConfig};
@@ -75,12 +76,17 @@ pub async fn start_server(config: ServerConfig) -> Result<(), Box<dyn std::error
     info!("Initialized session manager and auth store");
 
     // Create the router with all routes and add the app state
-    let app = create_api_router().with_state(app_state);
+    let mut app = create_api_router().with_state(app_state.clone());
 
-    // Log if authentication is enabled
+    // Apply authentication middleware if enabled
     if config.enable_auth {
         info!("Authentication enabled");
-        // We'll implement authentication in a future update
+        // Apply the auth middleware to all routes
+        let auth_store = Arc::new(app_state.auth_store.clone());
+        app = app.layer(axum::middleware::from_fn_with_state(
+            auth_store,
+            auth_middleware,
+        ));
     }
 
     // Add common middleware

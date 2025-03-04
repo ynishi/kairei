@@ -1,8 +1,8 @@
 use crate::auth::AuthStore;
 use crate::models::user::User;
 use axum::{
-    extract::Request,
-    http::{HeaderMap, StatusCode},
+    extract::{Request, State},
+    http::StatusCode,
     middleware::Next,
     response::Response,
 };
@@ -10,13 +10,13 @@ use std::sync::Arc;
 
 /// Axum middleware for API key authentication
 pub async fn auth_middleware(
-    auth_store: Arc<AuthStore>,
-    headers: HeaderMap,
+    State(auth_store): State<Arc<AuthStore>>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
     // Extract API key from headers
-    let api_key = headers
+    let api_key = request
+        .headers()
         .get("X-API-Key")
         .and_then(|value| value.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;

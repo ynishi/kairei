@@ -8,6 +8,6 @@ use axum::{
 /// Create the agents routes with state
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/agents", post(create_agent))
+        .route("/users/{user_id}/agents", post(create_agent))
         .route("/agents/{agent_id}", get(get_agent_details))
 }

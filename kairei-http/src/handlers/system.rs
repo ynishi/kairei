@@ -1,3 +1,4 @@
+use crate::auth::AuthAdmin;
 use crate::models::system::{SystemInfo, SystemStatistics, SystemStatus};
 use crate::server::AppState;
 use axum::{extract::State, response::Json};
@@ -5,8 +6,9 @@ use axum::{extract::State, response::Json};
 /// Get system information
 ///
 /// Returns information about the current state of the system.
+/// Requires authentication with admin role.
 #[axum::debug_handler]
-pub async fn get_system_info(State(state): State<AppState>) -> Json<SystemInfo> {
+pub async fn get_system_info(State(state): State<AppState>, _auth: AuthAdmin) -> Json<SystemInfo> {
     // Get the number of active sessions
     let _session_count = state.session_manager.session_count();
 

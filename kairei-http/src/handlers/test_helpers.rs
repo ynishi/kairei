@@ -19,10 +19,30 @@ pub fn create_test_state() -> AppState {
     let session_manager = SessionManager::default();
     let auth_store = AuthStore::default();
 
+    // Ensure the auth store has the default test users and API keys
+    // This is already done in AuthStore::default() which calls AuthStore::with_defaults()
     AppState {
         session_manager,
         auth_store,
     }
+}
+
+/// Create a test user with the given API key for testing
+pub fn create_test_user_with_api_key(
+    app_state: &AppState,
+    user_id: &str,
+    username: &str,
+    is_admin: bool,
+    api_key: &str,
+) {
+    let user = if is_admin {
+        crate::models::user::User::new_admin(user_id, username)
+    } else {
+        crate::models::user::User::new_user(user_id, username)
+    };
+
+    app_state.auth_store.add_user(user.clone());
+    app_state.auth_store.add_api_key(api_key, user.user_id);
 }
 
 /// Test version of get_system_info that doesn't require State

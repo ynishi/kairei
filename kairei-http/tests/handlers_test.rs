@@ -1,13 +1,47 @@
 use axum::{extract::Path, http::StatusCode, response::Json};
 use kairei_http::{
     handlers::test_helpers::{
-        test_create_agent, test_get_agent_details, test_get_system_info, test_send_agent_request,
-        test_send_event,
+        create_test_state, create_test_user_with_api_key, test_create_agent,
+        test_get_agent_details, test_get_system_info, test_send_agent_request, test_send_event,
     },
     models::agents::AgentCreationRequest,
     models::events::{AgentRequestPayload, EventRequest},
 };
 use serde_json::json;
+
+#[tokio::test]
+async fn test_auth_store_default_users() {
+    // Create a test state with default users
+    let app_state = create_test_state();
+
+    // Verify that the default admin user exists
+    let admin_user = app_state.auth_store.get_user_by_api_key("admin-key");
+    assert!(admin_user.is_some());
+    assert_eq!(admin_user.unwrap().user_id, "admin");
+
+    // Verify that the default regular users exist
+    let user1 = app_state.auth_store.get_user_by_api_key("user1-key");
+    assert!(user1.is_some());
+    assert_eq!(user1.unwrap().user_id, "user1");
+
+    let user2 = app_state.auth_store.get_user_by_api_key("user2-key");
+    assert!(user2.is_some());
+    assert_eq!(user2.unwrap().user_id, "user2");
+}
+
+#[tokio::test]
+async fn test_create_custom_user() {
+    // Create a test state
+    let app_state = create_test_state();
+
+    // Create a custom test user
+    create_test_user_with_api_key(&app_state, "test-user", "Test User", false, "test-key");
+
+    // Verify that the custom user exists
+    let user = app_state.auth_store.get_user_by_api_key("test-key");
+    assert!(user.is_some());
+    assert_eq!(user.unwrap().user_id, "test-user");
+}
 
 #[tokio::test]
 async fn test_get_system_info_handler() {
