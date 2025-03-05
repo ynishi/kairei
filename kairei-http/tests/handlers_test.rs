@@ -1,8 +1,8 @@
 use axum::{extract::Path, http::StatusCode, response::Json};
 use kairei_http::{
     handlers::test_helpers::{
-        create_test_state, create_test_user_with_api_key, test_create_agent,
-        test_get_agent_details, test_get_system, test_send_agent_request, test_send_event,
+        create_test_state, create_test_user_with_api_key, test_create_agent, test_get_agent,
+        test_get_system, test_send_agent_request, test_send_event,
     },
     models::agents::AgentCreationRequest,
     models::events::{AgentRequestPayload, EventRequest},
@@ -103,9 +103,9 @@ async fn test_create_agent_handler() {
 }
 
 #[tokio::test]
-async fn test_get_agent_details_handler() {
+async fn test_get_agent_handler() {
     // Call the test handler directly with a valid agent ID
-    let response = test_get_agent_details(Path("test-agent-001".to_string())).await;
+    let response = test_get_agent(Path("test-agent-001".to_string())).await;
 
     // Check that the response is Ok
     assert!(response.is_ok());
@@ -124,7 +124,7 @@ async fn test_get_agent_details_handler() {
     assert!(body.get("statistics").is_some());
 
     // Test with a non-existent agent ID
-    let response = test_get_agent_details(Path("not-found-agent".to_string())).await;
+    let response = test_get_agent(Path("not-found-agent".to_string())).await;
 
     // Check that the response is an error with NOT_FOUND status
     assert!(response.is_err());

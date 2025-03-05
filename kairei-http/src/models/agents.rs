@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// Agent creation request model
 #[derive(Debug, Deserialize)]
@@ -52,6 +55,48 @@ pub struct AgentDetails {
 
     /// Statistics about the agent
     pub statistics: AgentStatistics,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetAgentResponse {
+    pub agent_id: String,
+    pub status: kairei_core::system::AgentStatus,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ListAgentsResponse {
+    pub agents: Vec<GetAgentResponse>,
+}
+
+/// Agent creation request model
+#[derive(Debug, Deserialize, Default)]
+pub struct ScaleUpAgentRequest {
+    /// Number of instances to scale up by
+    pub instances: usize,
+
+    /// Optional agent scaling options
+    pub options: HashMap<String, serde_json::Value>,
+}
+
+/// Agent creation request model
+#[derive(Debug, Deserialize)]
+pub struct ScaleDownAgentRequest {
+    /// Number of instances to scale up by
+    pub instances: usize,
+
+    /// Optional agent scaling options
+    pub options: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SendRequestAgentRequest {
+    pub request_type: String,
+    pub payload: Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SendRequestAgentResponse {
+    pub value: Value,
 }
 
 /// Agent status enum

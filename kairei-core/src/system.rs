@@ -647,6 +647,17 @@ impl System {
             .map_err(SystemError::from)
     }
 
+    pub async fn list_agents(&self) -> SystemResult<Vec<AgentStatus>> {
+        let registry = self.agent_registry.read().await;
+        let agent_names = registry.agent_names();
+        let mut agent_statuses = Vec::with_capacity(agent_names.len());
+        for agent_name in agent_names {
+            let status = self.get_agent_status(&agent_name).await?;
+            agent_statuses.push(status);
+        }
+        Ok(agent_statuses)
+    }
+
     pub async fn stop_agent(&self, agent_name: &str) -> SystemResult<()> {
         let registry = self.agent_registry.read().await;
         registry
@@ -885,7 +896,7 @@ pub struct SystemStatus {
     pub event_capacity: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AgentStatus {
     pub name: String,
     pub state: String,

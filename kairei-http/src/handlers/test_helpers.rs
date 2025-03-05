@@ -83,8 +83,8 @@ pub async fn test_create_agent(
     (StatusCode::CREATED, Json(response))
 }
 
-/// Test version of get_agent_details that doesn't require State
-pub async fn test_get_agent_details(
+/// Test version of get_agent that doesn't require State
+pub async fn test_get_agent(
     Path(agent_id): Path<String>,
 ) -> Result<Json<AgentDetails>, StatusCode> {
     // Simulate agent not found

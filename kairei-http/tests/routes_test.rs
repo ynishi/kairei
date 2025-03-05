@@ -235,7 +235,7 @@ async fn test_create_agent_route() {
 }
 
 #[tokio::test]
-async fn test_get_agent_details_route() {
+async fn test_get_agent_route() {
     // Create the router with a test state
     let app_state: kairei_http::server::AppState = create_test_state();
     let app = routes::create_api_router()

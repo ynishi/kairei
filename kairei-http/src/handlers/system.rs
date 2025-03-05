@@ -158,7 +158,7 @@ pub async fn start_system(
 
 // Shutdown the system
 #[axum::debug_handler]
-pub async fn shutdown_system(
+pub async fn stop_system(
     State(state): State<AppState>,
     auth: AuthAdmin,
     Path(system_id): Path<String>,
