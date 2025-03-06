@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -9,7 +10,7 @@ use crate::routes::create_api_router;
 use crate::session::manager::{SessionConfig, SessionManager};
 
 /// Server configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfig {
     /// Host address to bind to
     pub host: String,
@@ -31,6 +32,21 @@ impl Default for ServerConfig {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Secret {
+    admin_service_key: String,
+    user_service_key: String,
+}
+
+impl Default for Secret {
+    fn default() -> Self {
+        Self {
+            admin_service_key: "admin_service_key".to_string(),
+            user_service_key: "user_service_key".to_string(),
+        }
+    }
+}
+
 /// Application state containing shared resources
 #[derive(Clone, Default)]
 pub struct AppState {
@@ -41,7 +57,10 @@ pub struct AppState {
 }
 
 /// Start the HTTP server
-pub async fn start_server(config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_server(
+    config: ServerConfig,
+    secret: Secret,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Set up CORS
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -54,6 +73,9 @@ pub async fn start_server(config: ServerConfig) -> Result<(), Box<dyn std::error
 
     // Create the auth store
     let auth_store = AuthStore::default();
+    auth_store.add_api_key(secret.admin_service_key, "admin");
+    auth_store.add_api_key(format!("{}_1", secret.user_service_key.clone()), "user1");
+    auth_store.add_api_key(format!("{}_2", secret.user_service_key.clone()), "user2");
 
     // Create the application state
     let app_state = AppState {
