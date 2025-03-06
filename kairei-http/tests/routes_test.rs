@@ -1,8 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use axum::{
-    http::{Request, StatusCode},
-};
+use axum::http::{Request, StatusCode};
 use kairei_core::{
     config::{ProviderConfig, ProviderConfigs, SystemConfig},
     provider::provider::ProviderType,
@@ -12,9 +10,9 @@ use kairei_http::{
     auth::auth_middleware,
     handlers::test_helpers::create_test_state,
     models::{
-        CreateSystemRequest, CreateSystemResponse, GetAgentResponse, ListAgentsResponse,
-        ListSystemsResponse, ScaleDownAgentRequest, ScaleUpAgentRequest, SendRequestAgentRequest,
-        StartSystemRequest,
+        CreateSystemRequest, CreateSystemResponse, EventRequest, GetAgentResponse,
+        ListAgentsResponse, ListSystemsResponse, ScaleDownAgentRequest, ScaleUpAgentRequest,
+        SendRequestAgentRequest, StartSystemRequest,
     },
     routes,
 };
@@ -403,4 +401,83 @@ async fn test_agent_route() {
     // Process the request
     let response = app.clone().oneshot(request).await.unwrap();
     assert!(response.status().is_success());
+}
+
+#[tokio::test]
+async fn test_event_route() {
+    let app_state: kairei_http::server::AppState = create_test_state();
+
+    // Create the router with a test state
+    let app = routes::create_api_router()
+        .with_state(app_state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(app_state.auth_store.clone()),
+            auth_middleware,
+        ))
+        .into_service();
+
+    // setup system
+    let request_body = CreateSystemRequest {
+        name: "TestSystem".to_string(),
+        config: create_test_system_config(),
+        ..Default::default()
+    };
+
+    let request = Request::builder()
+        .uri("/api/v1/systems")
+        .method("POST")
+        .header("X-API-Key", "admin-key")
+        .header("Content-Type", "application/json")
+        .body(json!(request_body).to_string())
+        .unwrap();
+
+    // Process the request
+    let response = app.clone().oneshot(request).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), 1000)
+        .await
+        .unwrap();
+
+    let resp: CreateSystemResponse = serde_json::from_slice(&body).unwrap();
+    let system_id = resp.system_id.clone();
+
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    let request = Request::builder()
+        .uri(format!("/api/v1/systems/{}/events", system_id))
+        .method("GET")
+        .header("X-API-Key", "admin-key")
+        .body("".to_string())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+
+    let request = Request::builder()
+        .uri(format!(
+            "/api/v1/systems/{}/events/{}/emit",
+            system_id, "test_event"
+        ))
+        .method("POST")
+        .header("X-API-Key", "admin-key")
+        .header("Content-Type", "application/json")
+        .body(json!(EventRequest::default()).to_string())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+
+    let request = Request::builder()
+        .uri(format!(
+            "/api/v1/systems/{}/events/{}/subscribe",
+            system_id, "test_event"
+        ))
+        .method("POST")
+        .header("X-API-Key", "admin-key")
+        .header("Content-Type", "application/json")
+        .body("".to_string())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
 }
