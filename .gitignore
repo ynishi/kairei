@@ -29,6 +29,7 @@ data
 # User specific files
 *.kairei
 config.json
+secret.*
 
 # Claude workspace
 /.claude_workspace/*

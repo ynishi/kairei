@@ -18,6 +18,7 @@ steps:
       - gcr.io/$PROJECT_ID/kairei-http
       - "--region"
       - $_REGION
+      - "--set-secrets=/etc/secrets/kairei-secret.json=KAIREI_HTTP_DEV:latest"
 options:
   logging: CLOUD_LOGGING_ONLY
 substitutions:
