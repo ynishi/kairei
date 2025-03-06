@@ -1,4 +1,4 @@
-.PHONY: build run test test-core test-http fmt fmt-core fmt-http doc doc_check doc_open clean_doc all setup-hooks
+.PHONY: build run test test-core test-http fmt fmt-core fmt-http doc doc_check doc_open clean_doc all setup-hooks docker-build docker-run docker-push
 
 test: test-core test-http
 
@@ -81,3 +81,14 @@ setup-hooks:
 	@./scripts/install-hooks.sh
 
 all: fmt build test doc
+
+# Docker build and run targets
+docker-build:
+	docker build -t kairei-http:latest .
+
+docker-run:
+	docker run -p 3000:3000 kairei-http:latest
+
+docker-push:
+	docker tag kairei-http:latest gcr.io/$(GCP_PROJECT_ID)/kairei-http:latest
+	docker push gcr.io/$(GCP_PROJECT_ID)/kairei-http:latest

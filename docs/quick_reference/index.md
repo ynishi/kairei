@@ -32,6 +32,75 @@ KAIREI is an AI Agent Orchestration Platform leveraging LLMs. It provides a flex
 
 ## System Architecture
 
+```
+┌───────────────────────────────────────────┐
+│      Client Apps (CLI, Web, SDK-based)    │
+└───────────┬───────────────────┬───────────┘
+            │                   │
+┌───────────▼────────┐  ┌───────▼───────────┐
+│   Direct Access    │  │     HTTP API      │
+│   (kairei-core)    │  │    (kairei-http)  │
+└───────────┬────────┘  └───────┬───────────┘
+            │                   │
+            └────────┬──────────┘
+                     │
+┌────────────────────▼────────────────────────┐
+│                 kairei-core                 │
+│  ┌──────────────────────────────────────┐   │
+│  │             System Layer             │   │
+│  └──────────────────────────────────────┘   │
+│                                             │
+│  ┌────────────┐  ┌───────────┐  ┌────────┐  │
+│  │  Agent/    │  │  Event    │  │ Plugin │  │
+│  │  Type      │  │  System   │  │ System │  │
+│  │ Registries │  │           │  │        │  │
+│  └────────────┘  └───────────┘  └────────┘  │
+└─────────────────────────────────────────────┘
+```
+
+## Key Components
+
+- **System Layer**: Primary API for controlling KAIREI
+- **Access Methods**:
+  - Direct (kairei-core): High performance for edge devices
+  - HTTP API (kairei-http): Remote access and LLM integration
+- **Extension Points**:
+  - Provider Interface: LLM, vector stores, search services
+  - Plugin Interface: Event filters, state providers, custom handlers
+- **Crates Structure**:
+  - `kairei-core`: Core functionality (primary dependency)
+  - `kairei-http`: HTTP API interface
+  - `kairei-cli`: Command-line tool
+  - `kairei-web`: Web UI
+  - `kairei-sdk`: Client SDK (supports both access methods)
+
+## Main Design Decisions
+
+1. **Monolithic Core**: Avoids excessive trait fragmentation while maintaining clear extension points
+2. **Unified System Interface**: Single point of control across deployment methods
+3. **Event-Driven Communication**: Enables loose coupling and async processing
+4. **LLM Integration**: Function calling API and agent creation assistance
+
+## HTTP API Structure
+```
+/systems
+  POST /start              # Start the system
+  POST /stop               # Stop the system
+  ...
+
+/systems/:id/agents
+  GET    /                 # List all agents
+  GET    /{id}             # Get agent information
+  ...
+
+/systems/:id/events(planning)
+  POST   /emit             # Publish an event
+  GET    /subscribe        # Stream events (WebSocket)
+  ...
+```
+
+## KAIREI-Core Structure
+
 KAIREI follows a layered architecture with clear separation of concerns:
 
 ```
@@ -61,7 +130,6 @@ KAIREI follows a layered architecture with clear separation of concerns:
 │              Provider Layer                 │
 │  (LLM Integration, Plugins, Extensions)     │
 └─────────────────────────────────────────────┘
-```
 
 ## Key Modules Quick Reference
 
@@ -88,11 +156,11 @@ world ExampleWorld {
     config {
         tick_interval: Duration = "1s"
     }
-    
+
     events {
         CustomEvent(param: String)
     }
-    
+
     handlers {
         on CustomEvent(param: String) {
             // Handle event
@@ -106,29 +174,29 @@ world ExampleWorld {
 ```kairei
 micro ExampleAgent {
     policy "Provide helpful responses with accurate information"
-    
+
     state {
         counter: i64 = 0;
     }
-    
+
     lifecycle {
         on_init {
             // Initialization code
         }
     }
-    
+
     observe {
         on CustomEvent(param: String) {
             self.counter += 1;
         }
     }
-    
+
     answer {
         on request GetCount() -> Result<i64, Error> {
             return Ok(self.counter);
         }
     }
-    
+
     react {
         // Reactive behaviors
     }
@@ -194,7 +262,7 @@ sequenceDiagram
     participant EventBus
     participant Subscriber1 as Subscriber 1
     participant Subscriber2 as Subscriber 2
-    
+
     Publisher->>EventBus: publish(Event)
     Note over EventBus: Event broadcast to all subscribers
     par Parallel delivery
@@ -214,7 +282,7 @@ sequenceDiagram
     participant RM as RequestManager
     participant EB as EventBus
     participant Responder as Responder (Agent)
-    
+
     Requester->>RM: request(RequestEvent)
     RM->>RM: register pending request
     RM->>EB: publish(RequestEvent)
@@ -234,7 +302,7 @@ sequenceDiagram
     participant Component
     participant EventBus
     participant ErrorHandler
-    
+
     Component->>EventBus: publish_error(ErrorEvent)
     EventBus->>ErrorHandler: ErrorEvent
     Note over ErrorHandler: Log, recover or propagate
@@ -332,5 +400,5 @@ For detailed information, see the [Provider Configuration Validation Reference](
 ## Further Resources
 
 - [KAIREI Documentation](../README.md)
-- [Type System Details](../design/kairei_type_checker.md)
+- [Design Documentation](../design/architecture.md)
 - [API Documentation](https://your-documentation-link.com) (generated with `cargo doc`)
