@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+.github
+
+# Build artifacts
+target/
+**/target/
+
+# Dev tools
+.vscode/
+.idea/
+.DS_Store
+
+# Claude workspace
+.claude_workspace/
+
+# Documentation
+docs/
+
+# Test data
+**/test_data/
+
+# Markdown files
+*.md
+!kairei-http/README.md
+
+# Logs
+*.log
+
+# Rust
+**/*.rs.bk
