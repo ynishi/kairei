@@ -3,7 +3,7 @@ pub mod events;
 pub mod system;
 
 use crate::server::AppState;
-use axum::{routing::get, Router, http::StatusCode, response::IntoResponse};
+use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
 
 /// Create the main API router with state
 pub fn create_api_router() -> Router<AppState> {
