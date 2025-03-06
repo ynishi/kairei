@@ -26,9 +26,9 @@ WORKDIR /app
 COPY --from=builder /usr/src/kairei/target/release/kairei-http /app/
 
 # Expose the API port
-EXPOSE 3000
+EXPOSE 8080
 
 ENV RUST_LOG=info
 
 # Run the server
-CMD ["/app/kairei-http", "--host", "0.0.0.0", "--port", "3000"]
+CMD ["/app/kairei-http", "--host", "0.0.0.0", "--port", "8080"]
