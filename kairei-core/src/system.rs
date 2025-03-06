@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::{
     collections::HashMap,
@@ -646,6 +647,17 @@ impl System {
             .map_err(SystemError::from)
     }
 
+    pub async fn list_agents(&self) -> SystemResult<Vec<AgentStatus>> {
+        let registry = self.agent_registry.read().await;
+        let agent_names = registry.agent_names();
+        let mut agent_statuses = Vec::with_capacity(agent_names.len());
+        for agent_name in agent_names {
+            let status = self.get_agent_status(&agent_name).await?;
+            agent_statuses.push(status);
+        }
+        Ok(agent_statuses)
+    }
+
     pub async fn stop_agent(&self, agent_name: &str) -> SystemResult<()> {
         let registry = self.agent_registry.read().await;
         registry
@@ -671,6 +683,70 @@ impl System {
             .map_err(SystemError::from)
     }
 
+    /// Send a request event and wait for a response.
+    ///
+    /// This method sends a request event to the specified agent and waits for a response.
+    /// It blocks the current task until a response is received or a timeout occurs.
+    ///
+    /// # Important
+    ///
+    /// This method is blocking and will wait for the response. For non-blocking operation,
+    /// consider using `tokio::spawn` to run this method in a separate task:
+    ///
+    /// ```rust,no_run
+    /// # // The following code is for illustration purposes only
+    /// # use kairei_core::event_bus::{Event, Value};
+    /// # use kairei_core::system::System;
+    /// # use kairei_core::config::{SystemConfig, SecretConfig};
+    /// # use std::sync::Arc;
+    /// # async fn example() {
+    /// # let request = Event::default();
+    /// # let system = Arc::new(System::new(&SystemConfig::default(), &SecretConfig::default()).await);
+    /// // Non-blocking usage example:
+    /// let request_clone = request.clone();
+    /// let system_clone = system.clone();
+    ///
+    /// // Create a oneshot channel to receive the result
+    /// let (tx, rx) = tokio::sync::oneshot::channel();
+    ///
+    /// // Spawn a new task to handle the request
+    /// tokio::spawn(async move {
+    ///     let result = match system.send_request(request_clone).await {
+    ///         Ok(result) => result,
+    ///         Err(e) => {
+    ///             tracing::error!("Failed to request agent: {}", e);
+    ///             // Default value or appropriate error representation
+    ///             Value::Null
+    ///         }
+    ///     };
+    ///     
+    ///     // Send the result back (ignore errors if receiver dropped)
+    ///     let _ = tx.send(result);
+    /// });
+    ///
+    /// // Later, receive the result
+    /// let value = match rx.await {
+    ///     Ok(result) => result,
+    ///     Err(_) => {
+    ///         tracing::error!("Channel closed before receiving result");
+    ///         Value::Null
+    ///     }
+    /// };
+    /// # }
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// * `event` - The request event to send
+    ///
+    /// # Returns
+    ///
+    /// * `SystemResult<Value>` - The response value or an error
+    ///
+    /// # Errors
+    ///
+    /// * `SystemError::UnsupportedRequest` - If the event is not a request event
+    /// * `SystemError::RequestError` - If the request fails or times out
     pub async fn send_request(&self, event: Event) -> SystemResult<Value> {
         let request_id = match event.event_type.clone() {
             EventType::Request { request_id, .. } => request_id,
@@ -872,7 +948,7 @@ pub struct ScaleStatus {
 }
 
 // システム全体の状態
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SystemStatus {
     pub started_at: DateTime<Utc>,
     pub running: bool,
@@ -884,7 +960,7 @@ pub struct SystemStatus {
     pub event_capacity: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AgentStatus {
     pub name: String,
     pub state: String,

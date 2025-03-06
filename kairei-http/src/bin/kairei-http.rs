@@ -54,6 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let config = ServerConfig {
                 host: cli.host,
                 port: cli.port,
+                enable_auth: false, // Disable auth by default for CLI
             };
 
             println!(

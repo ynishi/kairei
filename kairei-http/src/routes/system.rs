@@ -1,7 +1,28 @@
-use crate::handlers::system::get_system_info;
-use axum::{Router, routing::get};
+use crate::handlers::{
+    create_system, delete_system, get_system, list_systems, start_system, stop_system,
+};
+use crate::server::AppState;
+use axum::routing::delete;
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
-/// Create the system routes
-pub fn routes() -> Router {
-    Router::new().route("/system/info", get(get_system_info))
+use super::{agents, events};
+
+/// Create the system routes with state
+pub fn routes() -> Router<AppState> {
+    Router::new().nest("/systems", system_routes())
+}
+
+fn system_routes() -> Router<AppState> {
+    Router::new()
+        .route("/", get(list_systems))
+        .route("/", post(create_system))
+        .route("/{system_id}", get(get_system))
+        .route("/{system_id}/start", post(start_system))
+        .route("/{system_id}/stop", post(stop_system))
+        .route("/{system_id}", delete(delete_system))
+        .nest("/{system_id}/agents", agents::routes())
+        .nest("/{system_id}/events", events::routes())
 }

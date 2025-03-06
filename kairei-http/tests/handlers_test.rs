@@ -1,15 +1,52 @@
-use axum::{Json, extract::Path, http::StatusCode};
-use kairei_http::handlers::{
-    agents::{create_agent, get_agent_details},
-    events::{send_agent_request, send_event},
-    system::get_system_info,
+use axum::{extract::Path, http::StatusCode, response::Json};
+use kairei_http::{
+    handlers::test_helpers::{
+        create_test_state, create_test_user_with_api_key, test_create_agent, test_get_agent,
+        test_get_system, test_send_agent_request, test_send_event,
+    },
+    models::agents::AgentCreationRequest,
+    models::events::{AgentRequestPayload, EventRequest},
 };
 use serde_json::json;
 
 #[tokio::test]
-async fn test_get_system_info_handler() {
-    // Call the handler directly
-    let response = get_system_info().await;
+async fn test_auth_store_default_users() {
+    // Create a test state with default users
+    let app_state = create_test_state();
+
+    // Verify that the default admin user exists
+    let admin_user = app_state.auth_store.get_user_by_api_key("admin-key");
+    assert!(admin_user.is_some());
+    assert_eq!(admin_user.unwrap().user_id, "admin");
+
+    // Verify that the default regular users exist
+    let user1 = app_state.auth_store.get_user_by_api_key("user1-key");
+    assert!(user1.is_some());
+    assert_eq!(user1.unwrap().user_id, "user1");
+
+    let user2 = app_state.auth_store.get_user_by_api_key("user2-key");
+    assert!(user2.is_some());
+    assert_eq!(user2.unwrap().user_id, "user2");
+}
+
+#[tokio::test]
+async fn test_create_custom_user() {
+    // Create a test state
+    let app_state = create_test_state();
+
+    // Create a custom test user
+    create_test_user_with_api_key(&app_state, "test-user", "Test User", false, "test-key");
+
+    // Verify that the custom user exists
+    let user = app_state.auth_store.get_user_by_api_key("test-key");
+    assert!(user.is_some());
+    assert_eq!(user.unwrap().user_id, "test-user");
+}
+
+#[tokio::test]
+async fn test_get_system_handler() {
+    // Call the test handler directly
+    let response = test_get_system().await;
 
     // Convert to a standard response for testing
     let response_body = serde_json::to_string(&response.0).unwrap();
@@ -40,8 +77,11 @@ async fn test_create_agent_handler() {
         }
     });
 
-    // Call the handler directly
-    let response = create_agent(Json(serde_json::from_value(payload).unwrap())).await;
+    // Call the test handler directly
+    let response = test_create_agent(Json(
+        serde_json::from_value::<AgentCreationRequest>(payload).unwrap(),
+    ))
+    .await;
 
     // Check the response status
     assert_eq!(response.0, StatusCode::CREATED);
@@ -63,9 +103,9 @@ async fn test_create_agent_handler() {
 }
 
 #[tokio::test]
-async fn test_get_agent_details_handler() {
-    // Call the handler directly with a valid agent ID
-    let response = get_agent_details(Path("test-agent-001".to_string())).await;
+async fn test_get_agent_handler() {
+    // Call the test handler directly with a valid agent ID
+    let response = test_get_agent(Path("test-agent-001".to_string())).await;
 
     // Check that the response is Ok
     assert!(response.is_ok());
@@ -84,7 +124,7 @@ async fn test_get_agent_details_handler() {
     assert!(body.get("statistics").is_some());
 
     // Test with a non-existent agent ID
-    let response = get_agent_details(Path("not-found-agent".to_string())).await;
+    let response = test_get_agent(Path("not-found-agent".to_string())).await;
 
     // Check that the response is an error with NOT_FOUND status
     assert!(response.is_err());
@@ -104,8 +144,11 @@ async fn test_send_event_handler() {
         "target_agents": ["weather-agent-001"]
     });
 
-    // Call the handler directly
-    let response = send_event(Json(serde_json::from_value(payload).unwrap())).await;
+    // Call the test handler directly
+    let response = test_send_event(Json(
+        serde_json::from_value::<EventRequest>(payload).unwrap(),
+    ))
+    .await;
 
     // Convert to a standard response for testing
     let response_body = serde_json::to_string(&response.0).unwrap();
@@ -134,10 +177,10 @@ async fn test_send_agent_request_handler() {
         }
     });
 
-    // Call the handler directly with a valid agent ID
-    let response = send_agent_request(
+    // Call the test handler directly with a valid agent ID
+    let response = test_send_agent_request(
         Path("weather-agent-001".to_string()),
-        Json(serde_json::from_value(payload.clone()).unwrap()),
+        Json(serde_json::from_value::<AgentRequestPayload>(payload.clone()).unwrap()),
     )
     .await;
 
@@ -161,9 +204,9 @@ async fn test_send_agent_request_handler() {
     assert_eq!(body["result"]["location"], "Tokyo");
 
     // Test with a non-existent agent ID
-    let response = send_agent_request(
+    let response = test_send_agent_request(
         Path("not-found-agent".to_string()),
-        Json(serde_json::from_value(payload).unwrap()),
+        Json(serde_json::from_value::<AgentRequestPayload>(payload).unwrap()),
     )
     .await;
 

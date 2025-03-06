@@ -457,6 +457,28 @@ impl From<Value> for expression::Value {
     }
 }
 
+impl From<&Value> for serde_json::Value {
+    fn from(value: &Value) -> Self {
+        match value {
+            Value::Integer(i) => serde_json::Value::Number(serde_json::Number::from(*i)),
+            Value::Float(f) => serde_json::Value::Number(serde_json::Number::from_f64(*f).unwrap()),
+
+            Value::Boolean(b) => serde_json::Value::Bool(*b),
+            Value::String(s) => serde_json::Value::String(s.clone()),
+            Value::List(l) => {
+                serde_json::Value::Array(l.iter().map(serde_json::Value::from).collect())
+            }
+            Value::Duration(d) => serde_json::Value::String(format!("{:?}", d)),
+            Value::Map(m) => serde_json::Value::Object(
+                m.iter()
+                    .map(|(k, v)| (k.clone(), serde_json::Value::from(v)))
+                    .collect(),
+            ),
+            Value::Null => serde_json::Value::Null,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LastStatus {
     pub last_event_type: EventType,
