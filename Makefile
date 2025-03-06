@@ -73,11 +73,11 @@ dev-http:
 	cd kairei-http && RUST_LOG=kairei=debug cargo run
 
 build:
-	cargo build --workspace
+	cargo build --workspace --release
 
 setup-hooks:
 	@echo "Setting up Git hooks..."
 	@chmod +x scripts/install-hooks.sh
 	@./scripts/install-hooks.sh
 
-all: fmt test doc
+all: fmt build test doc
