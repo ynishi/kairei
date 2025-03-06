@@ -9,14 +9,14 @@ steps:
     args:
       - push
       - gcr.io/$PROJECT_ID/kairei-http
-  - name: "gcr.io/cloud-builders/gcloud"
+  - name: gcr.io/cloud-builders/gcloud
     args:
       - run
       - deploy
       - kairei-http
       - "--image"
       - gcr.io/$PROJECT_ID/kairei-http
-      - --region
+      - "--region"
       - $_REGION
 options:
   logging: CLOUD_LOGGING_ONLY
