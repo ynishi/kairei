@@ -1,3 +1,5 @@
+use core::panic;
+
 use crate::auth::{AuthAdmin, AuthUser};
 use crate::models::{
     GetAgentResponse, ListAgentsResponse, ScaleDownAgentRequest, ScaleUpAgentRequest,
@@ -210,11 +212,10 @@ pub async fn request_agent(
     if user.user_id != session.user_id {
         return Err(StatusCode::FORBIDDEN);
     }
+    let system_clone = session.system.clone();
+    drop(session);
 
     let request_id = uuid::Uuid::new_v4();
-
-    let system: tokio::sync::RwLockWriteGuard<'_, kairei_core::system::System> =
-        session.system.write().await;
     let request = event_bus::Event::request_builder()
         .request_type(&payload.request_type)
         .requester(&user.user_id)
@@ -225,12 +226,32 @@ pub async fn request_agent(
             tracing::error!("Failed to build request: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    let result = system.send_request(request).await.map_err(|e| {
-        tracing::error!("Failed to request agent: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let request_clone = request.clone();
 
-    let value = serde_json::Value::from(&result);
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    tokio::spawn(async move {
+        let system = system_clone.read().await;
+        match system.send_request(request_clone).await {
+            Ok(result) => {
+                // 成功時の処理
+                tracing::info!("Request succeeded: {:?}", result);
+                let _ = tx.send(result);
+            }
+            Err(e) => {
+                // エラー時の処理
+                tracing::error!("Failed to request agent: {}", e);
+            }
+        }
+    });
+
+    let value = match rx.await {
+        Ok(result) => serde_json::Value::from(&result),
+        Err(_) => {
+            tracing::error!("Failed to receive response from task");
+            serde_json::Value::Null
+        }
+    };
 
     Ok(Json(SendRequestAgentResponse { value }))
 }

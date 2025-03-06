@@ -57,19 +57,19 @@ pub struct AgentDetails {
     pub statistics: AgentStatistics,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GetAgentResponse {
     pub agent_id: String,
     pub status: kairei_core::system::AgentStatus,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ListAgentsResponse {
     pub agents: Vec<GetAgentResponse>,
 }
 
 /// Agent creation request model
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ScaleUpAgentRequest {
     /// Number of instances to scale up by
     pub instances: usize,
@@ -79,7 +79,7 @@ pub struct ScaleUpAgentRequest {
 }
 
 /// Agent creation request model
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ScaleDownAgentRequest {
     /// Number of instances to scale up by
     pub instances: usize,
@@ -88,7 +88,7 @@ pub struct ScaleDownAgentRequest {
     pub options: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SendRequestAgentRequest {
     pub request_type: String,
     pub payload: Value,

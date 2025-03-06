@@ -683,6 +683,70 @@ impl System {
             .map_err(SystemError::from)
     }
 
+    /// Send a request event and wait for a response.
+    ///
+    /// This method sends a request event to the specified agent and waits for a response.
+    /// It blocks the current task until a response is received or a timeout occurs.
+    ///
+    /// # Important
+    ///
+    /// This method is blocking and will wait for the response. For non-blocking operation,
+    /// consider using `tokio::spawn` to run this method in a separate task:
+    ///
+    /// ```rust,no_run
+    /// # // The following code is for illustration purposes only
+    /// # use kairei_core::event_bus::{Event, Value};
+    /// # use std::sync::Arc;
+    /// # async fn example() {
+    /// # let request = Event::default();
+    /// # let system = Arc::new(std::sync::RwLock::new(()));
+    /// // Non-blocking usage example:
+    /// let request_clone = request.clone();
+    /// let system_clone = system.clone();
+    ///
+    /// // Create a oneshot channel to receive the result
+    /// let (tx, rx) = tokio::sync::oneshot::channel();
+    ///
+    /// // Spawn a new task to handle the request
+    /// tokio::spawn(async move {
+    ///     let system = system_clone.read().await;
+    ///     
+    ///     let result = match system.send_request(request_clone).await {
+    ///         Ok(result) => result,
+    ///         Err(e) => {
+    ///             tracing::error!("Failed to request agent: {}", e);
+    ///             // Default value or appropriate error representation
+    ///             Value::Null
+    ///         }
+    ///     };
+    ///     
+    ///     // Send the result back (ignore errors if receiver dropped)
+    ///     let _ = tx.send(result);
+    /// });
+    ///
+    /// // Later, receive the result
+    /// let value = match rx.await {
+    ///     Ok(result) => result,
+    ///     Err(_) => {
+    ///         tracing::error!("Channel closed before receiving result");
+    ///         Value::Null
+    ///     }
+    /// };
+    /// # }
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// * `event` - The request event to send
+    ///
+    /// # Returns
+    ///
+    /// * `SystemResult<Value>` - The response value or an error
+    ///
+    /// # Errors
+    ///
+    /// * `SystemError::UnsupportedRequest` - If the event is not a request event
+    /// * `SystemError::RequestError` - If the request fails or times out
     pub async fn send_request(&self, event: Event) -> SystemResult<Value> {
         let request_id = match event.event_type.clone() {
             EventType::Request { request_id, .. } => request_id,
