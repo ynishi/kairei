@@ -696,10 +696,12 @@ impl System {
     /// ```rust,no_run
     /// # // The following code is for illustration purposes only
     /// # use kairei_core::event_bus::{Event, Value};
+    /// # use kairei_core::system::System;
+    /// # use kairei_core::config::{SystemConfig, SecretConfig};
     /// # use std::sync::Arc;
     /// # async fn example() {
     /// # let request = Event::default();
-    /// # let system = Arc::new(std::sync::RwLock::new(()));
+    /// # let system = Arc::new(System::new(&SystemConfig::default(), &SecretConfig::default()).await);
     /// // Non-blocking usage example:
     /// let request_clone = request.clone();
     /// let system_clone = system.clone();
@@ -709,8 +711,6 @@ impl System {
     ///
     /// // Spawn a new task to handle the request
     /// tokio::spawn(async move {
-    ///     let system = system_clone.read().await;
-    ///     
     ///     let result = match system.send_request(request_clone).await {
     ///         Ok(result) => result,
     ///         Err(e) => {

@@ -1,5 +1,3 @@
-use core::panic;
-
 use crate::auth::{AuthAdmin, AuthUser};
 use crate::models::{
     GetAgentResponse, ListAgentsResponse, ScaleDownAgentRequest, ScaleUpAgentRequest,
