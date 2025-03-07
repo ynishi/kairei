@@ -127,7 +127,7 @@ mod tests {
             format!("{:?}", system_config.clone())
         );
         assert_eq!(
-            format!("{:?}", session.secret_config),
+            format!("{:?}", SecretConfig::from(session.secret_config)),
             format!("{:?}", &secret_config.clone())
         );
         assert_eq!(session.user_id, user_id);
@@ -140,7 +140,10 @@ mod tests {
             format!("{:?}", system_config)
         );
         assert_eq!(
-            format!("{:?}", sessions[0].1.secret_config),
+            format!(
+                "{:?}",
+                SecretConfig::from(sessions[0].1.secret_config.clone())
+            ),
             format!("{:?}", secret_config)
         );
 
