@@ -26,6 +26,10 @@ struct Cli {
     #[arg(short, long, default_value = "/etc/secrets/secret.json")]
     secret_json: PathBuf,
 
+    /// Enable authentication
+    #[arg(short, long, default_value = "true")]
+    enable_auth: bool,
+
     /// Subcommands
     #[command(subcommand)]
     command: Option<Commands>,
@@ -68,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ServerConfig {
                 host: cli.host,
                 port: cli.port,
-                enable_auth: false, // Disable auth by default for CLI
+                enable_auth: cli.enable_auth,
             }
         }
     };

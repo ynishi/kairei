@@ -27,7 +27,7 @@ impl Default for ServerConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 3000,
-            enable_auth: false,
+            enable_auth: true,
         }
     }
 }
@@ -73,6 +73,7 @@ pub async fn start_server(
 
     // Create the auth store
     let auth_store = AuthStore::default();
+    auth_store.clean_keys();
     auth_store.add_api_key(secret.admin_service_key, "admin");
     auth_store.add_api_key(format!("{}_1", secret.user_service_key.clone()), "user1");
     auth_store.add_api_key(format!("{}_2", secret.user_service_key.clone()), "user2");

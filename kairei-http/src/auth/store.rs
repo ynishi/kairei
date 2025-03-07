@@ -67,6 +67,11 @@ impl AuthStore {
         self.api_keys.remove(api_key);
     }
 
+    /// Remove all
+    pub fn clean_keys(&self) {
+        self.api_keys.clear();
+    }
+
     /// Remove a user and all associated API keys
     pub fn remove_user(&self, user_id: &str) {
         // Remove the user
