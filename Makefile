@@ -1,6 +1,6 @@
 .PHONY: build run test test-core test-http fmt fmt-core fmt-http doc doc_check doc_open clean_doc all setup-hooks docker-build docker-run docker-push
 
-test: test-core test-http
+test: test-core test-http test-cli
 
 test-core:
 	cd kairei-core && cargo test --quiet
@@ -8,11 +8,13 @@ test-core:
 test-http:
 	cd kairei-http && cargo test --quiet
 
+test-cli:
+	cd kairei-cli && cargo test --quiet
 
 test_v:
 	cd kairei-core && RUST_LOG=debug cargo test -p kairei $(CASE) --verbose
 
-test_all: test_all-core test_all-http
+test_all: test_all-core test_all-http test_all-cli
 
 test_all-core:
 	cd kairei-core && RUN_API_TESTS=true RUST_LOG=error cargo test --all-features
@@ -20,12 +22,15 @@ test_all-core:
 test_all-http:
 	cd kairei-http && RUN_API_TESTS=true RUST_LOG=error cargo test --all-features
 
+test_all-cli:
+	cd kairei-cli && RUN_API_TESTS=true RUST_LOG=error cargo test --all-features
+
 bench: bench-core
 
 bench-core:
 	cd kairei-core && cargo bench
 
-fmt: fmt-core fmt-http
+fmt: fmt-core fmt-http fmt-cli
 
 fmt-core:
 	cd kairei-core && cargo fmt
@@ -39,7 +44,13 @@ fmt-http:
 	cd kairei-http && cargo clippy -- -D warnings
 	cd kairei-http && cargo fmt
 
-doc: doc-core doc-http
+fmt-cli:
+	cd kairei-cli && cargo fmt
+	cd kairei-cli && cargo clippy --fix --allow-dirty
+	cd kairei-cli && cargo clippy -- -D warnings
+	cd kairei-cli && cargo fmt
+
+doc: doc-core doc-http doc-cli
 
 doc-core:
 	cd kairei-core && cargo doc --no-deps
@@ -47,7 +58,10 @@ doc-core:
 doc-http:
 	cd kairei-http && cargo doc --no-deps
 
-doc_check: doc_check-core doc_check-http
+doc-cli:
+	cd kairei-cli && cargo doc --no-deps
+
+doc_check: doc_check-core doc_check-http doc_check-cli
 
 doc_check-core:
 	cd kairei-core && RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo doc --no-deps --document-private-items --all-features
@@ -55,22 +69,29 @@ doc_check-core:
 doc_check-http:
 	cd kairei-http && RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo doc --no-deps --document-private-items --all-features
 
+doc_check-cli:
+	cd kairei-cli && RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo doc --no-deps --document-private-items --all-features
 
 doc_open:
 	cd kairei-core && cargo doc --no-deps --open
 	cd kairei-http && cargo doc --no-deps --open
+	cd kairei-cli && cargo doc --no-deps --open
 
 clean_doc:
 	cd kairei-core && rm -rf target/doc
 	cd kairei-http && rm -rf target/doc
+	cd kairei-cli && rm -rf target/doc
 
-dev: dev-core dev-http
+dev: dev-core dev-http dev-cli
 
 dev-core:
 	cd kairei-core && RUST_LOG=kairei=debug cargo run --bin kairei
 
 dev-http:
 	cd kairei-http && RUST_LOG=kairei=debug cargo run
+
+dev-cli:
+	cd kairei-cli && RUST_LOG=kairei=debug cargo run
 
 build:
 	cargo build --workspace --release
