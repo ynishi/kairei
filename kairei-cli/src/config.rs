@@ -1,7 +1,7 @@
 use directories::ProjectDirs;
-use serde::{Deserialize, Serialize};
+use secrecy::{ExposeSecret, SecretString};
+use serde::{Deserialize, Serialize, ser::SerializeMap};
 use std::{
-    env,
     fs::{self, File},
     io::{self, Read, Write},
     path::{Path, PathBuf},
@@ -12,16 +12,16 @@ use thiserror::Error;
 pub enum ConfigError {
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
-    
+
     #[error("JSON parsing error: {0}")]
     Json(#[from] serde_json::Error),
-    
+
     #[error("No home directory found")]
     NoHomeDir,
-    
+
     #[error("Config directory not found")]
     NoConfigDir,
-    
+
     #[error("Failed to create config directory: {0}")]
     CreateConfigDir(String),
 }
@@ -29,14 +29,49 @@ pub enum ConfigError {
 pub type ConfigResult<T> = Result<T, ConfigError>;
 
 /// Credentials for accessing the Kairei API
-#[derive(Debug, Serialize, Deserialize)]
+/// Supported sources(in order of precedence):
+/// - CLI arguments(by clap)
+/// - Environment variables(by clap)
+/// - Dot-env file(by clap and dotenv)
+/// - Credentials file
+///   - Support Store and Load
+#[derive(Debug, Clone, Deserialize)]
 pub struct Credentials {
     /// API key for authentication
-    pub api_key: String,
-    
+    pub api_key: SecretString,
+
     /// Default API server URL
     #[serde(default = "default_api_url")]
     pub api_url: String,
+
+    // for internal use
+    credentials_dir: Option<String>,
+}
+
+pub fn partial_show_secret(s: &SecretString) -> String {
+    // show last 4 characters
+    let chars = s.expose_secret().chars();
+    if chars.clone().count() <= 4 {
+        "**************************".to_string()
+    } else {
+        let last_4 = chars.rev().take(4).collect::<String>();
+        format!(
+            "**********************{}",
+            last_4.chars().rev().collect::<String>()
+        )
+    }
+}
+
+impl Serialize for Credentials {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(2))?;
+        map.serialize_entry("api_key", &self.api_key.expose_secret())?;
+        map.serialize_entry("api_url", &self.api_url)?;
+        map.end()
+    }
 }
 
 fn default_api_url() -> String {
@@ -46,162 +81,177 @@ fn default_api_url() -> String {
 impl Default for Credentials {
     fn default() -> Self {
         Self {
-            api_key: String::new(),
+            api_key: SecretString::new(Box::default()),
             api_url: default_api_url(),
+            credentials_dir: None,
         }
     }
 }
 
-/// Get the credentials file path in the user's config directory
-fn get_credentials_file_path() -> ConfigResult<PathBuf> {
-    let proj_dirs = ProjectDirs::from("com", "kairei", "kairei-cli")
-        .ok_or(ConfigError::NoHomeDir)?;
-    
-    let config_dir = proj_dirs.config_dir();
-    
-    // Create the config directory if it doesn't exist
-    if !config_dir.exists() {
-        fs::create_dir_all(config_dir)
-            .map_err(|e| ConfigError::CreateConfigDir(e.to_string()))?;
-    }
-    
-    Ok(config_dir.join("credentials.json"))
-}
-
-/// Load credentials from various sources in order of precedence:
-/// 1. Environment variables (KAIREI_API_KEY, KAIREI_API_URL)
-/// 2. .env file in the current directory
-/// 3. Credentials file in the user's config directory
-pub fn load_credentials() -> ConfigResult<Credentials> {
-    // Load .env file if it exists (doesn't overwrite existing env vars)
-    let _ = dotenv::dotenv();
-    
-    // Start with default credentials
-    let mut credentials = Credentials::default();
-    
-    // Try to load from credentials file
-    let file_path = get_credentials_file_path()?;
-    if file_path.exists() {
-        let mut file = File::open(&file_path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        credentials = serde_json::from_str(&contents)?;
-    }
-    
-    // Override with environment variables if they exist
-    if let Ok(api_key) = env::var("KAIREI_API_KEY") {
-        credentials.api_key = api_key;
-    }
-    
-    if let Ok(api_url) = env::var("KAIREI_API_URL") {
-        credentials.api_url = api_url;
-    }
-    
-    Ok(credentials)
-}
-
-/// Save credentials to the user's config directory
-pub fn save_credentials(credentials: &Credentials) -> ConfigResult<()> {
-    let file_path = get_credentials_file_path()?;
-    let json = serde_json::to_string_pretty(credentials)?;
-    
-    let mut file = File::create(file_path)?;
-    file.write_all(json.as_bytes())?;
-    
-    Ok(())
-}
-
-/// Check if .env file exists in the current directory and create it if requested
-pub fn setup_env_file<P: AsRef<Path>>(path: P, api_key: &str, api_url: Option<&str>) -> ConfigResult<()> {
-    let path = path.as_ref();
-    
-    // Create or append to .env file
-    let mut content = String::new();
-    
-    // If file exists, read its content
-    if path.exists() {
-        let mut file = File::open(path)?;
-        file.read_to_string(&mut content)?;
-    }
-
-    let find_content = content.clone();
-    
-    // Helper to check if a variable is already set in the content
-    let has_var = |name: &str| find_content.lines().any(|line| line.starts_with(&format!("{}=", name)));
-    
-    // Add API key if not already set
-    if !has_var("KAIREI_API_KEY") && !api_key.is_empty() {
-        if !content.is_empty() && !content.ends_with('\n') {
-            content.push('\n');
+impl Credentials {
+    pub fn new(credentials_dir: String) -> Self {
+        Self {
+            credentials_dir: Some(credentials_dir),
+            ..Default::default()
         }
-        content.push_str(&format!("KAIREI_API_KEY={}\n", api_key));
     }
-    
-    // Add API URL if provided and not already set
-    if let Some(url) = api_url {
-        if !has_var("KAIREI_API_URL") && !url.is_empty() {
-            if !content.is_empty() && !content.ends_with('\n') {
-                content.push('\n');
+
+    pub fn initialize(
+        credentials_dir: Option<String>,
+        url: Option<String>,
+        key: Option<String>,
+    ) -> Self {
+        let mut credentials = if let Some(dir) = credentials_dir {
+            let mut credentials = Credentials::new(dir);
+            let _ = credentials.load_credentials();
+            credentials
+        } else {
+            Credentials::default()
+        };
+
+        if let Some(url) = url {
+            if !url.is_empty() {
+                credentials.api_url = url;
             }
-            content.push_str(&format!("KAIREI_API_URL={}\n", url));
         }
+
+        if let Some(key) = key {
+            if !key.is_empty() {
+                credentials.api_key = SecretString::new(Box::from(key));
+            }
+        }
+        credentials
     }
-    
-    // Write to file
-    let mut file = File::create(path)?;
-    file.write_all(content.as_bytes())?;
-    
-    Ok(())
+
+    /// Get the credentials file path in the user's config directory
+    pub fn get_credentials_file_path(&self) -> ConfigResult<PathBuf> {
+        if let Some(parent) = self.credentials_dir.clone() {
+            let parent_path = Path::new(&parent);
+            if !parent_path.exists() {
+                fs::create_dir_all(parent_path)
+                    .map_err(|e| ConfigError::CreateConfigDir(e.to_string()))?;
+            }
+            return Ok(parent_path.join("credentials.json"));
+        }
+        let proj_dirs =
+            ProjectDirs::from("com", "kairei", "kairei-cli").ok_or(ConfigError::NoHomeDir)?;
+
+        let config_dir = proj_dirs.config_dir();
+
+        // Create the config directory if it doesn't exist
+        if !config_dir.exists() {
+            fs::create_dir_all(config_dir)
+                .map_err(|e| ConfigError::CreateConfigDir(e.to_string()))?;
+        }
+
+        Ok(config_dir.join("credentials.json"))
+    }
+
+    pub fn load_credentials(&mut self) -> ConfigResult<Credentials> {
+        // Try to load from credentials file
+        let file_path = self.get_credentials_file_path()?;
+        if file_path.exists() {
+            let mut file = File::open(&file_path)?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            let credentials: Self = serde_json::from_str(&contents)?;
+            self.api_key = credentials.api_key;
+            self.api_url = credentials.api_url;
+        }
+
+        Ok(self.clone())
+    }
+
+    pub fn save_credentials(&self) -> ConfigResult<()> {
+        let file_path = self.get_credentials_file_path()?;
+        let json = serde_json::to_string_pretty(self)?;
+
+        let mut file = File::create(file_path)?;
+        file.write_all(json.as_bytes())?;
+
+        Ok(())
+    }
 }
 
-/// Get the best available API key from various sources
-pub fn get_api_key(cli_key: Option<&str>) -> String {
-    // First priority: CLI argument
-    if let Some(key) = cli_key {
-        if !key.is_empty() {
-            return key.to_string();
-        }
-    }
-    
-    // Second priority: Environment variable
-    if let Ok(key) = env::var("KAIREI_API_KEY") {
-        if !key.is_empty() {
-            return key;
-        }
-    }
-    
-    // Third priority: Stored credentials
-    if let Ok(creds) = load_credentials() {
-        if !creds.api_key.is_empty() {
-            return creds.api_key;
-        }
-    }
-    
-    // Default: empty string
-    String::new()
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-/// Get the best available API URL from various sources
-pub fn get_api_url(cli_url: &str) -> String {
-    // First priority: CLI argument
-    if !cli_url.is_empty() {
-        return cli_url.to_string();
+    use tempfile::TempDir;
+
+    fn test_key() -> String {
+        "test-key-123".to_string()
     }
-    
-    // Second priority: Environment variable
-    if let Ok(url) = env::var("KAIREI_API_URL") {
-        if !url.is_empty() {
-            return url;
-        }
+
+    fn test_url() -> String {
+        "https://test-url.example.com".to_string()
     }
-    
-    // Third priority: Stored credentials
-    if let Ok(creds) = load_credentials() {
-        if !creds.api_url.is_empty() {
-            return creds.api_url;
-        }
+
+    // Helper function to create a temporary directory and return its path
+    fn create_temp_dir() -> TempDir {
+        tempfile::tempdir().expect("Failed to create temporary directory")
     }
-    
-    // Default
-    default_api_url()
+
+    fn setup_test_credentials_file() -> TempDir {
+        let temp_dir = create_temp_dir();
+        let credentials = Credentials {
+            api_key: SecretString::new(Box::from(test_key())),
+            api_url: test_url(),
+            credentials_dir: temp_dir.path().to_str().map(|s| s.to_string()),
+        };
+        credentials.save_credentials().unwrap();
+        temp_dir
+    }
+
+    #[test]
+    fn test_credentials_default() {
+        let credentials = Credentials::default();
+        assert_eq!(credentials.api_key.expose_secret(), "");
+        assert_eq!(credentials.api_url, default_api_url());
+    }
+
+    #[test]
+    fn test_credentials_serialization() {
+        let key = "test-key-123";
+        let credentials = Credentials {
+            api_key: SecretString::new(Box::from("test-key-123")),
+            api_url: "https://test-url.example.com".to_string(),
+            credentials_dir: None,
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_string_pretty(&credentials).unwrap();
+
+        // Deserialize back
+        let deserialized: Credentials = serde_json::from_str(&json).unwrap();
+
+        // Verify
+        assert_eq!(credentials.api_key.expose_secret(), key);
+        assert_eq!(deserialized.api_key.expose_secret(), key);
+        assert_eq!(credentials.api_url, deserialized.api_url);
+    }
+
+    #[test]
+    fn test_initialize_credential() {
+        let credentials = Credentials::initialize(None, Some(test_url()), Some(test_key()));
+
+        assert_eq!(credentials.api_key.expose_secret(), test_key());
+        assert_eq!(credentials.api_url, test_url());
+
+        let dir = setup_test_credentials_file();
+        let credentials =
+            Credentials::initialize(dir.path().to_str().map(|d| d.to_string()), None, None);
+        assert_eq!(credentials.api_key.expose_secret(), test_key());
+        assert_eq!(credentials.api_url, test_url());
+
+        let key = "test-key-124";
+        let url = "https://test-url.example2.com";
+        let credentials = Credentials::initialize(
+            dir.path().to_str().map(|d| d.to_string()),
+            Some(url.to_string()),
+            Some(key.to_string()),
+        );
+        assert_eq!(credentials.api_key.expose_secret(), key);
+        assert_eq!(credentials.api_url, url);
+    }
 }

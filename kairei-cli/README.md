@@ -23,10 +23,10 @@ kairei [OPTIONS] <COMMAND>
 - `--verbose`: Enable debug mode
 - `--api-url <API_URL>`: API server URL [default: http://localhost:3000]
 - `--api-key <API_KEY>`: API key for authentication
-- `--output <OUTPUT>`: Output format (json, yaml, table) [default: json]
+- `--credentials-dir <DIR>`: Custom directory for storing credentials [default: system user config dir]
+- `--output <o>`: Output format (json, yaml, table) [default: json]
 
 ### Commands
-
 #### Running Locally
 
 ```bash
