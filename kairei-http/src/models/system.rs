@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use kairei_core::config::SystemConfig;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Requests
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, ToSchema)]
 pub struct CreateSystemRequest {
     /// System name
     pub name: String,
@@ -16,7 +16,22 @@ pub struct CreateSystemRequest {
     pub config: SystemConfig,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, ToSchema)]
+pub struct SystemConfig {
+    /// System name
+    pub name: String,
+
+    /// System description
+    pub description: Option<String>,
+}
+
+impl From<SystemConfig> for kairei_core::config::SystemConfig {
+    fn from(_config: SystemConfig) -> Self {
+        Self::default()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CreateSystemResponse {
     /// System ID
     pub system_id: String,

@@ -16,6 +16,9 @@ use kairei_core::system::{System, SystemStatus};
 use tokio::sync::RwLock;
 
 /// Create the system
+#[utoipa::path(get, path = "/systems", responses(
+    (status = 200, description = "List all todos successfully", body = CreateSystemRequest)
+),)]
 #[axum::debug_handler]
 pub async fn create_system(
     State(state): State<AppState>,
@@ -35,7 +38,7 @@ pub async fn create_system(
         },
     );
 
-    let config = payload.config.clone();
+    let config = kairei_core::config::SystemConfig::from(payload.config.clone());
 
     // impl create system using kairei-core with the session manager
     let system: System = System::new(&config, &secret).await;

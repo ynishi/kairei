@@ -1,4 +1,5 @@
-use kairei_core::{config::SystemConfig, system::SystemStatus};
+use kairei_core::system::SystemStatus;
+use kairei_http::models::SystemConfig;
 use kairei_http::models::{
     AgentCreationRequest, AgentStatus, CreateSystemRequest, CreateSystemResponse, EventRequest,
     ListSystemsResponse, StartSystemRequest,

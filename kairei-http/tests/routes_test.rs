@@ -1,18 +1,14 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use axum::http::{Request, StatusCode};
-use kairei_core::{
-    config::{ProviderConfig, ProviderConfigs, SystemConfig},
-    provider::provider::ProviderType,
-    system::SystemStatus,
-};
+use kairei_core::system::SystemStatus;
 use kairei_http::{
     auth::auth_middleware,
     handlers::test_helpers::create_test_state,
     models::{
         CreateSystemRequest, CreateSystemResponse, EventRequest, GetAgentResponse,
         ListAgentsResponse, ListSystemsResponse, ScaleDownAgentRequest, ScaleUpAgentRequest,
-        SendRequestAgentRequest, StartSystemRequest,
+        SendRequestAgentRequest, StartSystemRequest, SystemConfig,
     },
     routes,
 };
@@ -20,6 +16,10 @@ use serde_json::json;
 use tower::ServiceExt;
 
 fn create_test_system_config() -> SystemConfig {
+    SystemConfig {
+        ..Default::default()
+    }
+    /*
     SystemConfig {
         provider_configs: {
             let mut providers = HashMap::new();
@@ -37,6 +37,7 @@ fn create_test_system_config() -> SystemConfig {
         },
         ..Default::default()
     }
+    */
 }
 
 #[tokio::test]

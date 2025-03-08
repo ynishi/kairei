@@ -2,12 +2,23 @@ pub mod agents;
 pub mod events;
 pub mod system;
 
-use crate::server::AppState;
+use crate::handlers;
+use crate::{models::CreateSystemRequest, server::AppState};
 use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(handlers::create_system),
+    components(schemas(CreateSystemRequest))
+)]
+struct ApiDoc;
 
 /// Create the main API router with state
 pub fn create_api_router() -> Router<AppState> {
     Router::new()
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/health", get(health_check))
         .nest("/api/v1", api_v1_router())
 }

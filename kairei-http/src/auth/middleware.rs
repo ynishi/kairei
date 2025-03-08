@@ -14,6 +14,10 @@ pub async fn auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let path = request.uri().path();
+    if ignore_auth_path(path) {
+        return Ok(next.run(request).await);
+    }
     // Extract API key from headers
     let api_key = request
         .headers()
@@ -31,6 +35,14 @@ pub async fn auth_middleware(
 
     // Continue with the request
     Ok(next.run(request).await)
+}
+
+fn ignore_auth_path(path: &str) -> bool {
+    path.starts_with("/health") || is_swagger_path(path)
+}
+
+pub fn is_swagger_path(path: &str) -> bool {
+    path.starts_with("/swagger-ui") || path.starts_with("/api-docs")
 }
 
 /// Extension trait for Request to easily extract the authenticated user

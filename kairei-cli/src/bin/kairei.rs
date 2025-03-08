@@ -6,12 +6,13 @@ use kairei_cli::{
 use kairei_core::{
     Error,
     analyzer::Parser as _,
-    config::{self, SecretConfig, SystemConfig},
+    config::{self, SecretConfig},
     preprocessor::Preprocessor,
     system::System,
     tokenizer::token::Token,
     type_checker::run_type_checker,
 };
+use kairei_http::models::SystemConfig;
 use secrecy::ExposeSecret;
 use std::path::PathBuf;
 use std::{
@@ -355,7 +356,11 @@ async fn run_local(
     debug!("secret_config: {:?}", secret_config);
 
     // Initialize system
-    let mut system = System::new(&config, &secret_config).await;
+    let mut system = System::new(
+        &kairei_core::config::SystemConfig::from(config),
+        &secret_config,
+    )
+    .await;
 
     // Load and parse DSL
     let dsl = std::fs::read_to_string(&args.dsl)
