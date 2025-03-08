@@ -9,7 +9,7 @@ pub mod routes;
 pub mod server;
 pub mod session;
 
-use server::{ServerConfig, start_server};
+use server::{Secret, ServerConfig, start_server};
 
 /// Start the Kairei HTTP server with the default configuration
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
@@ -17,7 +17,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     // Start the server with default configuration
-    start_server(ServerConfig::default()).await
+    start_server(ServerConfig::default(), Secret::default()).await
 }
 
 /// Start the Kairei HTTP server with a custom configuration
@@ -26,5 +26,16 @@ pub async fn start_with_config(config: ServerConfig) -> Result<(), Box<dyn std::
     tracing_subscriber::fmt::init();
 
     // Start the server with the provided configuration
-    start_server(config).await
+    start_server(config, Secret::default()).await
+}
+
+pub async fn start_with_config_and_secret(
+    config: ServerConfig,
+    secret: Secret,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize tracing for logging
+    tracing_subscriber::fmt::init();
+
+    // Start the server with the provided configuration
+    start_server(config, secret).await
 }

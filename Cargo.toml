@@ -1,6 +1,7 @@
 [workspace]
-members = [
+members = [ "kairei-cli",
     "kairei-core",
     "kairei-http",
+    "kairei-cli",
 ]
 resolver = "3"

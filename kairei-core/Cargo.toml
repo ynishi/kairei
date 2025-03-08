@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-async-openai = "0.26.0"
+async-openai = "0.28.0"
 async-recursion = "1.1.1"
 async-trait = "0.1.83"
 chrono = {version = "0.4.39", features = ["serde"] }
@@ -21,6 +21,7 @@ proc-macro2 = "1.0.92"
 quote = "1.0.38"
 regex = "1.11.1"
 reqwest = "0.12.12"
+ring = "0.17.12"
 secrecy = "0.10.3"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.134"

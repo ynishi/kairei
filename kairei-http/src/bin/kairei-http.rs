@@ -1,6 +1,10 @@
 use clap::{Parser, Subcommand};
-use kairei_http::{self, server::ServerConfig};
+use kairei_http::{
+    self,
+    server::{Secret, ServerConfig},
+};
 use std::path::PathBuf;
+use tracing::debug;
 
 /// Kairei HTTP API Server
 #[derive(Parser)]
@@ -17,6 +21,14 @@ struct Cli {
     /// Log level (error, warn, info, debug, trace)
     #[arg(short, long, default_value = "info")]
     log_level: String,
+
+    /// Secret json file path
+    #[arg(short, long, default_value = "/etc/secrets/secret.json")]
+    secret_json: PathBuf,
+
+    /// Enable authentication
+    #[arg(short, long, default_value = "true")]
+    enable_auth: bool,
 
     /// Subcommands
     #[command(subcommand)]
@@ -38,32 +50,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse command line arguments
     let cli = Cli::parse();
 
+    debug!("secret_json path: {:?}", cli.secret_json);
+
+    let secret = std::fs::read_to_string(&cli.secret_json).unwrap_or_default();
+    let secret: Secret = serde_json::from_str(&secret).unwrap_or_default();
+
     // Note: We don't initialize tracing here because it's already initialized in the library
     // This avoids the "a global default trace dispatcher has already been set" error
 
     // Handle subcommands
-    match &cli.command {
+    let config = match &cli.command {
         Some(Commands::Config { file }) => {
             println!("Loading configuration from file: {}", file.display());
             // In a real implementation, we would load the configuration from the file
             // For now, we'll just use the default configuration
-            kairei_http::start().await?;
+            let config: String = std::fs::read_to_string(file)?;
+            serde_json::from_str(&config)?
         }
         None => {
             // Use the host and port from the command line arguments
-            let config = ServerConfig {
+            ServerConfig {
                 host: cli.host,
                 port: cli.port,
-                enable_auth: false, // Disable auth by default for CLI
-            };
-
-            println!(
-                "Starting Kairei HTTP server on {}:{}",
-                config.host, config.port
-            );
-            kairei_http::start_with_config(config).await?;
+                enable_auth: cli.enable_auth,
+            }
         }
-    }
+    };
+    kairei_http::start_with_config_and_secret(config, secret).await?;
 
     Ok(())
 }

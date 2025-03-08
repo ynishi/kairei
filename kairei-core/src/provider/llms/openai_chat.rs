@@ -67,7 +67,7 @@ impl OpenAIChatProviderLLM {
             model: config.common_config.model.clone(),
             messages,
             temperature: Some(config.common_config.temperature),
-            max_tokens: Some(config.common_config.max_tokens as u32),
+            max_completion_tokens: Some(config.common_config.max_tokens as u32),
             ..Default::default()
         };
 
