@@ -9,6 +9,10 @@ use axum::{
 use tracing::debug;
 
 /// List events
+///
+/// Lists all events for a system.
+/// Requires authentication.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn list_events(
     State(_state): State<AppState>,
@@ -23,6 +27,7 @@ pub async fn list_events(
 ///
 /// Sends an event to one or more agents.
 /// Requires authentication.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn emit_event(
     State(_state): State<AppState>,
@@ -41,6 +46,7 @@ pub async fn emit_event(
 ///
 /// Sends a request to a specific agent and returns the result.
 /// Requires authentication.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn subscribe_event(
     State(_state): State<AppState>,

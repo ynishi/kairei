@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use kairei_core::config::SystemConfig;
+use kairei_core::system::SystemStatus as CoreSystemStatus;
 use serde::{Deserialize, Serialize};
 
 /// Requests
@@ -27,7 +28,7 @@ pub struct CreateSystemResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ListSystemsResponse {
-    pub system_statuses: HashMap<String, kairei_core::system::SystemStatus>,
+    pub system_statuses: HashMap<String, CoreSystemStatus>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

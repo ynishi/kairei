@@ -60,6 +60,7 @@ pub struct AgentDetails {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetAgentResponse {
     pub agent_id: String,
+
     pub status: kairei_core::system::AgentStatus,
 }
 

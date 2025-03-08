@@ -16,6 +16,10 @@ use kairei_core::system::{System, SystemStatus};
 use tokio::sync::RwLock;
 
 /// Create the system
+///
+/// Creates a new system with the provided configuration.
+/// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn create_system(
     State(state): State<AppState>,
@@ -63,6 +67,7 @@ pub async fn create_system(
 ///
 /// Returns information about the current state of the system.
 /// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn get_system(
     State(state): State<AppState>,
@@ -88,6 +93,10 @@ pub async fn get_system(
 }
 
 /// List systems
+///
+/// Lists all systems available to the authenticated user.
+/// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn list_systems(
     State(state): State<AppState>,
@@ -116,7 +125,11 @@ pub async fn list_systems(
     Ok(Json(ListSystemsResponse { system_statuses }))
 }
 
-// Start the system
+/// Start the system
+///
+/// Starts a system with the specified ID.
+/// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn start_system(
     State(state): State<AppState>,
@@ -156,7 +169,11 @@ pub async fn start_system(
     }
 }
 
-// Shutdown the system
+/// Shutdown the system
+///
+/// Stops a running system with the specified ID.
+/// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn stop_system(
     State(state): State<AppState>,
@@ -180,6 +197,10 @@ pub async fn stop_system(
 }
 
 /// Delete the system
+///
+/// Deletes a system with the specified ID.
+/// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn delete_system(
     State(state): State<AppState>,

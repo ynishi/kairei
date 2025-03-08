@@ -1,5 +1,4 @@
-use crate::handlers::events::{emit_event, subscribe_event};
-use crate::handlers::list_events;
+use crate::handlers::events::{emit_event, list_events, subscribe_event};
 use crate::server::AppState;
 use axum::routing::get;
 use axum::{Router, routing::post};

@@ -1,6 +1,6 @@
-use crate::handlers::agents::get_agent;
-use crate::handlers::{
-    list_agents, request_agent, scale_down_agent, scale_up_agent, start_agent, stop_agent,
+use crate::handlers::agents::{
+    get_agent, list_agents, request_agent, scale_down_agent, scale_up_agent, start_agent,
+    stop_agent,
 };
 use crate::server::AppState;
 use axum::{

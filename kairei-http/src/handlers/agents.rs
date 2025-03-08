@@ -15,6 +15,7 @@ use kairei_core::event_bus;
 ///
 /// Returns details about a specific agent.
 /// Requires authentication.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn get_agent(
     State(state): State<AppState>,
@@ -41,6 +42,10 @@ pub async fn get_agent(
 }
 
 /// List agents
+///
+/// Lists all agents in a system.
+/// Requires authentication.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn list_agents(
     State(state): State<AppState>,
@@ -76,6 +81,10 @@ pub async fn list_agents(
 }
 
 /// Start agent
+///
+/// Starts an agent with the specified ID.
+/// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn start_agent(
     State(state): State<AppState>,
@@ -101,6 +110,10 @@ pub async fn start_agent(
 }
 
 /// Shutdown agent
+///
+/// Stops a running agent with the specified ID.
+/// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn stop_agent(
     State(state): State<AppState>,
@@ -126,6 +139,10 @@ pub async fn stop_agent(
 }
 
 /// Scale up agent
+///
+/// Increases the number of instances for an agent.
+/// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn scale_up_agent(
     State(state): State<AppState>,
@@ -160,6 +177,10 @@ pub async fn scale_up_agent(
 }
 
 /// Scale down agent
+///
+/// Decreases the number of instances for an agent.
+/// Requires authentication with admin role.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn scale_down_agent(
     State(state): State<AppState>,
@@ -194,6 +215,10 @@ pub async fn scale_down_agent(
 }
 
 /// Request agent
+///
+/// Sends a request to an agent and returns the response.
+/// Requires authentication.
+// OpenAPI documentation removed
 #[axum::debug_handler]
 pub async fn request_agent(
     State(state): State<AppState>,
