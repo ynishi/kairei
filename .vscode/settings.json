@@ -5,6 +5,8 @@
         "kairei",
         "serde",
         "serper",
+        "Sistence",
+        "Sistens",
         "thiserror"
     ]
 }
