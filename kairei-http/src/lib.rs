@@ -33,9 +33,6 @@ pub async fn start_with_config_and_secret(
     config: ServerConfig,
     secret: Secret,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing for logging
-    tracing_subscriber::fmt::init();
-
     // Start the server with the provided configuration
     start_server(config, secret).await
 }
