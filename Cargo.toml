@@ -1,5 +1,5 @@
 [workspace]
-members = [ "kairei-cli",
+members = [
     "kairei-core",
     "kairei-http",
     "kairei-cli",
