@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 COPY Cargo.toml Cargo.lock ./
 COPY kairei-core ./kairei-core
 COPY kairei-http ./kairei-http
+COPY kairei-cli  ./kairei-cli
 
 RUN cargo build --release --bin kairei-http
 
