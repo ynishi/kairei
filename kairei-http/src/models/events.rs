@@ -16,7 +16,7 @@ pub struct EventRequest {
 }
 
 /// Event submission response model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct EventResponse {
     /// Unique identifier for the event
     pub event_id: String,
@@ -29,7 +29,7 @@ pub struct EventResponse {
 }
 
 /// Event status enum
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventStatus {
     /// Event has been queued for delivery

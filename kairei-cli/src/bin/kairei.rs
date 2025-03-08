@@ -1,4 +1,8 @@
-use clap::{Parser, command};
+use clap::{Parser, Subcommand, command};
+use kairei_cli::{
+    api_client::ApiClient,
+    config::{get_api_key, get_api_url, load_credentials, save_credentials, setup_env_file, Credentials},
+};
 use kairei_core::{
     Error,
     analyzer::Parser as _,
@@ -8,13 +12,70 @@ use kairei_core::{
     tokenizer::token::Token,
     type_checker::run_type_checker,
 };
+use std::{fs, io::{self, Write}};
 use std::path::PathBuf;
 use tracing::{debug, info};
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 #[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+
+    /// Path to config file
+    #[arg(short, long, default_value = "config.json", global = true)]
+    config: PathBuf,
+
+    /// Path to secret file
+    #[arg(short, long, default_value = "secret.json", global = true)]
+    secret: PathBuf,
+
+    /// Enable debug mode
+    #[arg(short, long, global = true)]
+    verbose: bool,
+    
+    /// API server URL
+    #[arg(long, default_value = "http://localhost:3000", global = true)]
+    api_url: String,
+    
+    /// API key for authentication
+    #[arg(long, env = "KAIREI_API_KEY", global = true)]
+    api_key: Option<String>,
+    
+    /// Output format (json, yaml, table)
+    #[arg(long, default_value = "json", global = true)]
+    output: String,
+}
+
+#[derive(Subcommand)]
 enum Commands {
+    /// Format a Kairei DSL file
     Fmt(FmtArgs),
+    
+    /// Run the system locally
+    Run(RunArgs),
+    
+    /// Manage Kairei systems (remote API)
+    System {
+        #[command(subcommand)]
+        command: SystemCommands,
+    },
+    
+    /// Manage agents within a system (remote API)
+    Agent {
+        #[command(subcommand)]
+        command: AgentCommands,
+    },
+    
+    /// Manage events within a system (remote API)
+    Event {
+        #[command(subcommand)]
+        command: EventCommands,
+    },
+    
+    /// Manage API credentials
+    Login(LoginArgs),
 }
 
 #[derive(Parser)]
@@ -33,25 +94,187 @@ struct FmtArgs {
 }
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-struct Cli {
-    #[command(subcommand)]
-    command: Option<Commands>,
-
-    /// Path to config file
-    #[arg(short, long, default_value = "config.json")]
-    config: PathBuf,
-
+struct RunArgs {
     /// Path to DSL file
-    #[arg(short, long, default_value = "data/default.kairei")]
+    #[arg(default_value = "data/default.kairei")]
     dsl: PathBuf,
+}
 
-    #[arg(short, long, default_value = "secret.json")]
-    secret: PathBuf,
-
-    /// Enable debug mode
+#[derive(Parser)]
+struct LoginArgs {
+    /// API key to save
     #[arg(short, long)]
-    verbose: bool,
+    api_key: Option<String>,
+    
+    /// API URL to save
+    #[arg(short, long)]
+    api_url: Option<String>,
+    
+    /// Save credentials to .env file
+    #[arg(short, long)]
+    env: bool,
+    
+    /// Path to .env file (when --env is specified)
+    #[arg(long, default_value = ".env")]
+    env_file: PathBuf,
+    
+    /// Test the connection with saved credentials
+    #[arg(short, long)]
+    test: bool,
+}
+
+#[derive(Subcommand)]
+enum SystemCommands {
+    /// List all systems
+    List,
+    
+    /// Create a new system
+    Create {
+        /// System name
+        #[arg(short, long)]
+        name: String,
+        
+        /// System description
+        #[arg(short, long)]
+        description: Option<String>,
+        
+        /// System config file (JSON)
+        #[arg(short, long)]
+        config_file: Option<PathBuf>,
+    },
+    
+    /// Get system details
+    Get {
+        /// System ID
+        #[arg()]
+        id: String,
+    },
+    
+    /// Start a system
+    Start {
+        /// System ID
+        #[arg()]
+        id: String,
+        
+        /// DSL file to use (optional)
+        #[arg(short, long)]
+        dsl: Option<PathBuf>,
+    },
+    
+    /// Stop a system
+    Stop {
+        /// System ID
+        #[arg()]
+        id: String,
+    },
+    
+    /// Delete a system
+    Delete {
+        /// System ID
+        #[arg()]
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum AgentCommands {
+    /// List all agents in a system
+    List {
+        /// System ID
+        #[arg()]
+        system_id: String,
+    },
+    
+    /// Get agent details
+    Get {
+        /// System ID
+        #[arg()]
+        system_id: String,
+        
+        /// Agent ID
+        #[arg()]
+        agent_id: String,
+    },
+    
+    /// Create a new agent
+    Create {
+        /// System ID
+        #[arg()]
+        system_id: String,
+        
+        /// Agent definition file (JSON)
+        #[arg(short, long)]
+        file: PathBuf,
+    },
+    
+    /// Update an agent
+    Update {
+        /// System ID
+        #[arg()]
+        system_id: String,
+        
+        /// Agent ID
+        #[arg()]
+        agent_id: String,
+        
+        /// Agent definition file (JSON)
+        #[arg(short, long)]
+        file: PathBuf,
+    },
+    
+    /// Start an agent
+    Start {
+        /// System ID
+        #[arg()]
+        system_id: String,
+        
+        /// Agent ID
+        #[arg()]
+        agent_id: String,
+    },
+    
+    /// Stop an agent
+    Stop {
+        /// System ID
+        #[arg()]
+        system_id: String,
+        
+        /// Agent ID
+        #[arg()]
+        agent_id: String,
+    },
+    
+    /// Delete an agent
+    Delete {
+        /// System ID
+        #[arg()]
+        system_id: String,
+        
+        /// Agent ID
+        #[arg()]
+        agent_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum EventCommands {
+    /// List events in a system
+    List {
+        /// System ID
+        #[arg()]
+        system_id: String,
+    },
+    
+    /// Emit an event to a system
+    Emit {
+        /// System ID
+        #[arg()]
+        system_id: String,
+        
+        /// Event definition file (JSON)
+        #[arg(short, long)]
+        file: PathBuf,
+    },
 }
 
 async fn format_file(args: &FmtArgs) -> Result<(), Error> {
@@ -97,72 +320,311 @@ async fn format_file(args: &FmtArgs) -> Result<(), Error> {
     Ok(())
 }
 
-async fn run(cli: &Cli) -> Result<(), Error> {
-    match &cli.command {
-        Some(Commands::Fmt(args)) => format_file(args).await,
-        None => {
-            // Load config
-            let config_path = cli.config.clone();
-            let config: SystemConfig = if config_path.clone().exists() {
-                config::from_file(config_path)?
+async fn run_local(args: &RunArgs, config_path: &PathBuf, secret_path: &PathBuf) -> Result<(), Error> {
+    // Load config
+    let config: SystemConfig = if config_path.exists() {
+        config::from_file(config_path)?
+    } else {
+        // Default config
+        SystemConfig::default()
+    };
+    
+    let secret_config: SecretConfig = if secret_path.exists() {
+        config::from_file(secret_path)?
+    } else {
+        // Default secret config
+        SecretConfig::default()
+    };
+
+    info!("Config loaded.");
+    debug!("config: {:?}", config);
+    debug!("secret_config: {:?}", secret_config);
+
+    // Initialize system
+    let mut system = System::new(&config, &secret_config).await;
+
+    // Load and parse DSL
+    let dsl = std::fs::read_to_string(&args.dsl)
+        .map_err(|e| Error::Internal(format!("Failed to read DSL file: {}", e)))?;
+
+    debug!("Parsing DSL file: {:?}", args.dsl);
+
+    let root = system.parse_dsl(&dsl).await?;
+
+    debug!("Successfully parsed DSL, initializing system...");
+
+    // Initialize system with parsed definitions
+    system.initialize(root).await?;
+
+    debug!("System initialized, starting...");
+
+    // Start system
+    system.start().await?;
+
+    // Message to user as UI.
+    println!("Welcome to Kairei! System started. Press Ctrl+C to shutdown.");
+
+    // Wait for shutdown signal
+    tokio::signal::ctrl_c()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to wait for Ctrl+C: {}", e)))?;
+
+    println!("Shutdown signal received, performing clean shutdown...");
+
+    // Clean shutdown
+    system.shutdown().await?;
+
+    debug!("Shutdown completed.");
+
+    println!("System shutdown completed.");
+
+    Ok(())
+}
+
+fn get_api_client(cli_url: &str, cli_key: &Option<String>) -> ApiClient {
+    let api_key = get_api_key(cli_key.as_deref());
+    let api_url = get_api_url(cli_url);
+    
+    ApiClient::new(&api_url, &api_key)
+}
+
+fn output_json<T: serde::Serialize>(data: &T, pretty: bool) -> Result<(), Error> {
+    let output = if pretty {
+        serde_json::to_string_pretty(data)
+    } else {
+        serde_json::to_string(data)
+    }.map_err(|e| Error::Internal(format!("JSON serialization error: {}", e)))?;
+    
+    println!("{}", output);
+    Ok(())
+}
+
+async fn handle_system_commands(cmd: &SystemCommands, cli: &Cli) -> Result<(), Error> {
+    let client = get_api_client(&cli.api_url, &cli.api_key);
+    
+    match cmd {
+        SystemCommands::List => {
+            let response = client.list_systems().await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        SystemCommands::Create { name, description, config_file } => {
+            let config = if let Some(path) = config_file {
+                config::from_file::<SystemConfig, &PathBuf>(path)?
             } else {
-                // Default config
                 SystemConfig::default()
             };
-            let secret_path = cli.secret.clone();
-            let secret_config: SecretConfig = if secret_path.clone().exists() {
-                config::from_file(secret_path)?
+            
+            let response = client.create_system(name, description.as_deref(), config).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        SystemCommands::Get { id } => {
+            let response = client.get_system(id).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        SystemCommands::Start { id, dsl } => {
+            let dsl_content = if let Some(path) = dsl {
+                Some(fs::read_to_string(path)
+                    .map_err(|e| Error::Internal(format!("Failed to read DSL file: {}", e)))?)
             } else {
-                // Default secret config
-                SecretConfig::default()
+                None
             };
+            
+            let response = client.start_system(id, dsl_content.as_deref()).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        SystemCommands::Stop { id } => {
+            let response = client.stop_system(id).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        SystemCommands::Delete { id } => {
+            let response = client.delete_system(id).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+            println!("System {} deleted successfully", id);
+        },
+    }
+    
+    Ok(())
+}
 
-            info!("config loaded.");
+async fn handle_agent_commands(cmd: &AgentCommands, cli: &Cli) -> Result<(), Error> {
+    let client = get_api_client(&cli.api_url, &cli.api_key);
+    
+    match cmd {
+        AgentCommands::List { system_id } => {
+            let response = client.list_agents(system_id).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        AgentCommands::Get { system_id, agent_id } => {
+            let response = client.get_agent(system_id, agent_id).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        AgentCommands::Create { system_id, file } => {
+            let content = fs::read_to_string(file)
+                .map_err(|e| Error::Internal(format!("Failed to read agent definition file: {}", e)))?;
+            
+            let definition: kairei_http::models::AgentCreationRequest = serde_json::from_str(&content)
+                .map_err(|e| Error::Internal(format!("Failed to parse agent definition: {}", e)))?;
+            
+            let response = client.create_agent(system_id, &definition).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        AgentCommands::Update { system_id, agent_id, file } => {
+            let content = fs::read_to_string(file)
+                .map_err(|e| Error::Internal(format!("Failed to read agent definition file: {}", e)))?;
+            
+            let definition: kairei_http::models::AgentCreationRequest = serde_json::from_str(&content)
+                .map_err(|e| Error::Internal(format!("Failed to parse agent definition: {}", e)))?;
+            
+            let response = client.update_agent(system_id, agent_id, &definition).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        AgentCommands::Start { system_id, agent_id } => {
+            let response = client.start_agent(system_id, agent_id).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        AgentCommands::Stop { system_id, agent_id } => {
+            let response = client.stop_agent(system_id, agent_id).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        AgentCommands::Delete { system_id, agent_id } => {
+            let response = client.delete_agent(system_id, agent_id).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+            println!("Agent {} deleted successfully", agent_id);
+        },
+    }
+    
+    Ok(())
+}
 
-            debug!("config: {:?}", config);
+async fn handle_event_commands(cmd: &EventCommands, cli: &Cli) -> Result<(), Error> {
+    let client = get_api_client(&cli.api_url, &cli.api_key);
+    
+    match cmd {
+        EventCommands::List { system_id } => {
+            let response = client.list_events(system_id).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+        },
+        
+        EventCommands::Emit { system_id, file } => {
+            let content = fs::read_to_string(file)
+                .map_err(|e| Error::Internal(format!("Failed to read event definition file: {}", e)))?;
+            
+            let definition: kairei_http::models::EventRequest = serde_json::from_str(&content)
+                .map_err(|e| Error::Internal(format!("Failed to parse event definition: {}", e)))?;
+            
+            let response = client.emit_event(system_id, &definition).await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)?;
+            println!("Event emitted successfully");
+        },
+    }
+    
+    Ok(())
+}
 
-            debug!("secret_config: {:?}", secret_config);
+async fn handle_login_command(args: &LoginArgs) -> Result<(), Error> {
+    // Start with existing credentials or defaults
+    let mut credentials = load_credentials()
+        .unwrap_or_else(|_| Credentials::default());
 
-            // Initialize system
-            let mut system = System::new(&config, &secret_config).await;
-
-            // Load and parse DSL
-            let dsl = std::fs::read_to_string(&cli.dsl)
-                .map_err(|e| Error::Internal(format!("Failed to read DSL file: {}", e)))?;
-
-            debug!("Parsing DSL file: {:?}", cli.dsl);
-
-            let root = system.parse_dsl(&dsl).await?;
-
-            debug!("Successfully parsed DSL, initializing system...");
-
-            // Initialize system with parsed definitions
-            system.initialize(root).await?;
-
-            debug!("System initialized, starting...");
-
-            // Start system
-            system.start().await?;
-
-            // Message to user as UI.
-            println!("Welcome to Kairei! System started. Press Ctrl+C to shutdown.");
-
-            // Wait for shutdown signal
-            tokio::signal::ctrl_c()
-                .await
-                .map_err(|e| Error::Internal(format!("Failed to wait for Ctrl+C: {}", e)))?;
-
-            println!("Shutdown signal received, performing clean shutdown...");
-
-            // Clean shutdown
-            system.shutdown().await?;
-
-            debug!("Shutdown completed.");
-
-            println!("System shutdown completed.");
-
-            Ok(())
+    // Update with new values if provided
+    if let Some(api_key) = &args.api_key {
+        credentials.api_key = api_key.clone();
+    }
+    
+    if let Some(api_url) = &args.api_url {
+        credentials.api_url = api_url.clone();
+    }
+    
+    // Save to credentials file
+    if args.api_key.is_some() || args.api_url.is_some() {
+        match save_credentials(&credentials) {
+            Ok(_) => println!("Credentials saved successfully"),
+            Err(e) => eprintln!("Failed to save credentials: {}", e),
         }
+    }
+    
+    // Save to .env file if requested
+    if args.env {
+        match setup_env_file(
+            &args.env_file,
+            &credentials.api_key,
+            Some(&credentials.api_url),
+        ) {
+            Ok(_) => println!("Credentials saved to {} file", args.env_file.display()),
+            Err(e) => eprintln!("Failed to save to .env file: {}", e),
+        }
+    }
+    
+    // Display current settings
+    println!("Current API settings:");
+    println!("API URL: {}", credentials.api_url);
+    
+    // Don't show the full API key for security reasons
+    if !credentials.api_key.is_empty() {
+        let visible_chars = 4;
+        let masked_key = if credentials.api_key.len() > visible_chars {
+            format!(
+                "{}{}",
+                "*".repeat(credentials.api_key.len() - visible_chars),
+                &credentials.api_key[credentials.api_key.len() - visible_chars..]
+            )
+        } else {
+            "*".repeat(credentials.api_key.len())
+        };
+        println!("API Key: {}", masked_key);
+    } else {
+        println!("API Key: Not set");
+    }
+    
+    // Test connection if requested
+    if args.test {
+        print!("Testing API connection... ");
+        io::stdout().flush().map_err(|e| Error::Internal(e.to_string()))?;
+        
+        let client = ApiClient::new(&credentials.api_url, &credentials.api_key);
+        match client.health_check().await {
+            Ok(_) => println!("✅ Success"),
+            Err(e) => println!("❌ Failed: {}", e),
+        }
+    }
+    
+    Ok(())
+}
+
+async fn run(cli: &Cli) -> Result<(), Error> {
+    match &cli.command {
+        Commands::Fmt(args) => format_file(args).await,
+        Commands::Run(args) => run_local(args, &cli.config, &cli.secret).await,
+        Commands::System { command } => handle_system_commands(command, cli).await,
+        Commands::Agent { command } => handle_agent_commands(command, cli).await,
+        Commands::Event { command } => handle_event_commands(command, cli).await,
+        Commands::Login(args) => handle_login_command(args).await,
     }
 }
 

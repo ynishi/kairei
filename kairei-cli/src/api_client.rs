@@ -1,7 +1,28 @@
-use kairei_http::models::ListSystemsResponse;
+use kairei_core::config::SystemConfig;
+use kairei_http::models::{
+    AgentCreationRequest, AgentStatus, CreateSystemRequest, CreateSystemResponse, EventRequest, ListSystemsResponse, StartSystemRequest, SystemInfo
+};
 use reqwest::{Client, StatusCode};
-use serde_json::json;
-use std::error::Error;
+use serde::{de::DeserializeOwned, Serialize};
+use serde_json::Value;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ApiError {
+    #[error("Network error: {0}")]
+    Network(#[from] reqwest::Error),
+    
+    #[error("API error: {status} - {message}")]
+    Api { status: StatusCode, message: String },
+    
+    #[error("Serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+    
+    #[error("Other error: {0}")]
+    Other(String),
+}
+
+pub type ApiResult<T> = Result<T, ApiError>;
 
 pub struct ApiClient {
     client: Client,
@@ -18,34 +39,145 @@ impl ApiClient {
         }
     }
 
-    pub async fn list_systems(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        let url = format!("{}/api/v1/systems", self.base_url);
-        let response = self
-            .client
-            .get(&url)
+    /// Make a generic API request and return the response as JSON
+    async fn request<T, R>(&self, method: reqwest::Method, path: &str, body: Option<&T>) -> ApiResult<R>
+    where
+        T: Serialize + ?Sized,
+        R: DeserializeOwned,
+    {
+        let url = format!("{}{}", self.base_url, path);
+        
+        let mut request = self.client
+            .request(method, &url)
             .header("Authorization", format!("Bearer {}", self.api_key))
-            .send()
-            .await?;
-
-        match response.status() {
-            StatusCode::OK => {
-                let data = response.json::<ListSystemsResponse>().await?;
-                Ok(data
-                    .system_statuses
-                    .into_iter()
-                    .map(|(id, status)| {
-                        let v = json!(status);
-                        json!({
-                            "id": id,
-                            "status": v.to_string(),
-                        })
-                        .to_string()
-                    })
-                    .collect())
-            }
-            status => Err(format!("API error: {}", status).into()),
+            .header("Content-Type", "application/json");
+            
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        
+        let response = request.send().await?;
+        
+        let status = response.status();
+        if status.is_success() {
+            Ok(response.json::<R>().await?)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            Err(ApiError::Api {
+                status,
+                message: error_text,
+            })
         }
     }
+    
+    /// Convert any response to a JSON value for display
+    pub fn to_json<T: Serialize>(data: &T) -> ApiResult<Value> {
+        Ok(serde_json::to_value(data)?)
+    }
 
-    // Additional methods for each API endpoint...
+    // System endpoints
+    
+    pub async fn list_systems(&self) -> ApiResult<ListSystemsResponse> {
+        self.request(reqwest::Method::GET, "/api/v1/systems", None::<&()>).await
+    }
+    
+    pub async fn create_system(&self, name: &str, description: Option<&str>, config: SystemConfig) -> ApiResult<CreateSystemResponse> {
+        let request = CreateSystemRequest {
+            name: name.to_string(),
+            description: description.map(|s| s.to_string()),
+            config,
+        };
+        
+        self.request(reqwest::Method::POST, "/api/v1/systems", Some(&request)).await
+    }
+    
+    pub async fn get_system(&self, system_id: &str) -> ApiResult<SystemInfo> {
+        self.request(reqwest::Method::GET, &format!("/api/v1/systems/{}", system_id), None::<&()>).await
+    }
+    
+    pub async fn start_system(&self, system_id: &str, dsl: Option<&str>) -> ApiResult<Value> {
+        let request = StartSystemRequest {
+            dsl: dsl.map(|s| s.to_string()),
+        };
+        
+        self.request(reqwest::Method::POST, &format!("/api/v1/systems/{}/start", system_id), Some(&request)).await
+    }
+    
+    pub async fn stop_system(&self, system_id: &str) -> ApiResult<Value> {
+        self.request(reqwest::Method::POST, &format!("/api/v1/systems/{}/stop", system_id), None::<&()>).await
+    }
+    
+    pub async fn delete_system(&self, system_id: &str) -> ApiResult<Value> {
+        self.request(reqwest::Method::DELETE, &format!("/api/v1/systems/{}", system_id), None::<&()>).await
+    }
+    
+    // Agent endpoints
+    
+    pub async fn list_agents(&self, system_id: &str) -> ApiResult<Value> {
+        self.request(reqwest::Method::GET, &format!("/api/v1/systems/{}/agents", system_id), None::<&()>).await
+    }
+    
+    pub async fn get_agent(&self, system_id: &str, agent_id: &str) -> ApiResult<AgentStatus> {
+        self.request(
+            reqwest::Method::GET, 
+            &format!("/api/v1/systems/{}/agents/{}", system_id, agent_id), 
+            None::<&()>
+        ).await
+    }
+    
+    pub async fn create_agent(&self, _system_id: &str, _definition: &AgentCreationRequest) -> ApiResult<Value> {
+        todo!()
+    }
+    
+    pub async fn update_agent(&self, _system_id: &str, _agent_id: &str, _definition: &AgentCreationRequest) -> ApiResult<Value> {
+        todo!()
+    }
+    
+    pub async fn delete_agent(&self, system_id: &str, agent_id: &str) -> ApiResult<Value> {
+        self.request(
+            reqwest::Method::DELETE, 
+            &format!("/api/v1/systems/{}/agents/{}", system_id, agent_id), 
+            None::<&()>
+        ).await
+    }
+    
+    pub async fn start_agent(&self, system_id: &str, agent_id: &str) -> ApiResult<Value> {
+        self.request(
+            reqwest::Method::POST, 
+            &format!("/api/v1/systems/{}/agents/{}/start", system_id, agent_id), 
+            None::<&()>
+        ).await
+    }
+    
+    pub async fn stop_agent(&self, system_id: &str, agent_id: &str) -> ApiResult<Value> {
+        self.request(
+            reqwest::Method::POST, 
+            &format!("/api/v1/systems/{}/agents/{}/stop", system_id, agent_id), 
+            None::<&()>
+        ).await
+    }
+    
+    // Event endpoints
+    
+    pub async fn list_events(&self, system_id: &str) -> ApiResult<Value> {
+        self.request(
+            reqwest::Method::GET, 
+            &format!("/api/v1/systems/{}/events", system_id), 
+            None::<&()>
+        ).await
+    }
+    
+    pub async fn emit_event(&self, system_id: &str, event: &EventRequest) -> ApiResult<Value> {
+        self.request(
+            reqwest::Method::POST, 
+            &format!("/api/v1/systems/{}/events", system_id), 
+            Some(event)
+        ).await
+    }
+    
+    // Utility functions
+    
+    pub async fn health_check(&self) -> ApiResult<Value> {
+        self.request(reqwest::Method::GET, "/health", None::<&()>).await
+    }
 }
