@@ -4,7 +4,7 @@ use kairei_http::{
     server::{Secret, ServerConfig},
 };
 use std::path::PathBuf;
-use tracing::debug;
+use tracing::{debug, info, warn};
 
 /// Kairei HTTP API Server
 #[derive(Parser)]
@@ -23,7 +23,7 @@ struct Cli {
     log_level: String,
 
     /// Secret json file path
-    #[arg(short, long, default_value = "/etc/secrets/secret.json")]
+    #[arg(short, long, default_value = "/etc/secrets/kairei-secret.json")]
     secret_json: PathBuf,
 
     /// Enable authentication
@@ -47,10 +47,19 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize tracing for logging
+    tracing_subscriber::fmt::init();
+
     // Parse command line arguments
     let cli = Cli::parse();
 
     debug!("secret_json path: {:?}", cli.secret_json);
+
+    if cli.secret_json.exists() {
+        info!("Secret file exists");
+    } else {
+        warn!("Secret file does not exist: {:?}", cli.secret_json);
+    }
 
     let secret = std::fs::read_to_string(&cli.secret_json).unwrap_or_default();
     let secret: Secret = serde_json::from_str(&secret).unwrap_or_default();
