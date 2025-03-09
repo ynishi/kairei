@@ -115,7 +115,7 @@ impl AstRegistry {
     pub async fn create_ast_from_dsl(&self, dsl: &str) -> ASTResult<ast::Root> {
         // 1. Tokenization: Convert DSL string into tokens
         let mut tokenizer = tokenizer::token::Tokenizer::new();
-        let tokens = tokenizer.tokenize(dsl).unwrap();
+        let tokens = tokenizer.tokenize(dsl).map_err(ASTError::from)?;
 
         // 2. Preprocessing: Apply token transformations
         let preprocessor = preprocessor::TokenPreprocessor::default();
