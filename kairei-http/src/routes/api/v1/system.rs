@@ -1,5 +1,6 @@
 use crate::handlers::{
-    create_system, delete_system, get_system, list_systems, start_system, stop_system,
+    compile_system, create_system, delete_system, get_system, list_systems, start_system,
+    stop_system,
 };
 use crate::server::AppState;
 use axum::routing::delete;
@@ -20,6 +21,7 @@ fn system_routes() -> Router<AppState> {
         .route("/", get(list_systems))
         .route("/", post(create_system))
         .route("/{system_id}", get(get_system))
+        .route("/{system_id}/compile", post(compile_system))
         .route("/{system_id}/start", post(start_system))
         .route("/{system_id}/stop", post(stop_system))
         .route("/{system_id}", delete(delete_system))

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use kairei_core::system::SystemError;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -38,6 +39,33 @@ pub struct CreateSystemResponse {
 
     /// Session ID
     pub session_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CompileSystemRequest {
+    pub dsl: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CompileSystemResponse {
+    pub success: bool,
+    pub errors: Vec<String>,
+}
+
+impl CompileSystemResponse {
+    pub fn success() -> Self {
+        Self {
+            success: true,
+            errors: Vec::new(),
+        }
+    }
+
+    pub fn failure(error: SystemError) -> Self {
+        Self {
+            success: false,
+            errors: vec![error.to_string()],
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

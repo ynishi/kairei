@@ -17,15 +17,15 @@ pub struct SystemConfig {
     pub max_agents: usize,
 
     #[serde(default = "default_init_timeout", with = "duration_ms")]
-    #[schema(value_type = u64, example = "30000(means 30sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub init_timeout: Duration,
 
     #[serde(default = "default_shutdown_timeout", with = "duration_ms")]
-    #[schema(value_type = u64, example = "30000(means 30sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub shutdown_timeout: Duration,
 
     #[serde(default = "default_request_timeout", with = "duration_ms")]
-    #[schema(value_type = u64, example = "30000(means 30sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub request_timeout: Duration,
 
     #[serde(default)]
@@ -53,10 +53,10 @@ pub struct AgentConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ContextConfig {
     #[serde(default = "default_access_timeout", with = "duration_ms")]
-    #[schema(value_type = u64, example = "30000(means 30sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub access_timeout: Duration,
     #[serde(default = "default_request_timeout", with = "duration_ms")]
-    #[schema(value_type = u64, example = "30000(means 30sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub request_timeout: Duration,
 }
 
@@ -78,7 +78,7 @@ pub struct ScaleManagerConfig {
     pub max_instances_per_agent: usize,
 
     #[serde(default = "default_scale_interval", with = "duration_ms")]
-    #[schema(value_type = u64, example = "60000(means 60sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub scale_check_interval: Duration,
 }
 
@@ -98,11 +98,11 @@ pub struct MonitorConfig {
     pub enabled: bool,
 
     #[serde(default = "default_metrics_interval", with = "duration_ms")]
-    #[schema(value_type = u64, example = "10000(means 10sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub metrics_interval: Duration,
 
     #[serde(default = "default_retention_period", with = "duration_ms")]
-    #[schema(value_type = u64, example = "3600000(means 3600sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub retention_period: Duration,
 }
 
@@ -119,7 +119,7 @@ impl Default for MonitorConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct NativeFeatureConfig {
     #[serde(default = "default_shutdown_timeout", with = "duration_ms")]
-    #[schema(value_type = u64, example = "30000(means 30sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub shutdown_timeout: Duration,
 
     #[serde(default = "default_ticker_config")]
@@ -145,7 +145,7 @@ pub struct TickerConfig {
     pub enabled: bool,
 
     #[serde(default = "default_tick_interval", with = "duration_ms")]
-    #[schema(value_type = u64, example = "100(means 100ms)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub tick_interval: Duration,
 }
 
@@ -322,7 +322,7 @@ impl Default for RagConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchConfig {
     #[serde(default = "default_search_window", with = "duration_ms")]
-    #[schema(value_type = u64, example = "60000(means 60sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub search_window: Duration,
     #[serde(default = "default_max_results")]
     pub max_results: usize,
@@ -332,7 +332,7 @@ pub struct SearchConfig {
     pub max_fetch_per_result: usize,
     // fetch_timeout
     #[serde(default = "default_fetch_timeout", with = "duration_ms")]
-    #[schema(value_type = u64, example = "5000(means 5sec)")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub fetch_timeout: Duration,
 }
 
@@ -571,6 +571,26 @@ pub mod duration_ms {
     {
         let millis = u64::deserialize(deserializer)?;
         Ok(Duration::from_millis(millis))
+    }
+}
+
+pub mod duration_secs {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(duration.as_secs())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let secs = u64::deserialize(deserializer)?;
+        Ok(Duration::from_secs(secs))
     }
 }
 

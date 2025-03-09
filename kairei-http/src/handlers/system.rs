@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use crate::auth::{AuthAdmin, AuthUser};
 use crate::models::{
-    CreateSystemRequest, CreateSystemResponse, ListSystemsResponse, StartSystemRequest,
+    CompileSystemRequest, CompileSystemResponse, CreateSystemRequest, CreateSystemResponse,
+    ListSystemsResponse, StartSystemRequest,
 };
 use crate::server::AppState;
 use crate::session::data::SessionDataBuilder;
@@ -151,7 +152,51 @@ pub async fn list_systems(
     Ok(Json(ListSystemsResponse { system_statuses }))
 }
 
-// Start the system
+/// Compile the dsl, without starting the system
+///
+/// Response include compilation error.
+/// This is useful for validating the DSL before starting the system.
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/compile",
+    responses(
+        (status = 200, description = "DSL compiled successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System not found"),
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier")
+    )
+)]
+#[axum::debug_handler]
+pub async fn compile_system(
+    State(state): State<AppState>,
+    auth: AuthAdmin,
+    Path(system_id): Path<String>,
+    Json(payload): Json<CompileSystemRequest>,
+) -> Result<Json<CompileSystemResponse>, StatusCode> {
+    if !auth.user().is_admin() {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    if let Some(data) = state.session_manager.get_session(&system_id).await {
+        let system = data.system.write().await;
+        if let Err(e) = system.parse_dsl(&payload.dsl).await {
+            tracing::error!("Failed to compile DSL: {}", e);
+            Ok(Json(CompileSystemResponse::failure(e)))
+        } else {
+            Ok(Json(CompileSystemResponse::success()))
+        }
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+/// Start the system
+///
+/// This will compile the DSL if provided, and start the system.
+/// If the DSL is not provided, the system will be started with the existing configuration.
 #[utoipa::path(
     post,
     path = "/systems/{system_id}/start",
@@ -206,7 +251,7 @@ pub async fn start_system(
     }
 }
 
-// Shutdown the system
+/// Shutdown the system
 #[utoipa::path(
     post,
     path = "/systems/{system_id}/stop",
