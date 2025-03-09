@@ -10,7 +10,11 @@ This guide provides instructions for deploying KAIREI to Google Cloud Platform (
 4. [Cloud Build Configuration](#cloud-build-configuration)
 5. [Dockerfile Overview](#dockerfile-overview)
 6. [Deployment Process](#deployment-process)
-7. [Troubleshooting](#troubleshooting)
+7. [Cloud Run Configuration](#cloud-run-configuration)
+8. [Application Secret Handling](#application-secret-handling)
+9. [Monitoring and Observability](#monitoring-and-observability)
+10. [Cost Considerations](#cost-considerations)
+11. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
@@ -253,6 +257,173 @@ If the application cannot access secrets:
    ```bash
    docker run -p 8080:8080 gcr.io/[PROJECT_ID]/kairei-http
    ```
+
+## Cloud Run Configuration
+
+When deploying KAIREI to Cloud Run, consider the following configuration options:
+
+### Resource Allocation
+
+```bash
+gcloud run deploy kairei-http \
+  --image gcr.io/[PROJECT_ID]/kairei-http \
+  --region asia-northeast1 \
+  --memory 512Mi \
+  --cpu 1 \
+  --concurrency 80 \
+  --max-instances 10 \
+  --min-instances 0
+```
+
+- **Memory**: Allocate sufficient memory based on your application's needs (default: 256Mi)
+- **CPU**: Specify CPU allocation (default: 1)
+- **Concurrency**: Maximum number of requests per instance (default: 80)
+- **Max Instances**: Maximum number of instances to scale up to (default: 100)
+- **Min Instances**: Minimum number of instances to maintain (default: 0)
+
+### Timeout and Scaling
+
+```bash
+gcloud run deploy kairei-http \
+  --image gcr.io/[PROJECT_ID]/kairei-http \
+  --region asia-northeast1 \
+  --timeout 300s \
+  --cpu-throttling \
+  --execution-environment gen2
+```
+
+- **Timeout**: Maximum request duration (default: 300s)
+- **CPU Throttling**: Enable CPU throttling to reduce costs when idle
+- **Execution Environment**: Use gen2 for improved performance and security
+
+## Application Secret Handling
+
+KAIREI reads secrets from the mounted JSON file at `/etc/secrets/kairei-secret.json`. Here's how the application handles secrets:
+
+### Secret Loading Process
+
+1. The application first checks for the secret file at the configured path:
+   ```rust
+   // In kairei-http/src/bin/kairei-http.rs
+   let secret_path = std::env::var("SECRET_PATH")
+       .unwrap_or_else(|_| "/etc/secrets/kairei-secret.json".to_string());
+   ```
+
+2. If the file exists, it loads and parses the JSON:
+   ```rust
+   // In kairei-http/src/server.rs
+   pub fn load_from_file(path: &str) -> Result<Secret, Error> {
+       let file = std::fs::File::open(path)?;
+       let secret: Secret = serde_json::from_reader(file)?;
+       Ok(secret)
+   }
+   ```
+
+3. The application uses a fallback mechanism if the file is not found:
+   ```rust
+   // Example fallback mechanism
+   let secret = Secret::load_from_file(&secret_path)
+       .unwrap_or_else(|_| Secret::default());
+   ```
+
+### Secret Structure
+
+The expected JSON structure is:
+```json
+{
+  "admin_service_key": "your-admin-key",
+  "user_service_key": "your-user-key"
+}
+```
+
+## Monitoring and Observability
+
+### Cloud Run Metrics
+
+Cloud Run automatically provides several metrics that can be monitored in Cloud Monitoring:
+
+1. **Request Count**: Monitor traffic patterns
+   ```bash
+   gcloud monitoring metrics list --filter="metric.type=run.googleapis.com/request_count"
+   ```
+
+2. **Request Latencies**: Track performance
+   ```bash
+   gcloud monitoring metrics list --filter="metric.type=run.googleapis.com/request_latencies"
+   ```
+
+3. **Container Instance Count**: Monitor scaling behavior
+   ```bash
+   gcloud monitoring metrics list --filter="metric.type=run.googleapis.com/container/instance_count"
+   ```
+
+### Setting Up Alerts
+
+Create alerts for critical metrics:
+
+```bash
+gcloud alpha monitoring policies create \
+  --display-name="KAIREI High Error Rate" \
+  --condition-filter="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"kairei-http\" AND metric.type=\"run.googleapis.com/request_count\" AND metric.labels.response_code_class=\"4xx\"" \
+  --condition-threshold-value=10 \
+  --condition-threshold-duration=300s \
+  --notification-channels="projects/[PROJECT_ID]/notificationChannels/[CHANNEL_ID]"
+```
+
+### Logging Integration
+
+View application logs in Cloud Logging:
+
+```bash
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=kairei-http" --limit=10
+```
+
+Configure structured logging in your application for better log analysis:
+
+```rust
+// Example structured logging
+log::info!(
+    target: "kairei-http",
+    "Request processed: status={}, duration_ms={}, user_id={}",
+    status, duration, user_id
+);
+```
+
+## Cost Considerations
+
+When deploying KAIREI to GCP, consider the following cost factors:
+
+### Cloud Run Costs
+
+- **Compute Time**: Billed per 100ms of vCPU and memory usage
+  - Optimize with min/max instances and CPU throttling
+  - Consider using CPU always allocated for consistent performance at higher cost
+
+- **Request Costs**: First 2 million requests per month are free
+  - Monitor request patterns to estimate costs
+
+### Secret Manager Costs
+
+- **Active Secret Versions**: $0.06 per active secret version per month
+  - Limit the number of active versions
+  - Delete old versions that are no longer needed
+
+- **Access Operations**: First 10,000 operations per month are free
+  - Cache secrets in memory to reduce access operations
+
+### Container Registry Costs
+
+- **Storage**: $0.026 per GB per month
+  - Implement lifecycle policies to clean up old images
+
+### Estimated Monthly Costs
+
+For a typical small to medium deployment:
+- Cloud Run: $20-50/month
+- Secret Manager: $1-5/month
+- Container Registry: $1-10/month
+
+Total estimated cost: $22-65/month
 
 ## Secret Management Best Practices
 
