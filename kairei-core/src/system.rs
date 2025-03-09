@@ -953,6 +953,8 @@ pub struct ScaleStatus {
 pub struct SystemStatus {
     pub started_at: DateTime<Utc>,
     pub running: bool,
+    #[serde(with = "crate::config::duration_secs")]
+    #[schema(value_type = u64, pattern = "uint64 as seconds")]
     pub uptime: Duration,
     pub agent_count: usize,
     pub running_agent_count: usize,

@@ -1,6 +1,8 @@
 use crate::handlers::agents;
 use crate::handlers::events;
 use crate::handlers::system;
+use crate::models::CompileSystemRequest;
+use crate::models::CompileSystemResponse;
 
 use utoipa::OpenApi;
 
@@ -23,6 +25,7 @@ use crate::models::{
         system::create_system,
         system::get_system,
         system::list_systems,
+        system::compile_system,
         system::start_system,
         system::stop_system,
         system::delete_system,
@@ -41,6 +44,8 @@ use crate::models::{
         CreateSystemRequest,
         CreateSystemResponse,
         ListSystemsResponse,
+        CompileSystemRequest,
+        CompileSystemResponse,
         StartSystemRequest,
         SystemInfo,
         SystemStatus,

@@ -269,7 +269,7 @@ mod tests {
                 "system-1": {
                     "started_at": "2023-01-01T00:00:00Z",
                     "running": true,
-                    "uptime": {"secs": 3600, "nanos": 0},
+                    "uptime": 3600,
                     "agent_count": 5,
                     "running_agent_count": 3,
                     "event_queue_size": 10,
@@ -336,6 +336,126 @@ mod tests {
         // Verify response
         assert_eq!(response.system_id, "new-system-123");
         assert_eq!(response.session_id, "session-456");
+    }
+
+    #[tokio::test]
+    async fn test_get_system() {
+        // Create a mock server
+        let mut server = mockito::Server::new_async().await;
+
+        let mock_response = r#"
+        {
+            "started_at": "2023-01-01T00:00:00Z",
+            "running": true,
+            "uptime": 3600,
+            "agent_count": 5,
+            "running_agent_count": 3,
+            "event_queue_size": 10,
+            "event_subscribers": 2,
+            "event_capacity": 100
+        }
+        "#;
+
+        // Setup mock
+        let _m = server
+            .mock("GET", "/api/v1/systems/test-system")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_response)
+            .create_async()
+            .await;
+
+        // Test API client
+        let client = create_test_client(&server);
+        let response = client.get_system("test-system").await.unwrap();
+
+        // Verify response
+        assert_eq!(response.agent_count, 5);
+        assert_eq!(response.running_agent_count, 3);
+    }
+
+    #[tokio::test]
+    async fn test_start_system() {
+        // Create a mock server
+        let mut server = mockito::Server::new_async().await;
+
+        let mock_response = r#"
+        {
+            "status": "ok"
+        }
+        "#;
+
+        // Setup mock
+        let _m = server
+            .mock("POST", "/api/v1/systems/test-system/start")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_response)
+            .create_async()
+            .await;
+
+        // Test API client
+        let client = create_test_client(&server);
+        let response = client.start_system("test-system", None).await.unwrap();
+
+        // Verify response
+        assert_eq!(response["status"], "ok");
+    }
+
+    #[tokio::test]
+    async fn test_stop_system() {
+        // Create a mock server
+        let mut server = mockito::Server::new_async().await;
+
+        let mock_response = r#"
+        {
+            "status": "ok"
+        }
+        "#;
+
+        // Setup mock
+        let _m = server
+            .mock("POST", "/api/v1/systems/test-system/stop")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_response)
+            .create_async()
+            .await;
+
+        // Test API client
+        let client = create_test_client(&server);
+        let response = client.stop_system("test-system").await.unwrap();
+
+        // Verify response
+        assert_eq!(response["status"], "ok");
+    }
+
+    #[tokio::test]
+    async fn test_delete_system() {
+        // Create a mock server
+        let mut server = mockito::Server::new_async().await;
+
+        let mock_response = r#"
+        {
+            "status": "ok"
+        }
+        "#;
+
+        // Setup mock
+        let _m = server
+            .mock("DELETE", "/api/v1/systems/test-system")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_response)
+            .create_async()
+            .await;
+
+        // Test API client
+        let client = create_test_client(&server);
+        let response = client.delete_system("test-system").await.unwrap();
+
+        // Verify response
+        assert_eq!(response["status"], "ok");
     }
 
     #[tokio::test]

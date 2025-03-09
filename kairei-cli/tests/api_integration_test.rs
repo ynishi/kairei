@@ -17,7 +17,7 @@ async fn test_system_list_command() {
             "system-1": {
                 "started_at": "2023-01-01T00:00:00Z",
                 "running": true,
-                "uptime": {"secs": 3600, "nanos": 0},
+                "uptime": 3600,
                 "agent_count": 5,
                 "running_agent_count": 3,
                 "event_queue_size": 10,
@@ -63,7 +63,7 @@ async fn test_system_get_command() {
         {
             "started_at": "2023-01-01T00:00:00Z",
             "running": true,
-            "uptime": {"secs": 3600, "nanos": 0},
+            "uptime": 3600,
             "agent_count": 5,
             "running_agent_count": 3,
             "event_queue_size": 10,
