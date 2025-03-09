@@ -3,15 +3,67 @@ pub mod events;
 pub mod system;
 
 use crate::handlers;
-use crate::{models::CreateSystemRequest, server::AppState};
+use crate::models::agents::{
+    AgentStatistics, AgentStatus, GetAgentResponse, ListAgentsResponse, ScaleDownAgentRequest,
+    ScaleUpAgentRequest, SendRequestAgentRequest, SendRequestAgentResponse, ValidationResult,
+};
+use crate::models::events::{
+    AgentRequestPayload, AgentRequestResponse, EventRequest, EventResponse, EventStatus,
+    RequestStatus,
+};
+use crate::models::{
+    CreateSystemRequest, CreateSystemResponse, ListSystemsResponse, StartSystemRequest, SystemInfo,
+    SystemStatistics, SystemStatus,
+};
+use crate::server::AppState;
 use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(handlers::create_system),
-    components(schemas(CreateSystemRequest))
+    paths(
+        handlers::system::create_system,
+        handlers::system::get_system,
+        handlers::system::list_systems,
+        handlers::system::start_system,
+        handlers::system::stop_system,
+        handlers::system::delete_system,
+        handlers::agents::get_agent,
+        handlers::agents::list_agents,
+        handlers::agents::start_agent,
+        handlers::agents::stop_agent,
+        handlers::agents::scale_up_agent,
+        handlers::agents::scale_down_agent,
+        handlers::agents::request_agent,
+        handlers::events::list_events,
+        handlers::events::emit_event,
+        handlers::events::subscribe_event
+    ),
+    components(schemas(
+        CreateSystemRequest,
+        CreateSystemResponse,
+        ListSystemsResponse,
+        StartSystemRequest,
+        SystemInfo,
+        SystemStatus,
+        SystemStatistics,
+        GetAgentResponse,
+        ListAgentsResponse,
+        ScaleUpAgentRequest,
+        ScaleDownAgentRequest,
+        SendRequestAgentRequest,
+        SendRequestAgentResponse,
+        AgentStatus,
+        ValidationResult,
+        AgentStatistics,
+        EventRequest,
+        EventResponse,
+        EventStatus,
+        AgentRequestPayload,
+        AgentRequestResponse,
+        RequestStatus
+    ))
 )]
 struct ApiDoc;
 

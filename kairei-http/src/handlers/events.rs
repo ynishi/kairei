@@ -9,6 +9,21 @@ use axum::{
 use tracing::debug;
 
 /// List events
+#[utoipa::path(
+    get,
+    path = "/systems/{system_id}/events",
+    responses(
+        (status = 200, description = "Events listed successfully", body = Vec<EventResponse>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error"),
+        (status = 501, description = "Not implemented")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn list_events(
     State(_state): State<AppState>,
@@ -23,6 +38,23 @@ pub async fn list_events(
 ///
 /// Sends an event to one or more agents.
 /// Requires authentication.
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/events/{event_id}",
+    request_body = EventRequest,
+    responses(
+        (status = 200, description = "Event emitted successfully", body = EventResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error"),
+        (status = 501, description = "Not implemented")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier"),
+        ("event_id" = String, Path, description = "Event identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn emit_event(
     State(_state): State<AppState>,
@@ -41,6 +73,22 @@ pub async fn emit_event(
 ///
 /// Sends a request to a specific agent and returns the result.
 /// Requires authentication.
+#[utoipa::path(
+    get,
+    path = "/systems/{system_id}/events/{event_id}/subscribe",
+    responses(
+        (status = 200, description = "Subscribed to event successfully", body = AgentRequestResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System or event not found"),
+        (status = 500, description = "Internal server error"),
+        (status = 501, description = "Not implemented")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier"),
+        ("event_id" = String, Path, description = "Event identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn subscribe_event(
     State(_state): State<AppState>,
