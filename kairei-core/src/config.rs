@@ -118,7 +118,8 @@ impl Default for MonitorConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct NativeFeatureConfig {
-    #[serde(default = "default_shutdown_timeout")]
+    #[serde(default = "default_shutdown_timeout", with = "duration_ms")]
+    #[schema(value_type = u64, example = "30000(means 30sec)")]
     pub shutdown_timeout: Duration,
 
     #[serde(default = "default_ticker_config")]
@@ -320,7 +321,8 @@ impl Default for RagConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchConfig {
-    #[serde(default = "default_search_window")]
+    #[serde(default = "default_search_window", with = "duration_ms")]
+    #[schema(value_type = u64, example = "60000(means 60sec)")]
     pub search_window: Duration,
     #[serde(default = "default_max_results")]
     pub max_results: usize,
