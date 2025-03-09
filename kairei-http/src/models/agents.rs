@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utoipa::ToSchema;
 
 /// Agent creation request model
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct AgentCreationRequest {
     /// Name of the agent
     pub name: String,
@@ -18,7 +19,7 @@ pub struct AgentCreationRequest {
 }
 
 /// Agent creation options
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, ToSchema)]
 pub struct AgentCreationOptions {
     /// Whether to automatically start the agent after creation
     #[serde(default)]
@@ -26,7 +27,7 @@ pub struct AgentCreationOptions {
 }
 
 /// Agent creation response model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AgentCreationResponse {
     /// Unique identifier for the agent
     pub agent_id: String,
@@ -39,7 +40,7 @@ pub struct AgentCreationResponse {
 }
 
 /// Agent details response model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AgentDetails {
     /// Unique identifier for the agent
     pub agent_id: String,
@@ -120,7 +121,7 @@ pub enum AgentStatus {
 }
 
 /// Validation result model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ValidationResult {
     /// Whether validation was successful
     pub success: bool,
@@ -130,7 +131,7 @@ pub struct ValidationResult {
 }
 
 /// Agent statistics model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AgentStatistics {
     /// Number of events processed by the agent
     pub events_processed: usize,
