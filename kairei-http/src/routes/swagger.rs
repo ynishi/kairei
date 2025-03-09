@@ -1,0 +1,65 @@
+use crate::handlers::agents;
+use crate::handlers::events;
+use crate::handlers::system;
+
+use utoipa::OpenApi;
+
+use crate::models::agents::{
+    AgentStatistics, AgentStatus, GetAgentResponse, ListAgentsResponse, ScaleDownAgentRequest,
+    ScaleUpAgentRequest, SendRequestAgentRequest, SendRequestAgentResponse, ValidationResult,
+};
+use crate::models::events::{
+    AgentRequestPayload, AgentRequestResponse, EventRequest, EventResponse, EventStatus,
+    RequestStatus,
+};
+use crate::models::{
+    CreateSystemRequest, CreateSystemResponse, ListSystemsResponse, StartSystemRequest, SystemInfo,
+    SystemStatistics, SystemStatus,
+};
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        system::create_system,
+        system::get_system,
+        system::list_systems,
+        system::start_system,
+        system::stop_system,
+        system::delete_system,
+        agents::get_agent,
+        agents::list_agents,
+        agents::start_agent,
+        agents::stop_agent,
+        agents::scale_up_agent,
+        agents::scale_down_agent,
+        agents::request_agent,
+        events::list_events,
+        events::emit_event,
+        events::subscribe_event
+    ),
+    components(schemas(
+        CreateSystemRequest,
+        CreateSystemResponse,
+        ListSystemsResponse,
+        StartSystemRequest,
+        SystemInfo,
+        SystemStatus,
+        SystemStatistics,
+        GetAgentResponse,
+        ListAgentsResponse,
+        ScaleUpAgentRequest,
+        ScaleDownAgentRequest,
+        SendRequestAgentRequest,
+        SendRequestAgentResponse,
+        AgentStatus,
+        ValidationResult,
+        AgentStatistics,
+        EventRequest,
+        EventResponse,
+        EventStatus,
+        AgentRequestPayload,
+        AgentRequestResponse,
+        RequestStatus
+    ))
+)]
+pub struct ApiDoc;
