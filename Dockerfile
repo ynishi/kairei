@@ -2,7 +2,7 @@
 FROM --platform=linux/amd64 rust:1.85-slim-bookworm as builder
 
 WORKDIR /usr/src/kairei
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y pkg-config libssl-dev ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
 # Copy Cargo files for dependency caching
 COPY Cargo.toml Cargo.lock ./
