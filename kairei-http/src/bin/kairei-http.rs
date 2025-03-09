@@ -30,6 +30,10 @@ struct Cli {
     #[arg(short, long, default_value = "true")]
     enable_auth: bool,
 
+    /// Servers for documentation
+    #[arg(long, env = "KAIREI_SERVERS")]
+    servers: Option<String>,
+
     /// Subcommands
     #[command(subcommand)]
     command: Option<Commands>,
@@ -64,9 +68,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let secret = std::fs::read_to_string(&cli.secret_json).unwrap_or_default();
     let secret: Secret = serde_json::from_str(&secret).unwrap_or_default();
 
-    // Note: We don't initialize tracing here because it's already initialized in the library
-    // This avoids the "a global default trace dispatcher has already been set" error
-
     // Handle subcommands
     let config = match &cli.command {
         Some(Commands::Config { file }) => {
@@ -82,9 +83,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 host: cli.host,
                 port: cli.port,
                 enable_auth: cli.enable_auth,
+                servers: cli
+                    .servers
+                    .map(|s| s.split(',').map(|s| s.to_string()).collect())
+                    .unwrap_or_default(),
             }
         }
     };
+    debug!("Starting server with config: {:?}", config);
     kairei_http::start_with_config_and_secret(config, secret).await?;
 
     Ok(())

@@ -17,12 +17,15 @@ pub struct SystemConfig {
     pub max_agents: usize,
 
     #[serde(default = "default_init_timeout", with = "duration_ms")]
+    #[schema(value_type = u64, example = "30000(means 30sec)")]
     pub init_timeout: Duration,
 
     #[serde(default = "default_shutdown_timeout", with = "duration_ms")]
+    #[schema(value_type = u64, example = "30000(means 30sec)")]
     pub shutdown_timeout: Duration,
 
     #[serde(default = "default_request_timeout", with = "duration_ms")]
+    #[schema(value_type = u64, example = "30000(means 30sec)")]
     pub request_timeout: Duration,
 
     #[serde(default)]
@@ -49,9 +52,11 @@ pub struct AgentConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ContextConfig {
-    #[serde(default = "default_access_timeout")]
+    #[serde(default = "default_access_timeout", with = "duration_ms")]
+    #[schema(value_type = u64, example = "30000(means 30sec)")]
     pub access_timeout: Duration,
     #[serde(default = "default_request_timeout", with = "duration_ms")]
+    #[schema(value_type = u64, example = "30000(means 30sec)")]
     pub request_timeout: Duration,
 }
 
@@ -73,6 +78,7 @@ pub struct ScaleManagerConfig {
     pub max_instances_per_agent: usize,
 
     #[serde(default = "default_scale_interval", with = "duration_ms")]
+    #[schema(value_type = u64, example = "60000(means 60sec)")]
     pub scale_check_interval: Duration,
 }
 
@@ -92,9 +98,11 @@ pub struct MonitorConfig {
     pub enabled: bool,
 
     #[serde(default = "default_metrics_interval", with = "duration_ms")]
+    #[schema(value_type = u64, example = "10000(means 10sec)")]
     pub metrics_interval: Duration,
 
     #[serde(default = "default_retention_period", with = "duration_ms")]
+    #[schema(value_type = u64, example = "3600000(means 3600sec)")]
     pub retention_period: Duration,
 }
 
@@ -136,6 +144,7 @@ pub struct TickerConfig {
     pub enabled: bool,
 
     #[serde(default = "default_tick_interval", with = "duration_ms")]
+    #[schema(value_type = u64, example = "100(means 100ms)")]
     pub tick_interval: Duration,
 }
 
@@ -321,6 +330,7 @@ pub struct SearchConfig {
     pub max_fetch_per_result: usize,
     // fetch_timeout
     #[serde(default = "default_fetch_timeout", with = "duration_ms")]
+    #[schema(value_type = u64, example = "5000(means 5sec)")]
     pub fetch_timeout: Duration,
 }
 
@@ -581,5 +591,20 @@ impl SystemConfig {
     // JSONファイルから設定を読み込む
     pub fn from_file(path: &str) -> InternalResult<Self> {
         from_file(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // test serialization/deserialization
+    #[test]
+    fn test_system_config_serde() {
+        let config: SystemConfig = SystemConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        tracing::debug!("{}", json);
+        let deserialized: SystemConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(format!("{:?}", config), format!("{:?}", deserialized));
     }
 }

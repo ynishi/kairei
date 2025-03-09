@@ -20,6 +20,9 @@ pub struct ServerConfig {
 
     /// Enable authentication
     pub enable_auth: bool,
+
+    /// For servers documentation
+    pub servers: Vec<String>,
 }
 
 impl Default for ServerConfig {
@@ -28,6 +31,7 @@ impl Default for ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 3000,
             enable_auth: true,
+            servers: vec![],
         }
     }
 }
@@ -87,7 +91,7 @@ pub async fn start_server(
     info!("Initialized session manager and auth store");
 
     // Create the router with all routes and add the app state
-    let mut app = create_api_router().with_state(app_state.clone());
+    let mut app = create_api_router(&config).with_state(app_state.clone());
 
     // Apply authentication middleware if enabled
     if config.enable_auth {

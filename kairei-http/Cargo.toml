@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1.0.97"
 async-trait = "0.1.87"
 axum = { version = "0.8.1", features = ["json", "macros", "tokio"] }
-clap = { version = "4.5.31", features = ["derive"] }
+clap = { version = "4.5.31", features = ["derive", "env"] }
 dashmap = "6.1.0"
 kairei-core = { path = "../kairei-core" }
 secrecy = "0.10.3"

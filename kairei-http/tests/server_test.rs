@@ -21,12 +21,15 @@ fn test_server_config_custom() {
         host: "0.0.0.0".to_string(),
         port: 8080,
         enable_auth: true,
+        servers: vec!["http://localhost:8080".to_string()],
     };
 
     // Verify the custom values
     assert_eq!(config.host, "0.0.0.0");
     assert_eq!(config.port, 8080);
     assert!(config.enable_auth);
+    assert_eq!(config.servers.len(), 1);
+    assert_eq!(config.servers[0], "http://localhost:8080");
 }
 
 #[tokio::test]
@@ -36,6 +39,7 @@ async fn test_server_address_parsing() {
         host: "127.0.0.1".to_string(),
         port: 8081,
         enable_auth: false,
+        ..Default::default()
     };
 
     // Parse the socket address
@@ -57,6 +61,7 @@ async fn test_server_startup_with_auth() {
         host: "127.0.0.1".to_string(),
         port,
         enable_auth: true,
+        ..Default::default()
     };
 
     // Start the server with a timeout
@@ -107,6 +112,7 @@ async fn test_server_startup() {
         host: "127.0.0.1".to_string(),
         port,
         enable_auth: false,
+        ..Default::default()
     };
 
     // Start the server with a timeout
