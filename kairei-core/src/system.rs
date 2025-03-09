@@ -13,6 +13,7 @@ use tokio::{
     time::sleep,
 };
 use tracing::debug;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::agent_registry::AgentError;
@@ -948,7 +949,7 @@ pub struct ScaleStatus {
 }
 
 // システム全体の状態
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct SystemStatus {
     pub started_at: DateTime<Utc>,
     pub running: bool,
@@ -960,7 +961,7 @@ pub struct SystemStatus {
     pub event_capacity: usize,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct AgentStatus {
     pub name: String,
     pub state: String,

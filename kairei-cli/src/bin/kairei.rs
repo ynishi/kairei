@@ -439,11 +439,14 @@ async fn handle_system_commands(cmd: &SystemCommands, cli: &Cli) -> Result<(), E
             description,
             config_file,
         } => {
-            let config = if let Some(path) = config_file {
-                config::from_file::<SystemConfig, &PathBuf>(path)?
-            } else {
-                SystemConfig::default()
-            };
+            let config = config_file
+                .clone()
+                .map(|path| {
+                    config::from_file::<kairei_core::config::SystemConfig, &PathBuf>(&path)
+                        .map_err(|e| Error::Internal(format!("Failed to read config file: {}", e)))
+                        .unwrap()
+                })
+                .unwrap_or_default();
 
             let response = client
                 .create_system(name, description.as_deref(), config)

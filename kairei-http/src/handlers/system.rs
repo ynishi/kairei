@@ -17,7 +17,11 @@ use tokio::sync::RwLock;
 
 /// Create the system
 #[utoipa::path(get, path = "/systems", responses(
-    (status = 200, description = "List all todos successfully", body = CreateSystemRequest)
+    (status = 200, description = "Create system successfully", body = CreateSystemRequest),
+    (status = 401, description = "Unauthorized"), // middleware should handle this
+    (status = 403, description = "Forbidden"),
+    (status = 500, description = "Internal server error"),
+
 ),)]
 #[axum::debug_handler]
 pub async fn create_system(
@@ -38,7 +42,7 @@ pub async fn create_system(
         },
     );
 
-    let config = kairei_core::config::SystemConfig::from(payload.config.clone());
+    let config = payload.config.clone();
 
     // impl create system using kairei-core with the session manager
     let system: System = System::new(&config, &secret).await;
