@@ -58,19 +58,19 @@ pub struct AgentDetails {
     pub statistics: AgentStatistics,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct GetAgentResponse {
     pub agent_id: String,
     pub status: kairei_core::system::AgentStatus,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ListAgentsResponse {
     pub agents: Vec<GetAgentResponse>,
 }
 
 /// Agent creation request model
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, ToSchema)]
 pub struct ScaleUpAgentRequest {
     /// Number of instances to scale up by
     pub instances: usize,
@@ -80,7 +80,7 @@ pub struct ScaleUpAgentRequest {
 }
 
 /// Agent creation request model
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, ToSchema)]
 pub struct ScaleDownAgentRequest {
     /// Number of instances to scale up by
     pub instances: usize,
@@ -89,19 +89,19 @@ pub struct ScaleDownAgentRequest {
     pub options: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SendRequestAgentRequest {
     pub request_type: String,
     pub payload: Value,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct SendRequestAgentResponse {
     pub value: Value,
 }
 
 /// Agent status enum
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentStatus {
     /// Agent has been created but not started

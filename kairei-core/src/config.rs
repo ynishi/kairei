@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Duration};
+use utoipa::ToSchema;
 
 use crate::{
     Error, InternalResult, expression::Value, provider::provider::ProviderType,
@@ -7,7 +8,7 @@ use crate::{
 };
 use std::convert::TryFrom;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct SystemConfig {
     #[serde(default = "default_event_buffer_size")]
     pub event_buffer_size: usize,
@@ -34,7 +35,7 @@ pub struct SystemConfig {
     pub provider_configs: ProviderConfigs,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, ToSchema)]
 pub struct AgentConfig {
     #[serde(default)]
     pub context: ContextConfig,
@@ -46,7 +47,7 @@ pub struct AgentConfig {
     pub monitor: Option<MonitorConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ContextConfig {
     #[serde(default = "default_access_timeout")]
     pub access_timeout: Duration,
@@ -63,7 +64,7 @@ impl Default for ContextConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ScaleManagerConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -85,7 +86,7 @@ impl Default for ScaleManagerConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct MonitorConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -107,7 +108,7 @@ impl Default for MonitorConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct NativeFeatureConfig {
     #[serde(default = "default_shutdown_timeout")]
     pub shutdown_timeout: Duration,
@@ -129,7 +130,7 @@ impl Default for NativeFeatureConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TickerConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -148,7 +149,7 @@ impl Default for TickerConfig {
 }
 
 // metricsの設定
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct MetricsConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -166,7 +167,7 @@ impl Default for MetricsConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ProviderConfigs {
     #[serde(default)]
     pub providers: HashMap<String, ProviderConfig>,
@@ -187,7 +188,7 @@ impl Default for ProviderConfigs {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ProviderConfig {
     // 基本情報
     #[serde(default = "ProviderType::default")]
@@ -255,7 +256,7 @@ impl TryFrom<HashMap<String, Value>> for ProviderConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, strum::EnumString)]
+#[derive(Debug, Clone, Serialize, Deserialize, strum::EnumString, ToSchema)]
 #[strum(serialize_all = "lowercase")]
 pub enum PluginConfig {
     Memory(MemoryConfig),
@@ -265,7 +266,7 @@ pub enum PluginConfig {
 }
 
 /// メモリプラグインの設定
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct MemoryConfig {
     #[serde(default = "default_max_short_term")]
     pub max_short_term: usize,
@@ -288,7 +289,7 @@ impl Default for MemoryConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct RagConfig {
     #[serde(default = "default_collection_name")]
     pub collection_name: String,
@@ -308,7 +309,7 @@ impl Default for RagConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchConfig {
     #[serde(default = "default_search_window")]
     pub search_window: Duration,
@@ -335,7 +336,7 @@ impl Default for SearchConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CommonConfig {
     #[serde(default = "default_temperature")]
     pub temperature: f32,
@@ -355,7 +356,7 @@ impl Default for CommonConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct EndpointConfig {
     #[serde(default = "default_endpoint")]
     pub url: Option<String>,

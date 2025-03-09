@@ -6,12 +6,13 @@ use kairei_cli::{
 use kairei_core::{
     Error,
     analyzer::Parser as _,
-    config::{self, SecretConfig, SystemConfig},
+    config::{self, SecretConfig},
     preprocessor::Preprocessor,
     system::System,
     tokenizer::token::Token,
     type_checker::run_type_checker,
 };
+use kairei_http::models::SystemConfig;
 use secrecy::ExposeSecret;
 use std::path::PathBuf;
 use std::{
@@ -355,7 +356,11 @@ async fn run_local(
     debug!("secret_config: {:?}", secret_config);
 
     // Initialize system
-    let mut system = System::new(&config, &secret_config).await;
+    let mut system = System::new(
+        &kairei_core::config::SystemConfig::from(config),
+        &secret_config,
+    )
+    .await;
 
     // Load and parse DSL
     let dsl = std::fs::read_to_string(&args.dsl)
@@ -434,11 +439,14 @@ async fn handle_system_commands(cmd: &SystemCommands, cli: &Cli) -> Result<(), E
             description,
             config_file,
         } => {
-            let config = if let Some(path) = config_file {
-                config::from_file::<SystemConfig, &PathBuf>(path)?
-            } else {
-                SystemConfig::default()
-            };
+            let config = config_file
+                .clone()
+                .map(|path| {
+                    config::from_file::<kairei_core::config::SystemConfig, &PathBuf>(&path)
+                        .map_err(|e| Error::Internal(format!("Failed to read config file: {}", e)))
+                        .unwrap()
+                })
+                .unwrap_or_default();
 
             let response = client
                 .create_system(name, description.as_deref(), config)
