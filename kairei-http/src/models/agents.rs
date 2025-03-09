@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utoipa::ToSchema;
 
 /// Agent creation request model
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct AgentCreationRequest {
     /// Name of the agent
     pub name: String,
@@ -18,7 +19,7 @@ pub struct AgentCreationRequest {
 }
 
 /// Agent creation options
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, ToSchema)]
 pub struct AgentCreationOptions {
     /// Whether to automatically start the agent after creation
     #[serde(default)]
@@ -26,7 +27,7 @@ pub struct AgentCreationOptions {
 }
 
 /// Agent creation response model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AgentCreationResponse {
     /// Unique identifier for the agent
     pub agent_id: String,
@@ -39,7 +40,7 @@ pub struct AgentCreationResponse {
 }
 
 /// Agent details response model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AgentDetails {
     /// Unique identifier for the agent
     pub agent_id: String,
@@ -57,19 +58,19 @@ pub struct AgentDetails {
     pub statistics: AgentStatistics,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct GetAgentResponse {
     pub agent_id: String,
     pub status: kairei_core::system::AgentStatus,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ListAgentsResponse {
     pub agents: Vec<GetAgentResponse>,
 }
 
 /// Agent creation request model
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, ToSchema)]
 pub struct ScaleUpAgentRequest {
     /// Number of instances to scale up by
     pub instances: usize,
@@ -79,7 +80,7 @@ pub struct ScaleUpAgentRequest {
 }
 
 /// Agent creation request model
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, ToSchema)]
 pub struct ScaleDownAgentRequest {
     /// Number of instances to scale up by
     pub instances: usize,
@@ -88,19 +89,19 @@ pub struct ScaleDownAgentRequest {
     pub options: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SendRequestAgentRequest {
     pub request_type: String,
     pub payload: Value,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct SendRequestAgentResponse {
     pub value: Value,
 }
 
 /// Agent status enum
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentStatus {
     /// Agent has been created but not started
@@ -120,7 +121,7 @@ pub enum AgentStatus {
 }
 
 /// Validation result model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ValidationResult {
     /// Whether validation was successful
     pub success: bool,
@@ -130,7 +131,7 @@ pub struct ValidationResult {
 }
 
 /// Agent statistics model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AgentStatistics {
     /// Number of events processed by the agent
     pub events_processed: usize,

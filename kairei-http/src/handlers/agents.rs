@@ -15,6 +15,21 @@ use kairei_core::event_bus;
 ///
 /// Returns details about a specific agent.
 /// Requires authentication.
+#[utoipa::path(
+    get,
+    path = "/systems/{system_id}/agents/{agent_id}",
+    responses(
+        (status = 200, description = "Agent retrieved successfully", body = GetAgentResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Agent not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier"),
+        ("agent_id" = String, Path, description = "Agent identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn get_agent(
     State(state): State<AppState>,
@@ -41,6 +56,20 @@ pub async fn get_agent(
 }
 
 /// List agents
+#[utoipa::path(
+    get,
+    path = "/systems/{system_id}/agents",
+    responses(
+        (status = 200, description = "Agents listed successfully", body = ListAgentsResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn list_agents(
     State(state): State<AppState>,
@@ -76,6 +105,21 @@ pub async fn list_agents(
 }
 
 /// Start agent
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/agents/{agent_id}/start",
+    responses(
+        (status = 200, description = "Agent started successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Agent not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier"),
+        ("agent_id" = String, Path, description = "Agent identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn start_agent(
     State(state): State<AppState>,
@@ -101,6 +145,21 @@ pub async fn start_agent(
 }
 
 /// Shutdown agent
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/agents/{agent_id}/stop",
+    responses(
+        (status = 200, description = "Agent stopped successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Agent not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier"),
+        ("agent_id" = String, Path, description = "Agent identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn stop_agent(
     State(state): State<AppState>,
@@ -126,6 +185,22 @@ pub async fn stop_agent(
 }
 
 /// Scale up agent
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/agents/{agent_id}/scale-up",
+    request_body = ScaleUpAgentRequest,
+    responses(
+        (status = 200, description = "Agent scaled up successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Agent not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier"),
+        ("agent_id" = String, Path, description = "Agent identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn scale_up_agent(
     State(state): State<AppState>,
@@ -160,6 +235,22 @@ pub async fn scale_up_agent(
 }
 
 /// Scale down agent
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/agents/{agent_id}/scale-down",
+    request_body = ScaleDownAgentRequest,
+    responses(
+        (status = 200, description = "Agent scaled down successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Agent not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier"),
+        ("agent_id" = String, Path, description = "Agent identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn scale_down_agent(
     State(state): State<AppState>,
@@ -194,6 +285,22 @@ pub async fn scale_down_agent(
 }
 
 /// Request agent
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/agents/{agent_id}/request",
+    request_body = SendRequestAgentRequest,
+    responses(
+        (status = 200, description = "Request sent successfully", body = SendRequestAgentResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Agent not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier"),
+        ("agent_id" = String, Path, description = "Agent identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn request_agent(
     State(state): State<AppState>,

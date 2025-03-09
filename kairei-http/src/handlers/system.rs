@@ -16,6 +16,17 @@ use kairei_core::system::{System, SystemStatus};
 use tokio::sync::RwLock;
 
 /// Create the system
+#[utoipa::path(
+    post,
+    path = "/systems",
+    request_body = CreateSystemRequest,
+    responses(
+        (status = 200, description = "Create system successfully", body = CreateSystemResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 #[axum::debug_handler]
 pub async fn create_system(
     State(state): State<AppState>,
@@ -63,6 +74,20 @@ pub async fn create_system(
 ///
 /// Returns information about the current state of the system.
 /// Requires authentication with admin role.
+#[utoipa::path(
+    get,
+    path = "/systems/{system_id}",
+    responses(
+        (status = 200, description = "System retrieved successfully", body = SystemStatus),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn get_system(
     State(state): State<AppState>,
@@ -88,6 +113,16 @@ pub async fn get_system(
 }
 
 /// List systems
+#[utoipa::path(
+    get,
+    path = "/systems",
+    responses(
+        (status = 200, description = "Systems listed successfully", body = ListSystemsResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 #[axum::debug_handler]
 pub async fn list_systems(
     State(state): State<AppState>,
@@ -117,6 +152,21 @@ pub async fn list_systems(
 }
 
 // Start the system
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/start",
+    request_body = StartSystemRequest,
+    responses(
+        (status = 200, description = "System started successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn start_system(
     State(state): State<AppState>,
@@ -157,6 +207,20 @@ pub async fn start_system(
 }
 
 // Shutdown the system
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/stop",
+    responses(
+        (status = 200, description = "System stopped successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn stop_system(
     State(state): State<AppState>,
@@ -180,6 +244,20 @@ pub async fn stop_system(
 }
 
 /// Delete the system
+#[utoipa::path(
+    delete,
+    path = "/systems/{system_id}",
+    responses(
+        (status = 200, description = "System deleted successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier")
+    )
+)]
 #[axum::debug_handler]
 pub async fn delete_system(
     State(state): State<AppState>,

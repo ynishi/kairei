@@ -1,4 +1,4 @@
-use kairei_core::{config::SystemConfig, system::SystemStatus};
+use kairei_core::system::SystemStatus;
 use kairei_http::models::{
     AgentCreationRequest, AgentStatus, CreateSystemRequest, CreateSystemResponse, EventRequest,
     ListSystemsResponse, StartSystemRequest,
@@ -100,7 +100,7 @@ impl ApiClient {
         &self,
         name: &str,
         description: Option<&str>,
-        config: SystemConfig,
+        config: kairei_core::config::SystemConfig,
     ) -> ApiResult<CreateSystemResponse> {
         let request = CreateSystemRequest {
             name: name.to_string(),
@@ -328,7 +328,7 @@ mod tests {
             .create_system(
                 "test-system",
                 Some("Test system description"),
-                SystemConfig::default(),
+                kairei_core::config::SystemConfig::default(),
             )
             .await
             .unwrap();

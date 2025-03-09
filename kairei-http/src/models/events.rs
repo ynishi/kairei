@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utoipa::ToSchema;
 
 /// Event submission request model
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, ToSchema)]
 pub struct EventRequest {
     /// Type of the event
     pub event_type: String,
@@ -16,7 +17,7 @@ pub struct EventRequest {
 }
 
 /// Event submission response model
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct EventResponse {
     /// Unique identifier for the event
     pub event_id: String,
@@ -29,7 +30,7 @@ pub struct EventResponse {
 }
 
 /// Event status enum
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum EventStatus {
     /// Event has been queued for delivery
@@ -43,7 +44,7 @@ pub enum EventStatus {
 }
 
 /// Agent request model
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct AgentRequestPayload {
     /// Type of the request
     pub request_type: String,
@@ -53,7 +54,7 @@ pub struct AgentRequestPayload {
 }
 
 /// Agent request response model
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AgentRequestResponse {
     /// Unique identifier for the request
     pub request_id: String,
@@ -71,7 +72,7 @@ pub struct AgentRequestResponse {
 }
 
 /// Request status enum
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestStatus {
     /// Request is pending processing

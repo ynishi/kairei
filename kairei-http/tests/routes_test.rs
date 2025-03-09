@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::http::{Request, StatusCode};
 use kairei_core::{
-    config::{ProviderConfig, ProviderConfigs, SystemConfig},
+    config::{ProviderConfig, ProviderConfigs},
     provider::provider::ProviderType,
     system::SystemStatus,
 };
@@ -19,8 +19,13 @@ use kairei_http::{
 use serde_json::json;
 use tower::ServiceExt;
 
-fn create_test_system_config() -> SystemConfig {
-    SystemConfig {
+fn create_test_system_config() -> kairei_core::config::SystemConfig {
+    /*SystemConfig {
+        ..Default::default()
+    }
+    */
+
+    kairei_core::config::SystemConfig {
         provider_configs: {
             let mut providers = HashMap::new();
             providers.insert(

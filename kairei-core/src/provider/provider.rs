@@ -15,6 +15,7 @@ use super::{
 use async_trait::async_trait;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// # Provider Interface
 ///
@@ -305,6 +306,7 @@ impl fmt::Display for SectionMetadata {
     Default,
     PartialEq,
     PartialOrd,
+    ToSchema,
 )]
 pub enum ProviderType {
     #[default]
