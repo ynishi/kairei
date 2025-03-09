@@ -607,6 +607,7 @@ use proc_macro2::TokenStream;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::tokenizer::token::TokenizerError;
 use crate::type_checker::TypeCheckError;
 
 // リクエストオプション
@@ -968,6 +969,8 @@ pub enum ASTError {
     ASTNotFound(String),
     #[error("Type check error: {0}")]
     TypeCheckError(#[from] TypeCheckError),
+    #[error("Tokenization error: {0}")]
+    TokenizeError(#[from] TokenizerError),
 }
 
 pub type ASTResult<T> = Result<T, ASTError>;
