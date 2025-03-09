@@ -60,6 +60,9 @@ use crate::models::{
         AgentRequestPayload,
         AgentRequestResponse,
         RequestStatus
-    ))
+    )),
+    servers(
+        (url = "http://localhost:3000/api/v1", description = "Local development server"),
+    )
 )]
 pub struct ApiDoc;

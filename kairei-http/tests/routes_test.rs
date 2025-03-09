@@ -47,9 +47,10 @@ fn create_test_system_config() -> kairei_core::config::SystemConfig {
 #[tokio::test]
 async fn test_system_route() {
     let app_state: kairei_http::server::AppState = create_test_state();
+    let config = kairei_http::server::ServerConfig::default();
 
     // Create the router with a test state
-    let app = routes::create_api_router()
+    let app = routes::create_api_router(&config)
         .with_state(app_state.clone())
         .layer(axum::middleware::from_fn_with_state(
             Arc::new(app_state.auth_store.clone()),
@@ -199,7 +200,9 @@ async fn test_system_route() {
 async fn test_agent_route() {
     // Create the router with a test state
     let app_state: kairei_http::server::AppState = create_test_state();
-    let app = routes::create_api_router()
+    let config = kairei_http::server::ServerConfig::default();
+
+    let app = routes::create_api_router(&config)
         .with_state(app_state.clone())
         .layer(axum::middleware::from_fn_with_state(
             Arc::new(app_state.auth_store.clone()),
@@ -411,9 +414,10 @@ async fn test_agent_route() {
 #[tokio::test]
 async fn test_event_route() {
     let app_state: kairei_http::server::AppState = create_test_state();
+    let config = kairei_http::server::ServerConfig::default();
 
     // Create the router with a test state
-    let app = routes::create_api_router()
+    let app = routes::create_api_router(&config)
         .with_state(app_state.clone())
         .layer(axum::middleware::from_fn_with_state(
             Arc::new(app_state.auth_store.clone()),
