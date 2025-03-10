@@ -8,5 +8,5 @@ pub mod v1;
 pub fn api_v1_router() -> Router<AppState> {
     Router::new()
         .merge(v1::system::routes())
-        .nest("/compiler", v1::compiler::routes())
+        .merge(v1::compiler::routes())
 }

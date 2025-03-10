@@ -9,6 +9,10 @@ use crate::models::events::{
 };
 use crate::models::system::{SystemInfo, SystemStatistics, SystemStatus};
 use crate::server::AppState;
+use crate::services::compiler::models::{
+    ErrorLocation, SuggestionRequest, SuggestionResponse, ValidationError, ValidationRequest,
+    ValidationResponse, ValidationSuggestion, ValidationWarning,
+};
 use crate::session::manager::SessionManager;
 use axum::{extract::Path, http::StatusCode, response::Json};
 use serde_json::json;
@@ -166,4 +170,66 @@ pub async fn test_send_agent_request(
     };
 
     Ok(Json(response))
+}
+
+/// Test version of validate_dsl that doesn't require State
+pub async fn test_validate_dsl(Json(payload): Json<ValidationRequest>) -> Json<ValidationResponse> {
+    // For valid DSL code
+    if payload.code.contains("micro") && !payload.code.contains("ERROR") {
+        Json(ValidationResponse {
+            valid: true,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+            suggestions: None,
+        })
+    } else {
+        // For invalid DSL code
+        let error = ValidationError {
+            message: "Parse error: unexpected token".to_string(),
+            location: ErrorLocation {
+                line: 1,
+                column: payload.code.find("ERROR").unwrap_or(1),
+                context: payload.code.clone(),
+            },
+            error_code: "E1001".to_string(),
+            suggestion: "Check syntax for errors".to_string(),
+        };
+
+        let warning = if payload.code.contains("WARNING") {
+            vec![ValidationWarning {
+                message: "Potential performance issue".to_string(),
+                location: ErrorLocation {
+                    line: 1,
+                    column: payload.code.find("WARNING").unwrap_or(1),
+                    context: payload.code.clone(),
+                },
+                warning_code: "W1001".to_string(),
+            }]
+        } else {
+            Vec::new()
+        };
+
+        Json(ValidationResponse {
+            valid: false,
+            errors: vec![error.clone()],
+            warnings: warning,
+            suggestions: Some(ValidationSuggestion {
+                code: payload.code.replace("ERROR", ""),
+            }),
+        })
+    }
+}
+
+/// Test version of suggest_fixes that doesn't require State
+pub async fn test_suggest_fixes(
+    Json(payload): Json<SuggestionRequest>,
+) -> Json<SuggestionResponse> {
+    // Simple implementation that removes "ERROR" from the code
+    let fixed_code = payload.code.replace("ERROR", "");
+
+    Json(SuggestionResponse {
+        original_code: payload.code,
+        fixed_code,
+        explanation: "Removed syntax errors from the code.".to_string(),
+    })
 }

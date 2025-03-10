@@ -1,19 +1,15 @@
 use crate::handlers::agents;
-use crate::handlers::compiler;
 use crate::handlers::events;
 use crate::handlers::system;
 use crate::models::CompileSystemRequest;
 use crate::models::CompileSystemResponse;
+use crate::services::compiler::handlers as compiler;
 
 use utoipa::OpenApi;
 
 use crate::models::agents::{
     AgentStatistics, AgentStatus, GetAgentResponse, ListAgentsResponse, ScaleDownAgentRequest,
     ScaleUpAgentRequest, SendRequestAgentRequest, SendRequestAgentResponse, ValidationResult,
-};
-use crate::models::compiler::{
-    ErrorLocation, SuggestionRequest, SuggestionResponse, ValidationError, ValidationRequest,
-    ValidationResponse, ValidationSuggestion, ValidationWarning,
 };
 use crate::models::events::{
     AgentRequestPayload, AgentRequestResponse, EventRequest, EventResponse, EventStatus,
@@ -22,6 +18,10 @@ use crate::models::events::{
 use crate::models::{
     CreateSystemRequest, CreateSystemResponse, ListSystemsResponse, StartSystemRequest, SystemInfo,
     SystemStatistics, SystemStatus,
+};
+use crate::services::compiler::models::{
+    ErrorLocation, SuggestionRequest, SuggestionResponse, ValidationError, ValidationRequest,
+    ValidationResponse, ValidationSuggestion, ValidationWarning,
 };
 
 #[derive(OpenApi)]

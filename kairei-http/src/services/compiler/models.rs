@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use utoipa::ToSchema;
 
 /// Request for validating DSL code
@@ -81,4 +82,73 @@ pub struct SuggestionResponse {
     pub fixed_code: String,
     /// Explanation of the fixes
     pub explanation: String,
+}
+
+// Cloud Logging compatible structures
+
+/// Cloud Logging compatible log structure
+#[derive(Debug, Clone, Serialize)]
+pub struct CloudLog {
+    /// Log severity level
+    pub severity: String,
+    /// Log message payload
+    pub message: LogPayload,
+    /// Timestamp in ISO 8601 format
+    pub timestamp: String,
+    /// Trace information
+    pub trace: String,
+}
+
+/// Log payload containing request/response information and error details
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogPayload {
+    /// Request ID for tracking
+    pub x_request_id: Option<String>,
+    /// Host information
+    pub host: Option<String>,
+    /// User agent information
+    pub user_agent: Option<String>,
+    /// HTTP method
+    pub method: Option<String>,
+    /// Request URI
+    pub uri: Option<String>,
+    /// HTTP status code
+    pub status: Option<String>,
+    /// Request/response latency
+    pub latency: Option<Duration>,
+    /// Log entry type
+    pub kind: LogKind,
+    /// Error message details (if applicable)
+    pub error_message: Option<LogErrorMessage>,
+
+    /// Content type of the request
+    pub content_type: Option<String>,
+    /// Referrer information
+    pub referrer: Option<String>,
+    /// X-Forwarded-For header (client IP when behind proxy)
+    pub x_forwarded_for: Option<String>,
+    /// Google Cloud Trace context for distributed tracing
+    pub x_cloud_trace_context: Option<String>,
+}
+
+/// Log entry type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LogKind {
+    /// Request log
+    Request,
+    /// Response log
+    Response,
+    /// Error log
+    Err,
+}
+
+/// Detailed error message structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogErrorMessage {
+    /// Error type
+    pub r#type: String,
+    /// Error title
+    pub title: String,
+    /// Detailed error message
+    pub detail: String,
 }
