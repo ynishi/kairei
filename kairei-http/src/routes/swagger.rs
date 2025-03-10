@@ -3,6 +3,7 @@ use crate::handlers::events;
 use crate::handlers::system;
 use crate::models::CompileSystemRequest;
 use crate::models::CompileSystemResponse;
+use crate::services::compiler::handlers as compiler;
 
 use utoipa::OpenApi;
 
@@ -17,6 +18,10 @@ use crate::models::events::{
 use crate::models::{
     CreateSystemRequest, CreateSystemResponse, ListSystemsResponse, StartSystemRequest, SystemInfo,
     SystemStatistics, SystemStatus,
+};
+use crate::services::compiler::models::{
+    ErrorLocation, SuggestionRequest, SuggestionResponse, ValidationError, ValidationRequest,
+    ValidationResponse, ValidationSuggestion, ValidationWarning,
 };
 
 #[derive(OpenApi)]
@@ -38,7 +43,9 @@ use crate::models::{
         agents::request_agent,
         events::list_events,
         events::emit_event,
-        events::subscribe_event
+        events::subscribe_event,
+        compiler::validate_dsl,
+        compiler::suggest_fixes
     ),
     components(schemas(
         CreateSystemRequest,
@@ -64,8 +71,19 @@ use crate::models::{
         EventStatus,
         AgentRequestPayload,
         AgentRequestResponse,
-        RequestStatus
+        RequestStatus,
+        ValidationRequest,
+        ValidationResponse,
+        ValidationError,
+        ValidationWarning,
+        ErrorLocation,
+        ValidationSuggestion,
+        SuggestionRequest,
+        SuggestionResponse
     )),
+    tags(
+        (name = "compiler", description = "Compiler API")
+    ),
     servers(
         (url = "http://localhost:3000/api/v1", description = "Local development server"),
     )

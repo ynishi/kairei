@@ -7,6 +7,7 @@ pub mod handlers;
 pub mod models;
 pub mod routes;
 pub mod server;
+pub mod services;
 pub mod session;
 
 use server::{Secret, ServerConfig, start_server};

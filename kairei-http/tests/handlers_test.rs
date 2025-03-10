@@ -2,10 +2,16 @@ use axum::{extract::Path, http::StatusCode, response::Json};
 use kairei_http::{
     handlers::test_helpers::{
         create_test_state, create_test_user_with_api_key, test_create_agent, test_get_agent,
-        test_get_system, test_send_agent_request, test_send_event,
+        test_get_system, test_send_agent_request, test_send_event, test_suggest_fixes,
+        test_validate_dsl,
     },
-    models::agents::AgentCreationRequest,
-    models::events::{AgentRequestPayload, EventRequest},
+    models::{
+        agents::AgentCreationRequest,
+        events::{AgentRequestPayload, EventRequest},
+    },
+    services::compiler::models::{
+        SuggestionRequest, ValidationError, ValidationRequest, ValidationResponse,
+    },
 };
 use serde_json::json;
 
@@ -129,6 +135,114 @@ async fn test_get_agent_handler() {
     // Check that the response is an error with NOT_FOUND status
     assert!(response.is_err());
     assert_eq!(response.unwrap_err(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_validate_dsl_handler_valid_code() {
+    // Create a request payload with valid DSL code
+    let payload = json!({
+        "code": "micro TestAgent { }"
+    });
+
+    // Call the test handler directly
+    let response = test_validate_dsl(Json(
+        serde_json::from_value::<ValidationRequest>(payload).unwrap(),
+    ))
+    .await;
+
+    // Convert to a standard response for testing
+    let response_body = serde_json::to_string(&response.0).unwrap();
+
+    // Parse the response body
+    let _: ValidationResponse = serde_json::from_str(&response_body).unwrap();
+}
+
+#[tokio::test]
+async fn test_validate_dsl_handler_invalid_code() {
+    // Create a request payload with invalid DSL code
+    let payload = json!({
+        "code": "micro TestAgent { ERROR on init { println(\"Hello, World!\"); } }"
+    });
+
+    // Call the test handler directly
+    let response = test_validate_dsl(Json(
+        serde_json::from_value::<ValidationRequest>(payload).unwrap(),
+    ))
+    .await;
+
+    // Convert to a standard response for testing
+    let response_body = serde_json::to_string(&response.0).unwrap();
+
+    // Parse the response body
+    let _: ValidationResponse = serde_json::from_str(&response_body).unwrap();
+}
+
+#[tokio::test]
+async fn test_validate_dsl_handler_with_warnings() {
+    // Create a request payload with code that has warnings
+    let payload = json!({
+        "code": "micro TestAgent { WARNING on init { println(\"Hello, World!\"); } }"
+    });
+
+    // Call the test handler directly
+    let response = test_validate_dsl(Json(
+        serde_json::from_value::<ValidationRequest>(payload).unwrap(),
+    ))
+    .await;
+
+    // Convert to a standard response for testing
+    let response_body = serde_json::to_string(&response.0).unwrap();
+
+    // Parse the response body
+    let _: ValidationResponse = serde_json::from_str(&response_body).unwrap();
+}
+
+#[tokio::test]
+async fn test_suggest_fixes_handler() {
+    // Create a validation error
+    let error = ValidationError {
+        message: "Parse error: unexpected token".to_string(),
+        location: kairei_http::services::compiler::models::ErrorLocation {
+            line: 1,
+            column: 15,
+            context: "micro TestAgent { ERROR }".to_string(),
+        },
+        error_code: "E1001".to_string(),
+        suggestion: "Check syntax for errors".to_string(),
+    };
+
+    // Create a request payload
+    let payload = json!({
+        "code": "micro TestAgent { ERROR }",
+        "errors": [error]
+    });
+
+    // Call the test handler directly
+    let response = test_suggest_fixes(Json(
+        serde_json::from_value::<SuggestionRequest>(payload).unwrap(),
+    ))
+    .await;
+
+    // Convert to a standard response for testing
+    let response_body = serde_json::to_string(&response.0).unwrap();
+
+    // Parse the response body
+    let body: serde_json::Value = serde_json::from_str(&response_body).unwrap();
+
+    // Verify the response structure
+    assert!(body.get("original_code").is_some());
+    assert!(body.get("fixed_code").is_some());
+    assert!(body.get("explanation").is_some());
+
+    // Verify specific values
+    assert_eq!(body["original_code"], "micro TestAgent { ERROR }");
+    assert_eq!(body["fixed_code"], "micro TestAgent {  }");
+    assert!(
+        body["explanation"]
+            .as_str()
+            .unwrap()
+            .contains("Removed syntax errors")
+    );
 }
 
 #[tokio::test]
