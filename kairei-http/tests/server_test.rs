@@ -22,6 +22,7 @@ fn test_server_config_custom() {
         port: 8080,
         enable_auth: true,
         servers: vec!["http://localhost:8080".to_string()],
+        ..Default::default()
     };
 
     // Verify the custom values

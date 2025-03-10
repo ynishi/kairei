@@ -33,6 +33,14 @@ struct Cli {
     /// Servers for documentation
     #[arg(long, env = "KAIREI_SERVERS")]
     servers: Option<String>,
+    
+    /// Directory containing DSL files for compiler services
+    #[arg(long, env = "KAIREI_DSL_DIR")]
+    dsl_dir: Option<String>,
+    
+    /// Enable DSL-based compiler services
+    #[arg(long, env = "KAIREI_ENABLE_DSL_COMPILER", default_value = "true")]
+    enable_dsl_compiler: bool,
 
     /// Subcommands
     #[command(subcommand)]
@@ -78,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             serde_json::from_str(&config)?
         }
         None => {
-            // Use the host and port from the command line arguments
+            // Use the command line arguments to build the server configuration
             ServerConfig {
                 host: cli.host,
                 port: cli.port,
@@ -87,6 +95,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .servers
                     .map(|s| s.split(',').map(|s| s.to_string()).collect())
                     .unwrap_or_default(),
+                dsl_directory: cli.dsl_dir,
+                enable_dsl_compiler: cli.enable_dsl_compiler,
             }
         }
     };
