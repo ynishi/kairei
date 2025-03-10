@@ -23,7 +23,7 @@ pub struct ValidationResponse {
 }
 
 /// Detailed validation error
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ValidationError {
     /// Error message
     pub message: String,
@@ -47,7 +47,7 @@ pub struct ValidationWarning {
 }
 
 /// Error location information
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ErrorLocation {
     /// Line number (1-based)
     pub line: usize,

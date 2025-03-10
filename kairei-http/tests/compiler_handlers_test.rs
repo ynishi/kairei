@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use axum::{extract::State, http::header::HeaderMap, response::Json};
 use kairei_http::{
     server::AppState,
     services::compiler::{
+        CompilerSystemManager,
         handlers::{suggest_fixes, validate_dsl},
         models::{ErrorLocation, SuggestionRequest, ValidationError, ValidationRequest},
     },
@@ -10,8 +13,12 @@ use kairei_http::{
 #[tokio::test]
 async fn test_validate_dsl_handler_integration() {
     // Create a test state
-    let app_state = AppState::default();
-
+    let mut compiler_manager = CompilerSystemManager::default();
+    compiler_manager.initialize(false).await.unwrap();
+    let app_state = AppState {
+        compiler_system_manager: Some(Arc::new(compiler_manager)),
+        ..Default::default()
+    };
     // Test with valid DSL code
     let valid_payload = ValidationRequest {
         code: "micro TestAgent { }".to_string(),

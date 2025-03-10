@@ -3,6 +3,7 @@
         "dashmap",
         "dotenv",
         "kairei",
+        "oneshot",
         "serde",
         "serper",
         "Sistence",

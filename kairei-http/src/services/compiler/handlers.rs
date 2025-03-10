@@ -5,13 +5,10 @@ use tracing::{error, info};
 
 use crate::{
     server::AppState,
-    services::compiler::{
-        CompilerSystemManager,
-        models::{
-            CloudLog, ErrorLocation, LogErrorMessage, LogKind, LogPayload, SuggestionRequest,
-            SuggestionResponse, ValidationError, ValidationRequest, ValidationResponse,
-            ValidationSuggestion,
-        },
+    services::compiler::models::{
+        CloudLog, ErrorLocation, LogErrorMessage, LogKind, LogPayload, SuggestionRequest,
+        SuggestionResponse, ValidationError, ValidationRequest, ValidationResponse,
+        ValidationSuggestion,
     },
 };
 
@@ -166,7 +163,7 @@ fn error_type_from_system_error(error: &SystemError) -> String {
     )
 )]
 pub async fn validate_dsl(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<ValidationRequest>,
 ) -> Json<ValidationResponse> {
@@ -214,7 +211,25 @@ pub async fn validate_dsl(
     let method = Some("POST".to_string());
     let uri = Some("/compiler/validate".to_string());
 
-    let manager = CompilerSystemManager::default();
+    if state.compiler_system_manager.is_none() {
+        return Json(ValidationResponse {
+            valid: false,
+            errors: vec![ValidationError {
+                message: "Compiler system not available".to_string(),
+                location: ErrorLocation {
+                    line: 1,
+                    column: 1,
+                    context: "".to_string(),
+                },
+                error_code: "E1006".to_string(),
+                suggestion: "Check system configuration".to_string(),
+            }],
+            warnings: Vec::new(),
+            suggestions: None,
+        });
+    }
+
+    let manager = state.compiler_system_manager.clone().unwrap();
     let error_logger = ErrorLogger::new();
     if payload.code.is_empty() {
         return Json(ValidationResponse {

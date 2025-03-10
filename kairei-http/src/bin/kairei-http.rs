@@ -33,11 +33,11 @@ struct Cli {
     /// Servers for documentation
     #[arg(long, env = "KAIREI_SERVERS")]
     servers: Option<String>,
-    
+
     /// Directory containing DSL files for compiler services
-    #[arg(long, env = "KAIREI_DSL_DIR")]
-    dsl_dir: Option<String>,
-    
+    #[arg(long, env = "KAIREI_DSL_DIR", default_value = "dsl")]
+    dsl_dir: String,
+
     /// Enable DSL-based compiler services
     #[arg(long, env = "KAIREI_ENABLE_DSL_COMPILER", default_value = "true")]
     enable_dsl_compiler: bool,
