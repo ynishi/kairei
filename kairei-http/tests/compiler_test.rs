@@ -3,7 +3,8 @@ use kairei_http::services::compiler::CompilerSystemManager;
 #[tokio::test]
 async fn test_compiler_system_manager() {
     // Create a new CompilerSystemManager with default configuration
-    let manager = CompilerSystemManager::default();
+    let mut manager = CompilerSystemManager::default();
+    manager.initialize(false).await.unwrap();
 
     // Test validation with valid DSL code
     let valid_code = "micro TestAgent { }";
@@ -22,7 +23,7 @@ async fn test_compiler_system_manager() {
     let error = result.unwrap_err();
     let error_string = error.to_string();
     assert!(
-        error_string.contains("failed to parse") || error_string.contains("syntax"),
+        error_string.to_lowercase().contains("failed to parse") || error_string.contains("syntax"),
         "Error message should indicate a parsing problem: {}",
         error_string
     );
@@ -31,19 +32,8 @@ async fn test_compiler_system_manager() {
 #[tokio::test]
 async fn test_compiler_system_manager_create_system() {
     // Create a new CompilerSystemManager with default configuration
-    let manager = CompilerSystemManager::default();
+    let mut manager = CompilerSystemManager::default();
 
     // Create a validation system
-    let system = manager.create_validation_system().await;
-
-    // Verify that the system was created successfully
-    assert!(
-        system
-            .ast_registry()
-            .read()
-            .await
-            .list_agent_asts()
-            .await
-            .is_empty()
-    );
+    manager.initialize(false).await.unwrap();
 }

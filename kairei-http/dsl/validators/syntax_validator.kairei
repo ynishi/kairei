@@ -1,0 +1,41 @@
+micro Validator {
+  policy "provide detailed error information"
+
+  answer {
+    on request Validate(stateInput: String, answerInput: String, observeInput: Sting, lifecycleInput: String, policiesInput: String, parseError: String) -> Result<String, Error> {
+      (stateResult, answerResult, observeResult, lifecycleResult, policiesResult) = await (
+        request StateValidator to ValidateState(stateInput, parseError),
+        request AnswerValidator to ValidateAnswer(answerInput, parseError),
+        request ObserveValidator to ValidateObserve(observeInput, parseError),
+        request LifecycleValidator to ValidateLifecycle(lifecycleInput, parseError),
+        request PoliciesValidator to ValidatePolicies(policiesInput, parseError)
+      )
+
+      // Analyze error and prepare suggestions
+      analysis = think("""Analyze this Kairei DSL error and suggest a fix:
+
+        state:
+        ${stateResult}
+
+        answer:
+        ${answerResult}
+
+        observe:
+        ${observeResult}
+
+        lifecycle:
+        ${lifecycleResult}
+
+        policies:
+        ${policiesResult}
+          
+        Provide a structured analysis with:
+        1. What caused the error
+        2. Where the error is located (line/column if possible)
+        3. How to fix it
+        4. A specific code example showing the fix
+        """)
+      return analysis
+    }
+  }
+}

@@ -1,0 +1,39 @@
+micro StateValidator {
+    policy "KAIREI validator for state, parts of DSL"
+    policy "provide detailed error information"
+    
+    answer {
+        on request ValidateState(stateInput: String, parseError: String) -> Result<String, Error> {
+        stateResult = think("""
+            Spec:
+            state is group of state variable assignment.
+            [pattern 1]
+            {var_name}: {type_name} = {value}; // ; is needed
+            [pattern 2]
+            {var_name}: {type_name};
+            [pattern 3]
+            {var_name} = {value}; // it is allowed type infer
+        
+            Example:
+            ```kairei
+            micro TravelAgent {
+                state {
+                    active_trips: Int = 0;
+                    user_preferences: String = "";
+                    last_update: Duration;
+                }
+            }
+            ```
+        
+            Validate target:
+            ${stateInput}
+        
+            Error:
+            ${parseError}
+        """)
+    
+        return stateResult
+        }
+    }
+}
+    

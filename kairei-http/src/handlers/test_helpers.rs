@@ -28,6 +28,7 @@ pub fn create_test_state() -> AppState {
     AppState {
         session_manager,
         auth_store,
+        ..Default::default()
     }
 }
 
