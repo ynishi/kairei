@@ -1,0 +1,67 @@
+micro AnswerValidator {
+    policy "Validate answer blocks in Kairei DSL according to specification"
+    policy "Provide concise feedback (max 50 words) when validation fails"
+    
+    answer {
+        on request ValidateAnswer(answerInput: String, parseError: String) -> Result<String, Error> {
+            answerResult = think("""
+Spec OF ANSWER BLOCK:
+The answer block contains request handlers that respond to specific request types.
+[pattern]
+on request {RequestName}({param_name}: {type_name}, ...) -> Result<{return_type}, Error> {
+    // handler body with return statement
+}
+
+Example:
+```kairei
+answer {
+    on request GetUserProfile(userId: String) -> Result<UserProfile, Error> {
+        // Fetch user profile logic
+        return Ok(userProfile)
+    }
+    
+    on request UpdateSettings(settings: Settings) -> Result<Boolean, Error> {
+        // Update settings logic
+        return Ok(true)
+    }
+}
+```
+
+SEE THIS STATEMENT AND IT SATISFIES ANSWER BLOCK SPEC OR NOT.
+USER INPUT ANSWER BLOCK IS HERE
+```
+${answerInput}
+```
+
+GOT ERROR IS HERE:
+```
+${parseError}
+```
+
+ANALYZE THE CODE AND PROVIDE ONE OF THESE RESPONSES:
+
+[OK]
+Valid answer block.
+
+[UNKNOWN ERROR]
+Not related to answer block syntax.
+
+[SYNTAX ERROR]
+Missing return type. Should be `-> Result<Type, Error>`.
+
+[PARAMETER ERROR]
+Parameter 'userId' missing type annotation. Use: `userId: String`.
+
+[REQUEST ERROR]
+Missing 'request' keyword before handler name.
+
+[RETURN ERROR]
+Missing return statement or incorrect return type.
+
+PROVIDE ONLY THE ERROR TYPE AND A BRIEF EXPLANATION.
+            """)
+        
+            return answerResult
+        }
+    }
+}

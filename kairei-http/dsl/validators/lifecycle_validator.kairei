@@ -1,0 +1,68 @@
+micro LifecycleValidator {
+    policy "Validate lifecycle blocks in Kairei DSL according to specification"
+    policy "Provide concise feedback (max 50 words) when validation fails"
+    
+    answer {
+        on request ValidateLifecycle(lifecycleInput: String, parseError: String) -> Result<String, Error> {
+            lifecycleResult = think("""
+Spec OF LIFECYCLE BLOCK:
+The lifecycle block contains handlers for agent lifecycle events like initialization and shutdown.
+[patterns]
+on_init {
+    // Initialization code
+}
+
+on_shutdown {
+    // Cleanup code
+}
+
+Example:
+```kairei
+lifecycle {
+    on_init {
+        self.counter = 0
+        log("Agent initialized")
+    }
+    
+    on_shutdown {
+        save_state()
+        log("Agent shutting down")
+    }
+}
+```
+
+SEE THIS STATEMENT AND IT SATISFIES LIFECYCLE BLOCK SPEC OR NOT.
+USER INPUT LIFECYCLE BLOCK IS HERE
+```
+${lifecycleInput}
+```
+
+GOT ERROR IS HERE:
+```
+${parseError}
+```
+
+ANALYZE THE CODE AND PROVIDE ONE OF THESE RESPONSES:
+
+[OK]
+Valid lifecycle block.
+
+[UNKNOWN ERROR]
+Not related to lifecycle block syntax.
+
+[HANDLER ERROR]
+Invalid handler type. Only 'on_init' and 'on_shutdown' are supported.
+
+[SYNTAX ERROR]
+Missing opening/closing braces or other syntax elements.
+
+[CODE ERROR]
+Invalid code in handler body.
+
+PROVIDE ONLY THE ERROR TYPE AND A BRIEF EXPLANATION.
+            """)
+        
+            return lifecycleResult
+        }
+    }
+}

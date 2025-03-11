@@ -1,0 +1,64 @@
+micro ObserveValidator {
+    policy "Validate observe blocks in Kairei DSL according to specification"
+    policy "Provide concise feedback (max 50 words) when validation fails"
+    
+    answer {
+        on request ValidateObserve(observeInput: String, parseError: String) -> Result<String, Error> {
+            observeResult = think("""
+Spec OF OBSERVE BLOCK:
+The observe block contains event handlers that react to specific events.
+[pattern]
+on {EventName}({param_name}: {type_name}, ...) {
+    // handler body
+}
+
+Example:
+```kairei
+observe {
+    on UserLoggedIn(userId: String, timestamp: Int) {
+        // Handle user login event
+        log("User ${userId} logged in at ${timestamp}")
+    }
+    
+    on MessageReceived(message: Message) {
+        // Process incoming message
+        analyze_message(message)
+    }
+}
+```
+
+SEE THIS STATEMENT AND IT SATISFIES OBSERVE BLOCK SPEC OR NOT.
+USER INPUT OBSERVE BLOCK IS HERE
+```
+${observeInput}
+```
+
+GOT ERROR IS HERE:
+```
+${parseError}
+```
+
+ANALYZE THE CODE AND PROVIDE ONE OF THESE RESPONSES:
+
+[OK]
+Valid observe block.
+
+[UNKNOWN ERROR]
+Not related to observe block syntax.
+
+[EVENT ERROR]
+Invalid event handler format. Use `on EventName(parameters) { ... }`.
+
+[PARAMETER ERROR]
+Parameter 'userId' missing type annotation. Use: `userId: String`.
+
+[SYNTAX ERROR]
+Missing opening/closing braces or other syntax elements.
+
+PROVIDE ONLY THE ERROR TYPE AND A BRIEF EXPLANATION.
+            """)
+        
+            return observeResult
+        }
+    }
+}

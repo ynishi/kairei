@@ -3,13 +3,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::auth::{AuthStore, auth_middleware};
 use crate::routes::create_api_router;
 use crate::services::compiler::{CompilerSystemManager, DslLoader};
 use crate::session::manager::{SessionConfig, SessionManager};
-use kairei_core::config::{SecretConfig, SystemConfig};
+use kairei_core::config::{SystemConfig, TickerConfig};
 
 /// Server configuration
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -31,6 +31,9 @@ pub struct ServerConfig {
 
     /// Enable DSL-based compiler services
     pub enable_dsl_compiler: bool,
+
+    /// Enable the ticker for compiler services
+    pub enable_ticker: bool,
 }
 
 impl Default for ServerConfig {
@@ -42,6 +45,7 @@ impl Default for ServerConfig {
             servers: vec![],
             dsl_directory: "dsl".to_string(),
             enable_dsl_compiler: true,
+            enable_ticker: false,
         }
     }
 }
@@ -86,7 +90,7 @@ pub async fn start_server(
 
     // Create the session manager
     let session_config = SessionConfig::default();
-    let session_manager = SessionManager::new(session_config, system_secret);
+    let session_manager = SessionManager::new(session_config, system_secret.clone());
 
     // Create the auth store
     let auth_store = AuthStore::default();
@@ -97,11 +101,17 @@ pub async fn start_server(
 
     let compiler_system_manager = if config.enable_dsl_compiler {
         // Initialize the system
-        let system_config = SystemConfig::default();
-        let secret_config = SecretConfig::default();
-        let dsl_loader = DslLoader::new(config.dsl_directory.clone(), None);
-        let compiler_system_manager =
+        let mut system_config = SystemConfig::default();
+        system_config.native_feature_config.ticker = Some(TickerConfig {
+            enabled: config.enable_ticker,
+            ..Default::default()
+        });
+        let secret_config = system_secret.unwrap_or_default();
+        let dsl_loader = DslLoader::with_base_dir(config.dsl_directory.clone());
+        debug!("dsl_loader setup: {:?}", dsl_loader);
+        let mut compiler_system_manager =
             CompilerSystemManager::new(system_config, secret_config, Some(dsl_loader));
+        compiler_system_manager.initialize(true).await?;
 
         info!("Initialized Kairei system for DSL-based compiler services");
         Some(Arc::new(compiler_system_manager))

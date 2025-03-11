@@ -1,0 +1,65 @@
+micro ReactValidator {
+    policy "Validate react blocks in Kairei DSL according to specification"
+    policy "Provide concise feedback (max 50 words) when validation fails"
+    
+    answer {
+        on request ValidateReact(reactInput: String, parseError: String) -> Result<String, Error> {
+            reactResult = think("""
+Spec OF REACT BLOCK:
+The react block contains conditional reaction handlers that execute when conditions are met.
+[pattern]
+when {condition} {
+    // reaction code
+}
+
+Example:
+```kairei
+react {
+    when self.temperature > 30 {
+        emit TemperatureAlert(temperature: self.temperature)
+    }
+    
+    when self.battery < 0.1 {
+        emit LowBatteryWarning(level: self.battery)
+    }
+}
+```
+
+SEE THIS STATEMENT AND IT SATISFIES REACT BLOCK SPEC OR NOT.
+USER INPUT REACT BLOCK IS HERE
+```
+${reactInput}
+```
+
+GOT ERROR IS HERE:
+```
+${parseError}
+```
+
+ANALYZE THE CODE AND PROVIDE ONE OF THESE RESPONSES:
+
+[OK]
+Valid react block.
+
+[UNKNOWN ERROR]
+Not related to react block syntax.
+
+[CONDITION ERROR]
+Invalid condition. Must be a boolean expression.
+
+[KEYWORD ERROR]
+Missing 'when' keyword. Use: `when condition { ... }`.
+
+[SYNTAX ERROR]
+Missing opening/closing braces or other syntax elements.
+
+[CODE ERROR]
+Invalid code in reaction body.
+
+PROVIDE ONLY THE ERROR TYPE AND A BRIEF EXPLANATION.
+            """)
+        
+            return reactResult
+        }
+    }
+}

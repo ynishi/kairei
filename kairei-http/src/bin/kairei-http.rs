@@ -23,11 +23,20 @@ struct Cli {
     log_level: String,
 
     /// Secret json file path
-    #[arg(short, long, default_value = "/etc/secrets/kairei-secret.json")]
+    #[arg(
+        short,
+        long,
+        env = "KAIREI_SERVER_SECRET",
+        default_value = "/etc/secrets/kairei-secret.json"
+    )]
     secret_json: PathBuf,
 
     /// Secret json for System
-    #[arg(long, default_value = "/etc/secrets/kairei-system-secret.json")]
+    #[arg(
+        long,
+        env = "KAIREI_SYSTEM_SECRET",
+        default_value = "/etc/secrets/kairei-system-secret.json"
+    )]
     system_secret_json: PathBuf,
 
     /// Enable authentication
@@ -45,6 +54,10 @@ struct Cli {
     /// Enable DSL-based compiler services
     #[arg(long, env = "KAIREI_ENABLE_DSL_COMPILER", default_value = "true")]
     enable_dsl_compiler: bool,
+
+    /// Enable the ticker for compiler services
+    #[arg(long, env = "KAIREI_ENABLE_TICKER", default_value = "false")]
+    enable_ticker: bool,
 
     /// Subcommands
     #[command(subcommand)]
@@ -115,6 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap_or_default(),
                 dsl_directory: cli.dsl_dir,
                 enable_dsl_compiler: cli.enable_dsl_compiler,
+                enable_ticker: cli.enable_ticker,
             }
         }
     };

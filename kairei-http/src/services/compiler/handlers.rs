@@ -1,6 +1,6 @@
 use axum::{extract::State, http::header::HeaderMap, response::Json};
 use chrono::Utc;
-use kairei_core::system::SystemError;
+use kairei_core::{ASTError, system::SystemError};
 use tracing::{error, info};
 
 use crate::{
@@ -11,6 +11,8 @@ use crate::{
         ValidationSuggestion,
     },
 };
+
+use super::manager::CompilerError;
 
 /// Error logger for compiler service
 #[derive(Debug, Clone, Default)]
@@ -276,7 +278,10 @@ pub async fn validate_dsl(
                     referrer.clone(),
                     x_forwarded_for.clone(),
                     x_cloud_trace_context.clone(),
-                    &err,
+                    &SystemError::Ast(ASTError::ParseError {
+                        target: "DSL".to_string(),
+                        message: err.to_string(),
+                    }),
                 )
                 .await;
 
@@ -409,17 +414,74 @@ pub async fn suggest_fixes(
 
 /// Convert System errors to validation errors
 fn convert_system_error_to_validation_errors(
-    system_error: &SystemError,
+    system_error: &CompilerError,
     code: &str,
 ) -> Vec<ValidationError> {
-    let mut errors = Vec::new();
-
+    let mut acc = Vec::new();
     match system_error {
-        SystemError::Ast(ast_error) => {
+        CompilerError::CompilationError {
+            message,
+            errors,
+            suggestions,
+        } => {
+            // Convert compilation errors
+            for error in errors {
+                acc.push(ValidationError {
+                    message: format!("Compilation error: {} - {}", message, error),
+                    location: ErrorLocation {
+                        line: 0,
+                        column: 0,
+                        context: extract_context(code, 0, 0),
+                    },
+                    error_code: "E1005".to_string(),
+                    suggestion: suggestions.join("\n"),
+                });
+            }
+        }
+        CompilerError::EventError(event_error) => {
+            // Convert event errors
+            acc.push(ValidationError {
+                message: event_error.to_string(),
+                location: ErrorLocation {
+                    line: 1,
+                    column: 1,
+                    context: extract_context(code, 1, 1),
+                },
+                error_code: "E1006".to_string(),
+                suggestion: "Check event configuration".to_string(),
+            });
+        }
+        CompilerError::InitializationError(message) => {
+            // Convert initialization errors
+            acc.push(ValidationError {
+                message: message.clone(),
+                location: ErrorLocation {
+                    line: 1,
+                    column: 1,
+                    context: extract_context(code, 1, 1),
+                },
+                error_code: "E1007".to_string(),
+                suggestion: "Check system initialization".to_string(),
+            });
+        }
+        CompilerError::RequestError(message) => {
+            // Convert request errors
+            acc.push(ValidationError {
+                message: message.clone(),
+                location: ErrorLocation {
+                    line: 1,
+                    column: 1,
+                    context: extract_context(code, 1, 1),
+                },
+                error_code: "E1008".to_string(),
+                suggestion: "Check request configuration".to_string(),
+            });
+        }
+        CompilerError::ParseError(SystemError::Ast(ast_error)) => {
             // Convert AST errors
             match ast_error {
                 kairei_core::ASTError::ParseError { target, message } => {
-                    errors.push(ValidationError {
+                    acc.push(ValidationError {
                         message: format!("Parse error in {}: {}", target, message),
                         location: ErrorLocation {
                             line: 1,
@@ -438,7 +500,7 @@ fn convert_system_error_to_validation_errors(
                             found,
                             span,
                         } => {
-                            errors.push(ValidationError {
+                            acc.push(ValidationError {
                                 message: message.clone(),
                                 location: ErrorLocation {
                                     line: span.line,
@@ -452,7 +514,7 @@ fn convert_system_error_to_validation_errors(
                     }
                 }
                 kairei_core::ASTError::TypeCheckError(type_check_error) => {
-                    errors.push(ValidationError {
+                    acc.push(ValidationError {
                         message: type_check_error.to_string(),
                         location: ErrorLocation {
                             line: 1,
@@ -464,7 +526,7 @@ fn convert_system_error_to_validation_errors(
                     });
                 }
                 kairei_core::ASTError::ASTNotFound(name) => {
-                    errors.push(ValidationError {
+                    acc.push(ValidationError {
                         message: format!("AST not found: {}", name),
                         location: ErrorLocation {
                             line: 1,
@@ -479,7 +541,7 @@ fn convert_system_error_to_validation_errors(
         }
         // Handle other system error types
         _ => {
-            errors.push(ValidationError {
+            acc.push(ValidationError {
                 message: format!("System error: {}", system_error),
                 location: ErrorLocation {
                     line: 1,
@@ -492,7 +554,7 @@ fn convert_system_error_to_validation_errors(
         }
     }
 
-    errors
+    acc
 }
 
 /// Extract context around an error location

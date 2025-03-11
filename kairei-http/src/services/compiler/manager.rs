@@ -32,22 +32,24 @@ impl CompilerSystemManager {
         }
     }
 
-    pub async fn initialize(&mut self, is_load: bool) -> Result<(), SystemError> {
+    pub async fn initialize(&mut self, is_load: bool) -> Result<(), CompilerError> {
         let mut system = System::new(&self.config, &self.secret_config).await;
         if is_load {
-            let dsl = self
+            let dsl_files = self
                 .dsl_loader
                 .load_all()
-                .map_err(|err| SystemError::Initialization(err.to_string()))?
-                .merge_dsl_files();
+                .map_err(|e| CompilerError::InitializationError(e.to_string()))?;
+            let dsl = DslLoader::merge_dsl_files(&dsl_files);
             let root = system.parse_dsl(&dsl).await?;
             system.initialize(root).await?;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            system.start().await?;
         }
         self.system = Some(Arc::new(system));
         Ok(())
     }
 
-    pub async fn validate_dsl(&self, code: &str) -> Result<String, SystemError> {
+    pub async fn validate_dsl(&self, code: &str) -> Result<String, CompilerError> {
         if let Some(system) = self.system.clone() {
             let parsed = system.parse_dsl(code).await;
             println!("parsed: {:?}", parsed);
@@ -60,17 +62,17 @@ impl CompilerSystemManager {
                         .get_system_status()
                         .await
                         .map(|status| status.agent_count)
-                        .map_err(|err| SystemError::Initialization(err.to_string()))?;
+                        .map_err(|err| CompilerError::InitializationError(err.to_string()))?;
                     if agents == 0 {
-                        return Err(SystemError::Initialization(
+                        return Err(CompilerError::InitializationError(
                             "Failed to Parse, No agents found".to_string(),
                         ));
                     }
                     let request = RequestBuilder::new()
                         .request_id(&Uuid::new_v4().to_string())
-                        .request_type("ValidateDsl")
+                        .request_type("Validate")
                         .requester("manager")
-                        .responder("ValidatorAgent")
+                        .responder("Validator")
                         .parameter("code", &Value::String(code.to_string()))
                         .parameter(
                             "stateInput",
@@ -86,6 +88,15 @@ impl CompilerSystemManager {
                             &Value::String(
                                 splitted
                                     .get("answer")
+                                    .unwrap_or(&vec!["Not Found".to_string()])
+                                    .join("\n"),
+                            ),
+                        )
+                        .parameter(
+                            "reactInput",
+                            &Value::String(
+                                splitted
+                                    .get("react")
                                     .unwrap_or(&vec!["Not Found".to_string()])
                                     .join("\n"),
                             ),
@@ -132,8 +143,7 @@ impl CompilerSystemManager {
                             )),
                         )
                         .parameter("parseError", &Value::String(err.to_string()))
-                        .build()
-                        .map_err(SystemError::from)?;
+                        .build()?;
 
                     let (tx, rx) = tokio::sync::oneshot::channel();
                     let request_clone = request.clone();
@@ -162,17 +172,40 @@ impl CompilerSystemManager {
                     };
 
                     match response {
-                        kairei_core::event_bus::Value::String(s) => Ok(s),
-                        _ => Err(SystemError::Event(EventError::ReceiveFailed {
-                            message: "unsupported response type".to_string(),
-                        })),
+                        kairei_core::event_bus::Value::Null => {
+                            Err(CompilerError::RequestError("Request failed".to_string()))
+                        }
+                        _ => Err(CompilerError::CompilationError {
+                            message: "Check Completed".to_string(),
+                            errors: vec![err.to_string()],
+                            suggestions: vec![Self::extract_output(serde_json::Value::from(
+                                &response,
+                            ))],
+                        }),
                     }
                 }
             }
         } else {
-            Err(SystemError::Initialization(
+            Err(CompilerError::InitializationError(
                 "system not initialized".to_string(),
             ))
+        }
+    }
+
+    fn extract_output(value: serde_json::Value) -> String {
+        match value {
+            serde_json::Value::String(s) => s,
+            serde_json::Value::Object(obj) => {
+                if let Some(output) = obj.get("output") {
+                    Self::extract_output(output.clone())
+                } else {
+                    obj.iter()
+                        .map(|(k, v)| format!("{}: {}", k, Self::extract_output(v.clone())))
+                        .collect::<Vec<String>>()
+                        .join("\n")
+                }
+            }
+            _ => value.to_string(),
         }
     }
 
@@ -211,4 +244,25 @@ impl CompilerSystemManager {
         }
         acc_map
     }
+}
+
+/// custom error of CompilerSystemManager using thiserror
+#[derive(Debug, thiserror::Error)]
+pub enum CompilerError {
+    #[error("Failed to parse DSL: {0}")]
+    ParseError(#[from] SystemError),
+    #[error(
+        "Compilation error with suggest: {message}, errors: {errors:?}, suggestions: {suggestions:?}"
+    )]
+    CompilationError {
+        message: String,
+        errors: Vec<String>,
+        suggestions: Vec<String>,
+    },
+    #[error("Failed to initialize system: {0}")]
+    InitializationError(String),
+    #[error("Event error: {0}")]
+    EventError(#[from] EventError),
+    #[error("Request error: {0}")]
+    RequestError(String),
 }

@@ -1,15 +1,16 @@
 micro Validator {
-  policy "provide detailed error information"
+  policy "Friendly stance aside with User, Concise description to make user can fix it easily(MAX: 300 word)"
 
   answer {
-    on request Validate(microInput: String, stateInput: String, answerInput: String, observeInput: Sting, lifecycleInput: String, policiesInput: String, parseError: String) -> Result<String, Error> {
-      (microResult, stateResult, answerResult, observeResult, lifecycleResult, policiesResult) = await (
-        request MicroValidator to ValidateMicro(microInput, parseError),
-        request StateValidator to ValidateState(stateInput, parseError),
-        request AnswerValidator to ValidateAnswer(answerInput, parseError),
-        request ObserveValidator to ValidateObserve(observeInput, parseError),
-        request LifecycleValidator to ValidateLifecycle(lifecycleInput, parseError),
-        request PoliciesValidator to ValidatePolicies(policiesInput, parseError)
+    on request Validate(microInput: String, stateInput: String, answerInput: String, reactInput: String, observeInput: Sting, lifecycleInput: String, policiesInput: String, parseError: String) -> Result<String, Error> {
+      (microResult, stateResult, answerResult, reactResult, observeResult, lifecycleResult, policiesResult) = await (
+        request ValidateMicro to MicroValidator(microInput: microInput, parseError: parseError),
+        request ValidateState to StateValidator(stateInput: stateInput, parseError: parseError),
+        request ValidateAnswer to AnswerValidator(answerInput: answerInput, parseError: parseError),
+        request ValidateReact to ReactValidator(reactInput: reactInput, parseError: parseError),
+        request ValidateObserve to ObserveValidator(observeInput: observeInput, parseError:parseError),
+        request ValidateLifecycle to LifecycleValidator(lifecycleInput: lifecycleInput, parseError: parseError),
+        request ValidatePolicies to PoliciesValidator(policiesInput: policiesInput, parseError:parseError)
       )
 
       // Analyze error and prepare suggestions
@@ -24,6 +25,9 @@ micro Validator {
         answer:
         ${answerResult}
 
+        react:
+        ${reactResult}
+
         observe:
         ${observeResult}
 
@@ -33,12 +37,12 @@ micro Validator {
         policies:
         ${policiesResult}
           
-        Provide a structured analysis with:
+        Provide a structured analysis with(Total 100-200 words):
         1. What caused the error
         2. Where the error is located (line/column if possible)
         3. How to fix it
-        4. A specific code example showing the fix
-        """)
+        4. A specific code example showing the fix""")
+
       return analysis
     }
   }

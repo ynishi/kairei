@@ -29,6 +29,7 @@ data
 # User specific files
 config.json
 secret.*
+*secret.json
 
 # Claude workspace
 /.claude_workspace/*

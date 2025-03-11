@@ -166,7 +166,7 @@ impl System {
 
     #[tracing::instrument(skip(self))]
     pub async fn register_native_features(&mut self) -> SystemResult<()> {
-        debug!("started");
+        debug!("register_native_features started");
 
         let complete_state = EventType::SystemNativeFeaturesRegistered;
         Self::check_start_transition(
@@ -177,7 +177,7 @@ impl System {
         let registry = self.feature_registry.write().await;
         registry.register().await?;
         self.update_system_status(complete_state).await;
-        debug!("ended");
+        debug!("register_native_features ended");
         Ok(())
     }
 
@@ -197,7 +197,7 @@ impl System {
 
     #[tracing::instrument(skip(self, world_def))]
     pub async fn register_world(&self, world_def: &Option<WorldDef>) -> SystemResult<()> {
-        debug!("started");
+        debug!("register_world started");
         let complete_state = EventType::SystemWorldRegistered;
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
@@ -223,14 +223,14 @@ impl System {
         }
 
         self.update_system_status(complete_state).await;
-        debug!("ended");
+        debug!("register_world ended");
         Ok(())
     }
 
     // ビルトインエージェントの登録処理
     #[tracing::instrument(skip(self))]
     pub async fn register_builtin_agents(&self) -> SystemResult<()> {
-        debug!("started");
+        debug!("register_builtin_agents started");
 
         let complete_state = EventType::SystemBuiltinAgentsRegistered;
         Self::check_start_transition(
@@ -251,7 +251,7 @@ impl System {
         }
 
         self.update_system_status(complete_state).await;
-        debug!("ended");
+        debug!("register_builtin_agents ended");
         Ok(())
     }
 
@@ -260,7 +260,10 @@ impl System {
         &self,
         micro_agent_defs: Vec<MicroAgentDef>,
     ) -> SystemResult<()> {
-        debug!("started");
+        debug!(
+            "register_initial_user_agents started: {}",
+            micro_agent_defs.len()
+        );
         let complete_state = EventType::SystemUserAgentsRegistered;
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
@@ -272,7 +275,7 @@ impl System {
             self.register_agent(&agent_def.name).await?;
         }
         self.update_system_status(complete_state).await;
-        debug!("ended");
+        debug!("register_initial_user_agents ended");
         Ok(())
     }
 
