@@ -40,6 +40,7 @@ impl AgentRegistry {
             config: config.clone(),
         }
     }
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn run(&self) -> AgentResult<()> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         loop {
@@ -70,6 +71,7 @@ impl AgentRegistry {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn cleanup(&self) {
         // ここで必要な最終クリーンアップ処理を実行
         // 例: メトリクスの保存、状態の永続化など
@@ -78,6 +80,7 @@ impl AgentRegistry {
         tracing::info!("AgentRegistry cleanup completed");
     }
 
+    #[tracing::instrument(skip(self, agent, event_bus), level = "debug")]
     pub async fn register_agent(
         &self,
         id: &str,
@@ -115,6 +118,7 @@ impl AgentRegistry {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, event_bus), level = "debug")]
     pub async fn unregister_agent(&self, id: &str, event_bus: &EventBus) -> AgentResult<()> {
         // まず実行を停止
         if self.is_agent_running(id) {
@@ -142,6 +146,7 @@ impl AgentRegistry {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, event_bus), level = "debug")]
     pub async fn run_agent(&self, id: &str, event_bus: Arc<EventBus>) -> AgentResult<()> {
         let agent = self
             .agents
@@ -192,6 +197,7 @@ impl AgentRegistry {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn shutdown_agent(&self, id: &str, timeout_secs: Option<u64>) -> AgentResult<()> {
         let timeout_secs = timeout_secs.unwrap_or(30);
         let agent = self
@@ -222,6 +228,7 @@ impl AgentRegistry {
     }
 
     // エージェントの強制停止
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn kill_agent(&self, id: &str) -> AgentResult<()> {
         if let Some((_, handle)) = self.running_agents.remove(id) {
             handle.abort();
@@ -232,6 +239,7 @@ impl AgentRegistry {
     }
 
     // 全エージェントのシャットダウン
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn shutdown_all(&self, timeout_secs: u64) -> AgentResult<()> {
         info!("Initiating shutdown for all agents");
 
@@ -295,6 +303,7 @@ impl AgentRegistry {
             .collect()
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn agent_status(&self, id: &str) -> Option<LastStatus> {
         if let Some(agent) = self.agents.get(id) {
             Some(agent.value().status().await)
@@ -303,6 +312,7 @@ impl AgentRegistry {
         }
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn agent_status_by_agent_type(&self, agent_type: &AgentType) -> Vec<LastStatus> {
         let agent_names = self.agent_names_by_types(vec![agent_type.clone()]);
         let mut res = vec![];
@@ -314,6 +324,7 @@ impl AgentRegistry {
         res
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn agent_state(&self, id: &str, key: &str) -> Option<expression::Value> {
         if let Some(agent) = self.agents.get(id) {
             agent.value().state(key).await
