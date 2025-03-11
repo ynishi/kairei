@@ -143,7 +143,7 @@ impl System {
             .map_err(SystemError::from)
     }
 
-    #[tracing::instrument(skip(self, root))]
+    #[tracing::instrument(skip(self, root), level = "debug")]
     pub async fn initialize(&mut self, root: ast::Root) -> SystemResult<()> {
         // call all registration methods
         self.register_native_features()
@@ -164,7 +164,7 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn register_native_features(&mut self) -> SystemResult<()> {
         debug!("started");
 
@@ -181,7 +181,7 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn register_providers(&self) -> SystemResult<()> {
         let complete_state = EventType::SystemProvidersRegistered;
         Self::check_start_transition(
@@ -195,7 +195,7 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, world_def))]
+    #[tracing::instrument(skip(self, world_def), level = "debug")]
     pub async fn register_world(&self, world_def: &Option<WorldDef>) -> SystemResult<()> {
         debug!("started");
         let complete_state = EventType::SystemWorldRegistered;
@@ -228,7 +228,7 @@ impl System {
     }
 
     // ビルトインエージェントの登録処理
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn register_builtin_agents(&self) -> SystemResult<()> {
         debug!("started");
 
@@ -255,7 +255,7 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, micro_agent_defs))]
+    #[tracing::instrument(skip(self, micro_agent_defs), level = "debug")]
     pub async fn register_initial_user_agents(
         &self,
         micro_agent_defs: Vec<MicroAgentDef>,
@@ -276,7 +276,7 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn start(&self) -> SystemResult<()> {
         Self::check_start_transition(
             self.last_status.read().await.last_event_type.clone(),
@@ -296,14 +296,14 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn start_native_features(&self) -> SystemResult<()> {
         let registry = self.feature_registry.write().await;
         registry.start().await?;
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn start_providers(&self) -> SystemResult<()> {
         let registry = self.provider_registry.write().await;
         // No need to start, just check health
@@ -311,13 +311,13 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn start_world(&self) -> SystemResult<()> {
         self.start_agent(&AgentType::World.to_string()).await?;
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn start_builtin_agents(&self) -> SystemResult<()> {
         let registry = self.agent_registry().read().await;
         let agent_names = registry
@@ -333,7 +333,7 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn start_users_agents(&self) -> SystemResult<()> {
         let registry = self.agent_registry().read().await;
         let agent_names = registry
@@ -347,7 +347,7 @@ impl System {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn shutdown(&self) -> SystemResult<()> {
         let shutdown_started = Instant::now();
         self.update_system_status(EventType::SystemStopping).await;
