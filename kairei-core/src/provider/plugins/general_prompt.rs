@@ -25,7 +25,7 @@ impl ProviderPlugin for GeneralPromptPlugin {
         CapabilityType::GeneralPrompt
     }
 
-    #[tracing::instrument(skip(self, context))]
+    #[tracing::instrument(skip(self, context), level = "debug")]
     async fn generate_section<'a>(&self, context: &PluginContext<'a>) -> ProviderResult<Section> {
         // コンテキストからクエリを取得して基本的なセクションを生成
         let query = match context.request.input.query.clone() {
@@ -54,7 +54,7 @@ impl ProviderPlugin for GeneralPromptPlugin {
         })
     }
 
-    #[tracing::instrument(skip(self, _context, _response))]
+    #[tracing::instrument(skip(self, _context, _response), level = "debug")]
     async fn process_response<'a>(
         &self,
         _context: &PluginContext<'a>,
