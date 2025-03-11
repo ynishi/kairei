@@ -95,6 +95,7 @@ impl Evaluator {
     /// let context = Arc::new(ExecutionContext::new(/* ... */));
     /// let result = evaluator.eval_handler_block(&handler_block, context).await?;
     /// ```
+    #[tracing::instrument(skip(self, context))]
     pub async fn eval_handler_block(
         &self,
         block: &HandlerBlock,
@@ -158,6 +159,7 @@ impl Evaluator {
     /// let event = EventType::Request { /* ... */ };
     /// let result = evaluator.eval_answer_handler_block(&answer_block, context, event).await?;
     /// ```
+    #[tracing::instrument(skip(self, context))]
     pub async fn eval_answer_handler_block(
         &self,
         block: &HandlerBlock,
@@ -238,6 +240,7 @@ impl Evaluator {
     /// let value = evaluator.eval_expression(&expr, context).await?;
     /// assert_eq!(value, Value::Integer(42));
     /// ```
+    #[tracing::instrument(skip(self, context))]
     pub async fn eval_expression(
         &self,
         expression: &Expression,

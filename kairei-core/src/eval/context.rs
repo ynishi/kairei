@@ -194,7 +194,7 @@ pub struct SharedContext {
     pub policies: Vec<Policy>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum StateAccessMode {
     ReadOnly,
     ReadWrite,
@@ -296,6 +296,7 @@ impl ExecutionContext {
         new_self
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn fork(&self, access_mode: Option<StateAccessMode>) -> Self {
         // 現在のスコープの内容を新しいスコープにコピー
         let new_scope = {
@@ -327,6 +328,7 @@ impl ExecutionContext {
     }
 
     /// 変数アクセス（スコープチェーンを遡って検索）
+    #[tracing::instrument(skip(self))]
     pub async fn get_variable(&self, name: &str) -> Result<Value, ContextError> {
         // 現在のスコープをまず確認
         if let Some(value) = self.current_scope.get(name) {
@@ -361,6 +363,7 @@ impl ExecutionContext {
     }
 
     /// 変数の更新（現在のスコープのみ）
+    #[tracing::instrument(skip(self, value))]
     pub async fn set_variable(&self, name: &str, value: Value) -> Result<(), ContextError> {
         match self.access_mode {
             StateAccessMode::ReadOnly if self.is_state(name) => {
@@ -375,6 +378,7 @@ impl ExecutionContext {
     }
 
     /// 状態変数の読み取り
+    #[tracing::instrument(skip(self))]
     pub async fn get_state(&self, name: &str) -> Result<Value, ContextError> {
         if let Some(value) = self.shared.state.get(name) {
             match value.read_with_timeout(self.timeout).await {
@@ -401,6 +405,7 @@ impl ExecutionContext {
     }
 
     /// 状態変数の更新（クロージャを使用）
+    #[tracing::instrument(skip(self, f))]
     pub async fn update_state<F>(&self, name: &str, f: F) -> Result<(), ContextError>
     where
         F: FnOnce(&mut Value) -> Result<(), ContextError> + Send + Sync,
@@ -437,6 +442,7 @@ impl ExecutionContext {
     }
 
     /// 状態変数の削除
+    #[tracing::instrument(skip(self))]
     pub async fn remove_state(&self, name: &str) -> Result<(), ContextError> {
         match self.access_mode {
             StateAccessMode::ReadOnly => Err(ContextError::ReadOnlyViolation),
@@ -467,6 +473,7 @@ impl ExecutionContext {
         self.shared.agent_info.agent_name.clone()
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn session_id(&self) -> Result<String, ContextError> {
         let session_id = if let Some(session_id) = self.shared.state.get("session_id") {
             session_id
@@ -487,6 +494,7 @@ impl ExecutionContext {
     }
 
     // 統一された変数アクセスインターフェース
+    #[tracing::instrument(skip(self))]
     pub async fn get(&self, access: VariableAccess) -> Result<Value, ContextError> {
         match access {
             VariableAccess::State(key) => self.get_state(&key).await,
@@ -494,6 +502,7 @@ impl ExecutionContext {
         }
     }
 
+    #[tracing::instrument(skip(self, value))]
     pub async fn set(&self, access: VariableAccess, value: Value) -> Result<(), ContextError> {
         match access {
             VariableAccess::State(key) => self.set_state(&key, value),
@@ -501,6 +510,7 @@ impl ExecutionContext {
         }
     }
     /// 新しいスコープフレームの作成
+    #[tracing::instrument(skip(self))]
     pub async fn push_scope(&mut self) -> Result<(), ContextError> {
         let mut new_parents = (*self.shared.parent_scopes).clone();
         new_parents.push(Arc::new(self.current_scope.clone()));
@@ -512,6 +522,7 @@ impl ExecutionContext {
     }
 
     /// スコープフレームの破棄
+    #[tracing::instrument(skip(self))]
     pub async fn pop_scope(&mut self) -> Result<(), ContextError> {
         let mut new_parents = (*self.shared.parent_scopes).clone();
 
@@ -525,6 +536,7 @@ impl ExecutionContext {
     }
 
     // イベント関連のメソッド
+    #[tracing::instrument(skip(self))]
     pub async fn emit_event(&self, event: Event) -> Result<(), ContextError> {
         self.shared
             .event_bus
@@ -534,6 +546,7 @@ impl ExecutionContext {
     }
 
     // onFail などのエラーイベントの発行
+    #[tracing::instrument(skip(self))]
     pub async fn emit_failure(&self, error: ContextError) -> Result<(), ContextError> {
         let error_event = Event {
             event_type: EventType::Failure {
@@ -627,6 +640,7 @@ impl ExecutionContext {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn send_request(&self, request: Event) -> Result<Event, ContextError> {
         debug!("Send Request, I'm {}", self.agent_name());
         self.shared
@@ -636,6 +650,7 @@ impl ExecutionContext {
             .map_err(ContextError::from)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn cancel_pending_requests(&self) -> Result<(), ContextError> {
         self.shared
             .request_manager
