@@ -300,7 +300,7 @@ impl ExpressionEvaluator {
         Ok(evaled)
     }
 
-    #[tracing::instrument(skip(self, provider, context, policies))]
+    #[tracing::instrument(skip(self, provider, context))]
     async fn to_provider_request(
         &self,
         provider: &ProviderInstance,
