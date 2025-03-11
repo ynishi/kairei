@@ -1,0 +1,58 @@
+micro PoliciesValidator {
+    policy "Validate policy statements in Kairei DSL according to specification"
+    policy "Provide concise feedback (max 50 words) when validation fails"
+    
+    answer {
+        on request ValidatePolicies(policiesInput: String, parseError: String) -> Result<String, Error> {
+            policiesResult = think("""
+Spec OF POLICY STATEMENTS:
+Policy statements define rules and constraints for agent behavior.
+[pattern]
+policy "{policy_string}"
+
+Example:
+```kairei
+micro ExampleAgent {
+    policy "Respond with accurate information"
+    policy "Maintain user privacy"
+    policy "Use concise language"
+    
+    // ... rest of agent
+}
+```
+
+SEE THIS STATEMENT AND IT SATISFIES POLICY SPEC OR NOT.
+USER INPUT POLICIES ARE HERE
+```
+${policiesInput}
+```
+
+GOT ERROR IS HERE:
+```
+${parseError}
+```
+
+ANALYZE THE CODE AND PROVIDE ONE OF THESE RESPONSES:
+
+[OK]
+Valid policy statements.
+
+[UNKNOWN ERROR]
+Not related to policy syntax.
+
+[SYNTAX ERROR]
+Invalid policy syntax. Use: `policy "Policy text goes here"`.
+
+[STRING ERROR]
+Missing quotes around policy text.
+
+[EMPTY ERROR]
+Policy statement cannot be empty.
+
+PROVIDE ONLY THE ERROR TYPE AND A BRIEF EXPLANATION.
+            """)
+        
+            return policiesResult
+        }
+    }
+}

@@ -22,6 +22,7 @@ fn test_server_config_custom() {
         port: 8080,
         enable_auth: true,
         servers: vec!["http://localhost:8080".to_string()],
+        ..Default::default()
     };
 
     // Verify the custom values
@@ -65,7 +66,7 @@ async fn test_server_startup_with_auth() {
     };
 
     // Start the server with a timeout
-    let server_future = start_server(config.clone(), Default::default());
+    let server_future = start_server(config.clone(), Default::default(), None);
     let result = timeout(Duration::from_secs(1), server_future).await;
 
     // The server should still be running after the timeout
@@ -116,7 +117,7 @@ async fn test_server_startup() {
     };
 
     // Start the server with a timeout
-    let server_future = start_server(config.clone(), Default::default());
+    let server_future = start_server(config.clone(), Default::default(), None);
     let result = timeout(Duration::from_secs(1), server_future).await;
 
     // The server should still be running after the timeout

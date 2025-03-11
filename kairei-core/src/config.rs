@@ -490,7 +490,7 @@ fn default_max_tokens() -> usize {
 }
 
 fn default_model() -> String {
-    "gpt-3.5-turbo".to_string()
+    "gpt-4o-mini".to_string()
 }
 
 fn default_endpoint() -> Option<String> {

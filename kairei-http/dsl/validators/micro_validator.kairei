@@ -1,0 +1,77 @@
+micro MicroValidator {
+    policy "Validate overall syntax of Kairei DSL files"
+    policy "Identify common syntax errors and provide clear feedback"
+    
+    answer {
+        on request ValidateMicro(microInput: String, parseError: String) -> Result<String, Error> {
+            syntaxResult = think("""
+I'll analyze the complete code and provide syntax validation based on Kairei DSL specifications.
+
+FULL CODE:
+```
+${microInput}
+```
+
+ERROR INFORMATION (if any):
+```
+${parseError}
+```
+
+KAIREI DSL STRUCTURE:
+A valid Kairei DSL file should follow this general structure:
+
+```kairei
+micro AgentName {
+    // Policy statements
+    policy "Policy description"
+    
+    // State definitions
+    state {
+        // Variable declarations
+    }
+    
+    // Lifecycle handlers
+    lifecycle {
+        // on_init and on_shutdown handlers
+    }
+    
+    // Event observation handlers
+    observe {
+        // Event handlers
+    }
+    
+    // Request handling
+    answer {
+        // Request handlers
+    }
+    
+    // Reactive behaviors
+    react {
+        // Conditional reactions
+    }
+}
+```
+
+SYNTAX RULES:
+1. Agent declaration must start with `micro AgentName {` and end with `}`
+2. Blocks must be properly nested and balanced with braces
+3. Policy statements must use quoted strings
+4. State variables must end with semicolons
+5. Handlers must have proper signature and parameter types
+6. React conditions must use the `when` keyword and be boolean expressions
+
+VALIDATING SYNTAX:
+
+Let me analyze the code structure and look for:
+1. Overall structure correctness
+2. Block consistency and balance
+3. Common syntax patterns in each block
+4. Type consistency and declaration correctness
+
+Based on my analysis, here is the validation result:
+            """)
+        
+            return syntaxResult
+        }
+    }
+}

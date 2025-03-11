@@ -24,7 +24,7 @@ use std::{sync::Arc, time::Duration};
 use dashmap::DashMap;
 use thiserror::Error;
 use tokio::sync::oneshot;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use super::{
     event_bus::{Event, EventBus, EventError, Value},
@@ -213,12 +213,18 @@ impl RequestManager {
                 .request_id()
                 .map(|id| {
                     if let Some(pending) = self.pending_requests.remove(id) {
+                        debug!(
+                            "handle_event: Sending response to requester: {:?}, {}",
+                            event, pending.1.request_event_type
+                        );
                         let _ = pending.1.sender.send(event.clone());
                     }
                 })
                 .ok_or(RequestError::InvalidRequest(
                     "Request ID not found in event".to_string(),
-                ))
+                ))?;
+            debug!("handle_event: Response sent");
+            Ok(())
         } else {
             Err(RequestError::InvalidRequest(
                 "Invalid event type".to_string(),

@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result, bail};
 use dashmap::DashMap;
+use kairei_core::config::ProviderSecretConfig;
 
 use super::data::{SessionData, SessionDataBuilder};
 
@@ -17,13 +18,27 @@ pub struct SessionManager {
     sessions: Arc<DashMap<SessionId, SessionData>>,
     users: Arc<DashMap<UserId, Vec<SessionId>>>,
     _config: SessionConfig,
+    pub secret_config: kairei_core::config::SecretConfig,
 }
 
 impl SessionManager {
     /// Create a new session manager with the given configuration
-    pub fn new(config: SessionConfig) -> Self {
+    pub fn new(
+        config: SessionConfig,
+        secret_config: Option<kairei_core::config::SecretConfig>,
+    ) -> Self {
+        // setup valid default config
+        let mut secret = secret_config.unwrap_or_default();
+        secret.providers.insert(
+            "default_provider".to_string(),
+            ProviderSecretConfig {
+                ..Default::default()
+            },
+        );
+
         Self {
             _config: config,
+            secret_config: secret,
             ..Default::default()
         }
     }
@@ -38,6 +53,7 @@ impl SessionManager {
         let data = builder
             .user_id(user_id.clone())
             .system_id(session_id.clone())
+            .secret_config(self.secret_config.clone())
             .build()
             .with_context(|| "Failed to build session data")?;
         let system_id = data.system_id.clone();

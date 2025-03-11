@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_recursion::async_recursion;
+use tracing::debug;
 
 use super::{
     context::{ExecutionContext, StateAccessMode, VariableAccess},
@@ -130,6 +131,8 @@ impl StatementEvaluator {
             .expression_evaluator
             .eval_expression(value, context.clone())
             .await?;
+
+        debug!("eval_assignment: targets: {}", targets.len());
 
         match (targets.len(), &value) {
             // 単一のターゲットへの代入

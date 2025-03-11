@@ -12,7 +12,7 @@ use kairei_core::{
     tokenizer::token::Token,
     type_checker::run_type_checker,
 };
-use kairei_http::models::SystemConfig;
+use kairei_http::{models::SystemConfig, services::compiler::models::ValidationError};
 use secrecy::ExposeSecret;
 use std::path::PathBuf;
 use std::{
@@ -70,6 +70,12 @@ enum Commands {
 
     /// Run the system locally
     Run(RunArgs),
+
+    /// Compiler commands
+    Compiler {
+        #[command(subcommand)]
+        command: CompilerCommands,
+    },
 
     /// Manage Kairei systems (remote API)
     System {
@@ -132,6 +138,30 @@ struct LoginArgs {
     /// Test the connection with saved credentials
     #[arg(short, long, default_value = "false")]
     test: bool,
+}
+
+#[derive(Subcommand)]
+enum CompilerCommands {
+    /// Validate a DSL
+    Validate {
+        #[arg(short, long)]
+        dsl: String,
+
+        #[arg(short = 'f', long)]
+        dsl_file: Option<PathBuf>,
+    },
+
+    /// Suggest for a DSL
+    Suggest {
+        #[arg(short, long)]
+        dsl: String,
+
+        #[arg(short, long)]
+        errors: String,
+
+        #[arg(short = 'f', long)]
+        dsl_file: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -422,6 +452,49 @@ fn output_json<T: serde::Serialize>(data: &T, pretty: bool) -> Result<(), Error>
     Ok(())
 }
 
+async fn handle_compiler_commands(cmd: &CompilerCommands, cli: &Cli) -> Result<(), Error> {
+    let client = get_api_client(cli);
+
+    match cmd {
+        CompilerCommands::Validate { dsl, dsl_file } => {
+            let dsl_content = if let Some(path) = dsl_file {
+                fs::read_to_string(path)
+                    .map_err(|e| Error::Internal(format!("Failed to read DSL file: {}", e)))?
+            } else {
+                dsl.clone()
+            };
+
+            let response = client
+                .compiler_dsl(&dsl_content)
+                .await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)
+        }
+
+        CompilerCommands::Suggest {
+            dsl,
+            errors,
+            dsl_file,
+        } => {
+            let dsl_content = if let Some(path) = dsl_file {
+                fs::read_to_string(path)
+                    .map_err(|e| Error::Internal(format!("Failed to read DSL file: {}", e)))?
+            } else {
+                dsl.clone()
+            };
+
+            let errors: Vec<ValidationError> = serde_json::from_str(errors)
+                .map_err(|e| Error::Internal(format!("Failed to parse errors: {}", e)))?;
+
+            let response = client
+                .compiler_suggest(&dsl_content, errors.as_slice())
+                .await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+            output_json(&response, true)
+        }
+    }
+}
+
 async fn handle_system_commands(cmd: &SystemCommands, cli: &Cli) -> Result<(), Error> {
     let client = get_api_client(cli);
 
@@ -671,6 +744,7 @@ async fn run(cli: &Cli) -> Result<(), Error> {
     match &cli.command {
         Commands::Fmt(args) => format_file(args).await,
         Commands::Run(args) => run_local(args, &cli.config, &cli.secret).await,
+        Commands::Compiler { command } => handle_compiler_commands(command, cli).await,
         Commands::System { command } => handle_system_commands(command, cli).await,
         Commands::Agent { command } => handle_agent_commands(command, cli).await,
         Commands::Event { command } => handle_event_commands(command, cli).await,

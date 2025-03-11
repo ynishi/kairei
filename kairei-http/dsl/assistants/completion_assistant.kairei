@@ -1,0 +1,113 @@
+micro CompletionAssistant {
+    policy "Help users complete Kairei DSL code based on context and partial input"
+    policy "Provide idiomatic, specification-compliant code suggestions"
+    
+    answer {
+        on request CompleteCode(partialCode: String, cursorPosition: Int, blockType: String) -> Result<String, Error> {
+            completionResult = think("""
+I'll analyze the partial code and suggest completions based on the cursor position and block type.
+
+PARTIAL CODE:
+```
+${partialCode}
+```
+
+CURSOR POSITION: ${cursorPosition}
+BLOCK TYPE: ${blockType}
+
+KAIREI DSL SPECIFICATIONS AND PATTERNS:
+
+1. STATE BLOCK PATTERNS:
+```
+state {
+  // Basic variable with type and value
+  counter: Int = 0;
+  
+  // String variable
+  name: String = "Agent";
+  
+  // Variable with type only (no initial value)
+  timestamp: Int;
+  
+  // Complex type
+  settings: Map<String, String> = {};
+}
+```
+
+2. ANSWER BLOCK PATTERNS:
+```
+answer {
+  // Simple request handler
+  on request GetCount() -> Result<Int, Error> {
+    return Ok(self.counter)
+  }
+  
+  // Handler with parameters
+  on request SetName(name: String) -> Result<Boolean, Error> {
+    self.name = name
+    return Ok(true)
+  }
+  
+  // Handler returning complex type
+  on request GetSettings() -> Result<Map<String, String>, Error> {
+    return Ok(self.settings)
+  }
+}
+```
+
+3. OBSERVE BLOCK PATTERNS:
+```
+observe {
+  // Simple event handler
+  on CounterIncremented(value: Int) {
+    self.counter += value
+  }
+  
+  // Event handler with multiple parameters
+  on UserAction(userId: String, action: String, timestamp: Int) {
+    log("User ${userId} performed ${action} at ${timestamp}")
+  }
+}
+```
+
+4. LIFECYCLE BLOCK PATTERNS:
+```
+lifecycle {
+  // Initialization handler
+  on_init {
+    self.counter = 0
+    log("Agent initialized")
+  }
+  
+  // Shutdown handler
+  on_shutdown {
+    save_state()
+    log("Agent shutting down with counter at ${self.counter}")
+  }
+}
+```
+
+5. REACT BLOCK PATTERNS:
+```
+react {
+  // Simple condition with emission
+  when self.counter > 10 {
+    emit CounterThresholdReached(value: self.counter)
+  }
+  
+  // Multiple conditions
+  when self.temperature > 30 && self.humidity < 0.4 {
+    emit DangerCondition(temp: self.temperature, humidity: self.humidity)
+  }
+}
+```
+
+Based on the current cursor position and block type, I'll suggest a completion that follows Kairei DSL conventions and best practices:
+
+SUGGESTED COMPLETION:
+            """)
+        
+            return completionResult
+        }
+    }
+}

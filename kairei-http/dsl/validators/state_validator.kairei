@@ -1,0 +1,57 @@
+micro StateValidator {
+    policy "Validate state blocks in Kairei DSL according to specification"
+    policy "Provide concise feedback (max 50 words) when validation fails"
+    
+    answer {
+        on request ValidateState(stateInput: String, parseError: String) -> Result<String, Error> {
+            stateResult = think("""
+Spec OF STATE BLOCK:
+THE state is group of state variable assignment.
+[pattern 1]
+{var_name}: {type_name} = {value}; // ; is needed
+[pattern 2]
+{var_name}: {type_name};
+[pattern 3]
+{var_name} = {value}; // it is allowed type infer
+
+Example:
+```kairei
+state {
+  active_trips: Int = 0;
+  user_preferences: String = "";
+  last_update: Duration;
+}
+```
+
+SEE THIS STATEMENT AND IT SATISFY STATE SPEC OR NOT.
+USER INPUT STATE IS HERE
+```
+${stateInput}
+```
+
+GOT ERROR IS HERE:
+```
+${parseError}
+```
+
+YOUR OUTPUT EXAMPLE IS HERE:
+
+[EXAMPLE1(OK)]
+GOOD State Block!
+
+[EXAMPLE1(UNKNOWN OR NO RELATED STATE)]
+Not Our State Block Caused error.
+
+[EXAMPLE1(FOUND INVALID PATTERN)]
+Statement 1 is not closed with `;`, `:` is not allowed
+
+[EXAMPLE1(FOUND INVALID PATTERN)]
+Statement 3 is not separate with `:`, `@` is not allowed
+
+SIMPLY, EXPLICIT ANSWER IS REQUIRED.
+            """)
+        
+            return stateResult
+        }
+    }
+}

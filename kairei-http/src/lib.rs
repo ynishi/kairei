@@ -18,7 +18,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     // Start the server with default configuration
-    start_server(ServerConfig::default(), Secret::default()).await
+    start_server(ServerConfig::default(), Secret::default(), None).await
 }
 
 /// Start the Kairei HTTP server with a custom configuration
@@ -27,13 +27,14 @@ pub async fn start_with_config(config: ServerConfig) -> Result<(), Box<dyn std::
     tracing_subscriber::fmt::init();
 
     // Start the server with the provided configuration
-    start_server(config, Secret::default()).await
+    start_server(config, Secret::default(), None).await
 }
 
 pub async fn start_with_config_and_secret(
     config: ServerConfig,
     secret: Secret,
+    system_secret: Option<kairei_core::config::SecretConfig>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Start the server with the provided configuration
-    start_server(config, secret).await
+    start_server(config, secret, system_secret).await
 }

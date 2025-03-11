@@ -512,10 +512,12 @@ impl ExpressionEvaluator {
             .into_iter()
             .map(|(expr, ctx)| self.eval_expression_for_await(expr, ctx))
             .collect();
+        debug!("eval_await futures: {}", futures.len());
 
         // 並列実行して結果を収集
         let results = futures::future::join_all(futures).await;
         let values: Vec<Value> = results.into_iter().collect::<Result<Vec<_>, _>>()?;
+        debug!("eval_await values: {}", values.len());
 
         // 結果をタプルとして返す（単一値の場合はそのまま）
         match values.len() {

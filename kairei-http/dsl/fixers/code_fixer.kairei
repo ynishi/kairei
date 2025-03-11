@@ -1,0 +1,111 @@
+micro CodeFixer {
+    policy "Suggest fixes for common syntax errors in Kairei DSL code"
+    policy "Provide specific, actionable corrections that match DSL specification"
+    
+    answer {
+        on request FixCode(codeInput: String, errorInfo: String, blockType: String) -> Result<String, Error> {
+            fixResult = think("""
+I'll analyze the code and suggest fixes based on the error information and block type.
+
+CODE TO FIX:
+```
+${codeInput}
+```
+
+ERROR INFORMATION:
+```
+${errorInfo}
+```
+
+BLOCK TYPE: ${blockType}
+
+KAIREI DSL SPECIFICATIONS:
+
+1. STATE BLOCK:
+```
+state {
+  counter: Int = 0;
+  name: String = "Agent";
+  timestamp: Int;
+}
+```
+
+2. ANSWER BLOCK:
+```
+answer {
+  on request GetCount() -> Result<Int, Error> {
+    return Ok(self.counter)
+  }
+}
+```
+
+3. OBSERVE BLOCK:
+```
+observe {
+  on CounterIncremented(value: Int) {
+    self.counter += value
+  }
+}
+```
+
+4. LIFECYCLE BLOCK:
+```
+lifecycle {
+  on_init {
+    log("Agent initialized")
+  }
+  
+  on_shutdown {
+    log("Agent shutting down")
+  }
+}
+```
+
+5. REACT BLOCK:
+```
+react {
+  when self.counter > 10 {
+    emit CounterThresholdReached(value: self.counter)
+  }
+}
+```
+
+6. POLICY STATEMENTS:
+```
+policy "Respond with accurate information"
+policy "Use concise language"
+```
+
+COMMON ERRORS AND FIXES:
+
+1. Missing semicolons in state definitions
+   - Error: `counter: Int = 0`
+   - Fix: `counter: Int = 0;`
+
+2. Missing return type in answer handlers
+   - Error: `on request GetName()`
+   - Fix: `on request GetName() -> Result<String, Error>`
+
+3. Missing type annotations in parameters
+   - Error: `on UserJoined(userId)`
+   - Fix: `on UserJoined(userId: String)`
+
+4. Missing braces
+   - Error: `when condition emit Event()`
+   - Fix: `when condition { emit Event() }`
+
+5. Missing quotes in policy statements
+   - Error: `policy Be helpful`
+   - Fix: `policy "Be helpful"`
+
+ANALYZING THE CODE AND SUGGESTING FIXES:
+
+Based on the error information and code examination, here are my suggested fixes:
+
+${blockType} BLOCK FIX SUGGESTION:
+            """)
+        
+            return fixResult
+        }
+    }
+}
