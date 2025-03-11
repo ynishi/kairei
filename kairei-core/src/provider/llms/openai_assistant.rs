@@ -44,7 +44,7 @@ impl OpenAIAssistantProviderLLM {
         }
     }
 
-    #[tracing::instrument(skip(self, prompt, config))]
+    #[tracing::instrument(skip(self, prompt, config), level = "debug")]
     async fn create_and_run_thread(
         &self,
         prompt: &str,
@@ -106,7 +106,7 @@ impl OpenAIAssistantProviderLLM {
         self.wait_for_run(&thread.id, &run.id).await
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn wait_for_run(&self, thread_id: &str, run_id: &str) -> ProviderResult<String> {
         let client = self
             .client
@@ -149,7 +149,7 @@ impl OpenAIAssistantProviderLLM {
         Err(ProviderError::ApiError("Run timed out".to_string()))
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn get_latest_message(&self, thread_id: &str) -> ProviderResult<String> {
         let client = self
             .client
@@ -177,7 +177,7 @@ impl OpenAIAssistantProviderLLM {
 
 #[async_trait]
 impl ProviderLLM for OpenAIAssistantProviderLLM {
-    #[tracing::instrument(skip(self, prompt, config))]
+    #[tracing::instrument(skip(self, prompt, config), level = "debug")]
     async fn send_message(
         &self,
         prompt: &str,
@@ -196,7 +196,7 @@ impl ProviderLLM for OpenAIAssistantProviderLLM {
         })
     }
 
-    #[tracing::instrument(skip(self, config, secret))]
+    #[tracing::instrument(skip(self, config, secret), level = "debug")]
     async fn initialize(
         &mut self,
         config: &ProviderConfig,
@@ -236,7 +236,7 @@ impl ProviderLLM for OpenAIAssistantProviderLLM {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn stop(&self) -> ProviderResult<()> {
         if let Some(client) = &self.client {
             if let Some(assistant_id) = &self.assistant_id {
