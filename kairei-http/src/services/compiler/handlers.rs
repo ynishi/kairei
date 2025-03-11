@@ -221,7 +221,10 @@ pub async fn validate_dsl(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    start_position: None,
+                    end_position: None,
                     context: "".to_string(),
+                    token_text: None,
                 },
                 error_code: "E1006".to_string(),
                 suggestion: "Check system configuration".to_string(),
@@ -241,7 +244,10 @@ pub async fn validate_dsl(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    start_position: None,
+                    end_position: None,
                     context: "".to_string(),
+                    token_text: None,
                 },
                 error_code: "E1005".to_string(),
                 suggestion: "Provide valid DSL code".to_string(),
@@ -281,6 +287,7 @@ pub async fn validate_dsl(
                     &SystemError::Ast(ASTError::ParseError {
                         target: "DSL".to_string(),
                         message: err.to_string(),
+                        span: None,
                     }),
                 )
                 .await;
@@ -431,7 +438,10 @@ fn convert_system_error_to_validation_errors(
                     location: ErrorLocation {
                         line: 0,
                         column: 0,
+                        start_position: None,
+                        end_position: None,
                         context: extract_context(code, 0, 0),
+                        token_text: None,
                     },
                     error_code: "E1005".to_string(),
                     suggestion: suggestions.join("\n"),
@@ -445,7 +455,10 @@ fn convert_system_error_to_validation_errors(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    start_position: None,
+                    end_position: None,
                     context: extract_context(code, 1, 1),
+                    token_text: None,
                 },
                 error_code: "E1006".to_string(),
                 suggestion: "Check event configuration".to_string(),
@@ -458,7 +471,10 @@ fn convert_system_error_to_validation_errors(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    start_position: None,
+                    end_position: None,
                     context: extract_context(code, 1, 1),
+                    token_text: None,
                 },
                 error_code: "E1007".to_string(),
                 suggestion: "Check system initialization".to_string(),
@@ -471,7 +487,10 @@ fn convert_system_error_to_validation_errors(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    start_position: None,
+                    end_position: None,
                     context: extract_context(code, 1, 1),
+                    token_text: None,
                 },
                 error_code: "E1008".to_string(),
                 suggestion: "Check request configuration".to_string(),
@@ -480,38 +499,67 @@ fn convert_system_error_to_validation_errors(
         CompilerError::ParseError(SystemError::Ast(ast_error)) => {
             // Convert AST errors
             match ast_error {
-                kairei_core::ASTError::ParseError { target, message } => {
+                kairei_core::ASTError::ParseError {
+                    target,
+                    message,
+                    span,
+                } => {
+                    let (line, column, start_pos, end_pos) = if let Some(span) = span {
+                        (span.line, span.column, Some(span.start), Some(span.end))
+                    } else {
+                        (1, 1, None, None)
+                    };
+
+                    // Extract token text if span information is available
+                    let token_text = if let (Some(start), Some(end)) = (start_pos, end_pos) {
+                        if start < code.len() && end <= code.len() {
+                            Some(code[start..end].to_string())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     acc.push(ValidationError {
                         message: format!("Parse error in {}: {}", target, message),
                         location: ErrorLocation {
-                            line: 1,
-                            column: 1,
-                            context: extract_context(code, 1, 1),
+                            line,
+                            column,
+                            start_position: start_pos,
+                            end_position: end_pos,
+                            context: extract_context(code, line, column),
+                            token_text,
                         },
                         error_code: "E1001".to_string(),
                         suggestion: "Check syntax for errors".to_string(),
                     });
                 }
-                kairei_core::ASTError::TokenizeError(tokenizer_error) => {
-                    // Extract location information from tokenizer error
-                    match tokenizer_error {
-                        kairei_core::tokenizer::token::TokenizerError::ParseError {
-                            message,
-                            found,
-                            span,
-                        } => {
-                            acc.push(ValidationError {
-                                message: message.clone(),
-                                location: ErrorLocation {
-                                    line: span.line,
-                                    column: span.column,
-                                    context: extract_context(code, span.line, span.column),
-                                },
-                                error_code: "E1002".to_string(),
-                                suggestion: format!("Unexpected token: {}", found),
-                            });
-                        }
-                    }
+                kairei_core::ASTError::TokenizeError {
+                    message,
+                    found,
+                    span,
+                } => {
+                    // Extract token text from the code using span information
+                    let token_text = if span.start < code.len() && span.end <= code.len() {
+                        Some(code[span.start..span.end].to_string())
+                    } else {
+                        Some(found.clone())
+                    };
+
+                    acc.push(ValidationError {
+                        message: message.clone(),
+                        location: ErrorLocation {
+                            line: span.line,
+                            column: span.column,
+                            start_position: Some(span.start),
+                            end_position: Some(span.end),
+                            context: extract_context(code, span.line, span.column),
+                            token_text,
+                        },
+                        error_code: "E1002".to_string(),
+                        suggestion: format!("Unexpected token: {}", found),
+                    });
                 }
                 kairei_core::ASTError::TypeCheckError(type_check_error) => {
                     acc.push(ValidationError {
@@ -519,7 +567,10 @@ fn convert_system_error_to_validation_errors(
                         location: ErrorLocation {
                             line: 1,
                             column: 1,
+                            start_position: None,
+                            end_position: None,
                             context: extract_context(code, 1, 1),
+                            token_text: None,
                         },
                         error_code: "E1003".to_string(),
                         suggestion: "Check type compatibility".to_string(),
@@ -531,7 +582,10 @@ fn convert_system_error_to_validation_errors(
                         location: ErrorLocation {
                             line: 1,
                             column: 1,
+                            start_position: None,
+                            end_position: None,
                             context: extract_context(code, 1, 1),
+                            token_text: None,
                         },
                         error_code: "E1004".to_string(),
                         suggestion: "Check agent name".to_string(),
@@ -546,7 +600,10 @@ fn convert_system_error_to_validation_errors(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    start_position: None,
+                    end_position: None,
                     context: extract_context(code, 1, 1),
+                    token_text: None,
                 },
                 error_code: "E1000".to_string(),
                 suggestion: "Check system configuration".to_string(),
@@ -558,7 +615,7 @@ fn convert_system_error_to_validation_errors(
 }
 
 /// Extract context around an error location
-fn extract_context(code: &str, line: usize, _column: usize) -> String {
+fn extract_context(code: &str, line: usize, column: usize) -> String {
     let lines: Vec<&str> = code.lines().collect();
     let mut context = String::new();
 
@@ -566,10 +623,27 @@ fn extract_context(code: &str, line: usize, _column: usize) -> String {
     let start_line = line.saturating_sub(2);
     let end_line = (line + 2).min(lines.len());
 
+    // Calculate line number width for consistent formatting
+    let line_num_width = end_line.to_string().len();
+
     for i in start_line..end_line {
         if i < lines.len() {
-            context.push_str(lines[i]);
+            // Add line number prefix with consistent width
+            context.push_str(&format!("{:>width$} | ", i + 1, width = line_num_width));
+
+            let line_content = lines[i];
+            context.push_str(line_content);
             context.push('\n');
+
+            // Add a marker pointing to the error position for the error line
+            if i + 1 == line && column > 0 {
+                // Add consistent spacing for the marker line
+                context.push_str(&format!("{:>width$} | ", "", width = line_num_width));
+                let marker_indent = column.saturating_sub(1);
+                context.push_str(&" ".repeat(marker_indent));
+                context.push_str("^ Error occurs here");
+                context.push('\n');
+            }
         }
     }
 

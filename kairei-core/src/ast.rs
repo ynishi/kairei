@@ -964,13 +964,37 @@ pub trait CodeGen {
 #[derive(Error, Debug)]
 pub enum ASTError {
     #[error("Parse error: {target}: {message}")]
-    ParseError { target: String, message: String },
+    ParseError {
+        target: String,
+        message: String,
+        span: Option<crate::tokenizer::token::Span>,
+    },
     #[error("AST not found: {0}")]
     ASTNotFound(String),
     #[error("Type check error: {0}")]
     TypeCheckError(#[from] TypeCheckError),
-    #[error("Tokenization error: {0}")]
-    TokenizeError(#[from] TokenizerError),
+    #[error("Tokenization error: {message}")]
+    TokenizeError {
+        message: String,
+        found: String,
+        span: crate::tokenizer::token::Span,
+    },
+}
+
+impl From<TokenizerError> for ASTError {
+    fn from(err: TokenizerError) -> Self {
+        match err {
+            TokenizerError::ParseError {
+                message,
+                found,
+                span,
+            } => ASTError::TokenizeError {
+                message,
+                found,
+                span,
+            },
+        }
+    }
 }
 
 pub type ASTResult<T> = Result<T, ASTError>;

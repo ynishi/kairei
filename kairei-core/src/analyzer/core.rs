@@ -51,6 +51,8 @@ pub enum ParseError {
         found: String,
         /// Position information (line, column)
         position: (usize, usize),
+        /// Full span information
+        span: Option<crate::tokenizer::token::Span>,
     },
     /// Unexpected end of file
     #[error("Unexpected EOF")]
@@ -77,5 +79,7 @@ pub enum ParseError {
         message: String,
         /// Inner error
         inner: Box<ParseError>,
+        /// Full span information
+        span: Option<crate::tokenizer::token::Span>,
     },
 }

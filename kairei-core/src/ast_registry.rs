@@ -125,9 +125,17 @@ impl AstRegistry {
         // 3. Parsing: Convert tokens into AST structure
         let (pos, mut root) = analyzer::parsers::world::parse_root()
             .parse(tokens.as_slice(), 0)
-            .map_err(|e: analyzer::ParseError| ASTError::ParseError {
-                message: format!("failed to parse DSL {}", e),
-                target: "root".to_string(),
+            .map_err(|e: analyzer::ParseError| {
+                let span = match &e {
+                    analyzer::ParseError::ParseError { span, .. } => span.clone(),
+                    _ => None,
+                };
+
+                ASTError::ParseError {
+                    message: format!("failed to parse DSL {}", e),
+                    target: "root".to_string(),
+                    span,
+                }
             })?;
         debug!("{:?}", root);
 
@@ -142,6 +150,7 @@ impl AstRegistry {
             return Err(ASTError::ParseError {
                 message: "failed to parse DSL".to_string(),
                 target: "root".to_string(),
+                span: None,
             });
         }
 

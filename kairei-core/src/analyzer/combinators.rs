@@ -859,12 +859,23 @@ where
     P: Parser<I, O>,
 {
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<O> {
-        self.parser
-            .parse(input, pos)
-            .map_err(|e| ParseError::WithContext {
+        self.parser.parse(input, pos).map_err(|e| {
+            // Extract span information from the inner error if available
+            let span = match &e {
+                ParseError::ParseError { span, .. } => span.clone(),
+                ParseError::WithContext { inner, .. } => match &**inner {
+                    ParseError::ParseError { span, .. } => span.clone(),
+                    _ => None,
+                },
+                _ => None,
+            };
+
+            ParseError::WithContext {
                 message: self.context.to_string(),
                 inner: Box::new(e),
-            })
+                span,
+            }
+        })
     }
 }
 

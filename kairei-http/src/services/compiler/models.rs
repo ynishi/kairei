@@ -53,8 +53,14 @@ pub struct ErrorLocation {
     pub line: usize,
     /// Column number (1-based)
     pub column: usize,
+    /// Start position in the input string (byte offset)
+    pub start_position: Option<usize>,
+    /// End position in the input string (byte offset)
+    pub end_position: Option<usize>,
     /// Context around the error
     pub context: String,
+    /// Original token text that caused the error
+    pub token_text: Option<String>,
 }
 
 /// Suggestions for fixing validation errors

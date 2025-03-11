@@ -66,7 +66,10 @@ async fn test_suggest_fixes_handler_integration() {
         location: ErrorLocation {
             line: 1,
             column: 15,
+            start_position: None,
+            end_position: None,
             context: "micro TestAgent { invalid syntax }".to_string(),
+            token_text: None,
         },
         error_code: "E1001".to_string(),
         suggestion: "Check syntax for errors".to_string(),
