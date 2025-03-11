@@ -76,6 +76,7 @@ pub struct AppState {
 pub async fn start_server(
     config: ServerConfig,
     secret: Secret,
+    system_secret: Option<kairei_core::config::SecretConfig>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Set up CORS
     let cors = CorsLayer::new()
@@ -85,7 +86,7 @@ pub async fn start_server(
 
     // Create the session manager
     let session_config = SessionConfig::default();
-    let session_manager = SessionManager::new(session_config);
+    let session_manager = SessionManager::new(session_config, system_secret);
 
     // Create the auth store
     let auth_store = AuthStore::default();

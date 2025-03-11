@@ -222,8 +222,8 @@ impl DslSplitter {
         let chars: Vec<char> = code.chars().collect();
         let mut depth = 0;
 
-        for i in open_brace_pos..chars.len() {
-            match chars[i] {
+        for (i, c) in chars.iter().enumerate().skip(open_brace_pos) {
+            match c {
                 '{' => depth += 1,
                 '}' => {
                     depth -= 1;

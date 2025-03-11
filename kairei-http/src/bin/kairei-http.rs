@@ -26,6 +26,10 @@ struct Cli {
     #[arg(short, long, default_value = "/etc/secrets/kairei-secret.json")]
     secret_json: PathBuf,
 
+    /// Secret json for System
+    #[arg(long, default_value = "/etc/secrets/kairei-system-secret.json")]
+    system_secret_json: PathBuf,
+
     /// Enable authentication
     #[arg(short, long, default_value = "true")]
     enable_auth: bool,
@@ -76,6 +80,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let secret = std::fs::read_to_string(&cli.secret_json).unwrap_or_default();
     let secret: Secret = serde_json::from_str(&secret).unwrap_or_default();
 
+    debug!("system_secret_json path: {:?}", cli.system_secret_json);
+    if cli.system_secret_json.exists() {
+        info!("System secret file exists");
+    } else {
+        warn!(
+            "System secret file does not exist: {:?}",
+            cli.system_secret_json
+        );
+    }
+
+    let system_secret = std::fs::read_to_string(&cli.system_secret_json).unwrap_or_default();
+    let system_secret: Option<kairei_core::config::SecretConfig> =
+        serde_json::from_str(&system_secret).ok();
+
     // Handle subcommands
     let config = match &cli.command {
         Some(Commands::Config { file }) => {
@@ -101,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     debug!("Starting server with config: {:?}", config);
-    kairei_http::start_with_config_and_secret(config, secret).await?;
+    kairei_http::start_with_config_and_secret(config, secret, system_secret).await?;
 
     Ok(())
 }

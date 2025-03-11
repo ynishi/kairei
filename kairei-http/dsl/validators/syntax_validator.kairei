@@ -2,8 +2,9 @@ micro Validator {
   policy "provide detailed error information"
 
   answer {
-    on request Validate(stateInput: String, answerInput: String, observeInput: Sting, lifecycleInput: String, policiesInput: String, parseError: String) -> Result<String, Error> {
-      (stateResult, answerResult, observeResult, lifecycleResult, policiesResult) = await (
+    on request Validate(microInput: String, stateInput: String, answerInput: String, observeInput: Sting, lifecycleInput: String, policiesInput: String, parseError: String) -> Result<String, Error> {
+      (microResult, stateResult, answerResult, observeResult, lifecycleResult, policiesResult) = await (
+        request MicroValidator to ValidateMicro(microInput, parseError),
         request StateValidator to ValidateState(stateInput, parseError),
         request AnswerValidator to ValidateAnswer(answerInput, parseError),
         request ObserveValidator to ValidateObserve(observeInput, parseError),
@@ -13,6 +14,9 @@ micro Validator {
 
       // Analyze error and prepare suggestions
       analysis = think("""Analyze this Kairei DSL error and suggest a fix:
+
+        micro agent(total):
+        ${microResult}
 
         state:
         ${stateResult}

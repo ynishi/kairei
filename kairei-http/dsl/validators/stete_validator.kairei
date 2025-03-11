@@ -1,3 +1,11 @@
+micro MicroValidator {
+    answer {
+        on request ValidateMicro(microInput: String, parseError: String) -> Result<String, Error> {
+            return Ok("OK")
+        }
+    }
+}
+
 micro StateValidator {
     policy "KAIREI validator for state, parts of DSL"
     policy "provide detailed error information"
@@ -36,4 +44,35 @@ micro StateValidator {
         }
     }
 }
-    
+
+micro AnswerValidator {    
+    answer {
+        on request ValidateState(answerInput: String, parseError: String) -> Result<String, Error> {
+            Ok("OK")
+        }
+    }
+}
+
+micro ObserveValidator {
+    answer {
+        on request ValidateObserve(observeInput: String, parseError: String) -> Result<String, Error> {
+            return Ok("OK")
+        }
+    }
+}
+
+micro LifecycleValidator {
+    answer {
+        on request ValidateLifecycle(lifecycleInput: String, parseError: String) -> Result<String, Error> {
+            return Ok("OK")
+        }
+    }
+}
+
+micro PoliciesValidator {
+    answer {
+        on request ValidatePolicies(policiesInput: String, parseError: String) -> Result<String, Error> {
+            return Ok("OK")
+        }
+    }
+}

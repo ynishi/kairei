@@ -12,7 +12,6 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::{extract::State, response::Json};
 use kairei_core::Root;
-use kairei_core::config::ProviderSecretConfig;
 use kairei_core::system::{System, SystemStatus};
 use tokio::sync::RwLock;
 
@@ -38,19 +37,11 @@ pub async fn create_system(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    // todo extract secret from user
-    let mut secret = kairei_core::config::SecretConfig::default();
-    secret.providers.insert(
-        "default_provider".to_string(),
-        ProviderSecretConfig {
-            ..Default::default()
-        },
-    );
-
+    let secret = state.session_manager.secret_config.clone();
     let config = payload.config.clone();
 
     // impl create system using kairei-core with the session manager
-    let system: System = System::new(&config, &secret).await;
+    let system = System::new(&config, &secret).await;
 
     let session_data_builder = SessionDataBuilder::new()
         .system_config(config)

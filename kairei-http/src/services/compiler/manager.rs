@@ -54,6 +54,8 @@ impl CompilerSystemManager {
             match parsed {
                 Ok(_) => Ok("Successfully parsed DSL".to_string()),
                 Err(err) => {
+                    let splitted = self.split_dsl_blocks(code);
+                    let splitted_one_tier = self.split_dsl_blocks_one_tier(code);
                     let agents = system
                         .get_system_status()
                         .await
@@ -70,7 +72,66 @@ impl CompilerSystemManager {
                         .requester("manager")
                         .responder("ValidatorAgent")
                         .parameter("code", &Value::String(code.to_string()))
-                        .parameter("error", &Value::String(err.to_string()))
+                        .parameter(
+                            "stateInput",
+                            &Value::String(
+                                splitted
+                                    .get("state")
+                                    .unwrap_or(&vec!["Not Found".to_string()])
+                                    .join("\n"),
+                            ),
+                        )
+                        .parameter(
+                            "answerInput",
+                            &Value::String(
+                                splitted
+                                    .get("answer")
+                                    .unwrap_or(&vec!["Not Found".to_string()])
+                                    .join("\n"),
+                            ),
+                        )
+                        .parameter(
+                            "microInput",
+                            &Value::String(
+                                splitted
+                                    .get("micro")
+                                    .unwrap_or(&vec!["Not Found".to_string()])
+                                    .join("\n"),
+                            ),
+                        )
+                        .parameter(
+                            "policiesInput",
+                            &Value::String(
+                                splitted_one_tier
+                                    .get("micro")
+                                    .unwrap_or(&vec!["Not Found".to_string()])
+                                    .join("\n"),
+                            ),
+                        )
+                        .parameter(
+                            "observeInput",
+                            &Value::String(
+                                splitted
+                                    .get("observe")
+                                    .unwrap_or(&vec!["Not Found".to_string()])
+                                    .join("\n"),
+                            ),
+                        )
+                        .parameter(
+                            "lifecycleInput",
+                            &Value::String(format!(
+                                "{}\n{}",
+                                splitted
+                                    .get("onInit")
+                                    .unwrap_or(&vec!["Not Found".to_string()])
+                                    .join("\n"),
+                                splitted
+                                    .get("onEnd")
+                                    .unwrap_or(&vec!["Not Found".to_string()])
+                                    .join("\n")
+                            )),
+                        )
+                        .parameter("parseError", &Value::String(err.to_string()))
                         .build()
                         .map_err(SystemError::from)?;
 
@@ -135,12 +196,19 @@ impl CompilerSystemManager {
     ///
     /// # Returns
     /// A HashMap with keywords as keys and lists of related blocks as values
-    pub fn split_dsl_blocks_one_tier(
-        &self,
-        code: &str,
-        parent_block: &str,
-    ) -> HashMap<String, Vec<String>> {
+    pub fn split_dsl_blocks_one_tier(&self, code: &str) -> HashMap<String, Vec<String>> {
         let splitter = DslSplitter::new();
-        splitter.split_dsl_blocks_one_tier(code, parent_block)
+        let mut acc_map = HashMap::new();
+        for keywords in [
+            "policy", "state", "answer", "observe", "onInit", "onEnd", "on", "think", "await",
+            "world",
+        ] {
+            let parent_block = keywords;
+            let map = splitter.split_dsl_blocks_one_tier(code, parent_block);
+            for (key, value) in map {
+                acc_map.insert(key, value);
+            }
+        }
+        acc_map
     }
 }

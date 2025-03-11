@@ -66,7 +66,7 @@ async fn test_server_startup_with_auth() {
     };
 
     // Start the server with a timeout
-    let server_future = start_server(config.clone(), Default::default());
+    let server_future = start_server(config.clone(), Default::default(), None);
     let result = timeout(Duration::from_secs(1), server_future).await;
 
     // The server should still be running after the timeout
@@ -117,7 +117,7 @@ async fn test_server_startup() {
     };
 
     // Start the server with a timeout
-    let server_future = start_server(config.clone(), Default::default());
+    let server_future = start_server(config.clone(), Default::default(), None);
     let result = timeout(Duration::from_secs(1), server_future).await;
 
     // The server should still be running after the timeout
