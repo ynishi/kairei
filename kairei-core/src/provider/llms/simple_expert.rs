@@ -63,6 +63,7 @@ impl From<&ProviderConfig> for KnowledgeBase {
 
 #[async_trait]
 impl ProviderLLM for SimpleExpertProviderLLM {
+    #[tracing::instrument(skip(self, prompt, config), level = "debug")]
     async fn send_message(
         &self,
         prompt: &str,
@@ -93,6 +94,7 @@ impl ProviderLLM for SimpleExpertProviderLLM {
         &self.name
     }
 
+    #[tracing::instrument(skip(self, _config, _secret), level = "debug")]
     async fn initialize(
         &mut self,
         _config: &ProviderConfig,
