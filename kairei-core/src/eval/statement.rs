@@ -37,6 +37,7 @@ pub struct StatementEvaluator {
 
 impl StatementEvaluator {
     #[async_recursion]
+    #[tracing::instrument(skip(self, context), level = "debug")]
     pub async fn eval_statement(
         &self,
         statement: &Statement,
@@ -96,6 +97,7 @@ impl StatementEvaluator {
         }
     }
 
+    #[tracing::instrument(skip(self, context), level = "debug")]
     async fn eval_return(
         &self,
         expr: &Expression,
@@ -106,6 +108,7 @@ impl StatementEvaluator {
             .await
     }
 
+    #[tracing::instrument(skip(self, context), level = "debug")]
     pub async fn eval_expression(
         &self,
         expr: &Expression,
@@ -116,6 +119,7 @@ impl StatementEvaluator {
             .await
     }
 
+    #[tracing::instrument(skip(self, context), level = "debug")]
     async fn eval_assignment(
         &self,
         targets: &[Expression],
@@ -169,6 +173,7 @@ impl StatementEvaluator {
         }
     }
 
+    #[tracing::instrument(skip(self, context), level = "debug")]
     async fn eval_emit(
         &self,
         event_type: &EventType,
@@ -197,6 +202,7 @@ impl StatementEvaluator {
         Ok(Value::Unit)
     }
 
+    #[tracing::instrument(skip(self, context), level = "debug")]
     async fn eval_if(
         &self,
         condition: &Expression,
@@ -225,6 +231,7 @@ impl StatementEvaluator {
         }
     }
 
+    #[tracing::instrument(skip(self, context), level = "debug")]
     pub async fn eval_block(
         &self,
         statements: &[Statement],
@@ -249,6 +256,7 @@ impl StatementEvaluator {
         Ok(StatementResult::Value(last))
     }
 
+    #[tracing::instrument(skip(self, context), level = "debug")]
     async fn eval_with_error(
         &self,
         statement: &Statement,

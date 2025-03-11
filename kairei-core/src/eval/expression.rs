@@ -72,6 +72,7 @@ impl From<ProviderResponse> for Value {
 
 impl ExpressionEvaluator {
     #[async_recursion]
+    #[tracing::instrument(skip(self, context))]
     pub async fn eval_expression(
         &self,
         expr: &Expression,
@@ -118,6 +119,7 @@ impl ExpressionEvaluator {
         Self
     }
 
+    #[tracing::instrument(skip(self, context))]
     pub async fn eval_arguments(
         &self,
         arguments: &[Argument],
@@ -126,6 +128,7 @@ impl ExpressionEvaluator {
         self.eval_arguments_inner(arguments, context, false).await
     }
 
+    #[tracing::instrument(skip(self, context))]
     pub async fn eval_arguments_detect_name(
         &self,
         arguments: &[Argument],
@@ -134,6 +137,7 @@ impl ExpressionEvaluator {
         self.eval_arguments_inner(arguments, context, true).await
     }
 
+    #[tracing::instrument(skip(self, context))]
     async fn eval_arguments_inner(
         &self,
         arguments: &[Argument],
@@ -213,12 +217,14 @@ impl ExpressionEvaluator {
     }
 
     // 変数の評価
+    #[tracing::instrument(skip(self, context))]
     async fn eval_variable(&self, name: &str, context: Arc<ExecutionContext>) -> EvalResult<Value> {
         let access = VariableAccess::Local(name.to_string());
         context.get(access).await.map_err(EvalError::from)
     }
 
     // 状態アクセスの評価
+    #[tracing::instrument(skip(self, context))]
     async fn eval_state_access(
         &self,
         path: &str,
@@ -263,6 +269,7 @@ impl ExpressionEvaluator {
         Ok(Value::from(response))
     }
 
+    #[tracing::instrument(skip(self, context))]
     async fn select_provider(
         &self,
         provider_name: Option<String>,
@@ -282,6 +289,7 @@ impl ExpressionEvaluator {
         }
     }
 
+    #[tracing::instrument(skip(self, context))]
     async fn build_arg_map_from_args(
         &self,
         args: &[Argument],
@@ -292,6 +300,7 @@ impl ExpressionEvaluator {
         Ok(evaled)
     }
 
+    #[tracing::instrument(skip(self, provider, context))]
     async fn to_provider_request(
         &self,
         provider: &ProviderInstance,
@@ -359,6 +368,7 @@ impl ExpressionEvaluator {
         })
     }
 
+    #[tracing::instrument(skip(self, context))]
     async fn query_from_args(
         &self,
         args: &[Argument],
@@ -444,6 +454,7 @@ impl ExpressionEvaluator {
         Ok(policies)
     }
 
+    #[tracing::instrument(skip(self, _options, context))]
     async fn eval_request(
         &self,
         agent: &str,
@@ -485,6 +496,7 @@ impl ExpressionEvaluator {
         }
     }
 
+    #[tracing::instrument(skip(self, context))]
     async fn eval_await(
         &self,
         expressions: &[Expression],
@@ -513,6 +525,7 @@ impl ExpressionEvaluator {
         }
     }
 
+    #[tracing::instrument(skip(self, context))]
     async fn eval_expression_for_await(
         &self,
         expr: Expression,
@@ -522,6 +535,7 @@ impl ExpressionEvaluator {
     }
 
     // 関数呼び出しの評価
+    #[tracing::instrument(skip(self, context))]
     async fn eval_function_call(
         &self,
         function: &str,
@@ -549,6 +563,7 @@ impl ExpressionEvaluator {
     }
 
     // 二項演算の評価
+    #[tracing::instrument(skip(self, context))]
     async fn eval_binary_op(
         &self,
         op: &BinaryOperator,
