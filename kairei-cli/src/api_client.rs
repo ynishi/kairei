@@ -1,7 +1,10 @@
 use kairei_core::system::SystemStatus;
-use kairei_http::models::{
-    AgentCreationRequest, AgentStatus, CreateSystemRequest, CreateSystemResponse, EventRequest,
-    ListSystemsResponse, StartSystemRequest,
+use kairei_http::{
+    models::{
+        AgentCreationRequest, AgentStatus, CreateSystemRequest, CreateSystemResponse, EventRequest,
+        ListSystemsResponse, StartSystemRequest,
+    },
+    services::compiler::models::{ValidationError, ValidationResponse},
 };
 use reqwest::{Client, StatusCode};
 use secrecy::{ExposeSecret, SecretString};
@@ -87,6 +90,38 @@ impl ApiClient {
     /// Convert any response to a JSON value for display
     pub fn to_json<T: Serialize>(data: &T) -> ApiResult<Value> {
         Ok(serde_json::to_value(data)?)
+    }
+
+    // compiler endpoints
+    pub async fn compiler_dsl(&self, dsl: &str) -> ApiResult<ValidationResponse> {
+        let request = kairei_http::services::compiler::models::ValidationRequest {
+            code: dsl.to_string(),
+        };
+
+        self.request(
+            reqwest::Method::POST,
+            "/api/v1/compiler/validate",
+            Some(&request),
+        )
+        .await
+    }
+
+    pub async fn compiler_suggest(
+        &self,
+        dsl: &str,
+        errors: &[ValidationError],
+    ) -> ApiResult<Value> {
+        let request = kairei_http::services::compiler::models::SuggestionRequest {
+            code: dsl.to_string(),
+            errors: errors.to_owned(),
+        };
+
+        self.request(
+            reqwest::Method::POST,
+            "/api/v1/compiler/suggest",
+            Some(&request),
+        )
+        .await
     }
 
     // System endpoints
