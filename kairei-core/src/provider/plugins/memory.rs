@@ -39,6 +39,7 @@ impl MemoryPlugin {
     }
 
     /// 関連する記憶の検索
+    #[tracing::instrument(skip(self, context))]
     async fn retrieve_relevant_memories(
         &self,
         context: &PluginContext<'_>,
@@ -62,6 +63,7 @@ impl MemoryPlugin {
     }
 
     /// 記憶の保存
+    #[tracing::instrument(skip(self, memory))]
     async fn store_memory(&self, memory: Memory) -> ProviderResult<()> {
         // 重要度に応じて保存先を決定
         if memory.importance >= self.config.importance_threshold {
@@ -91,6 +93,7 @@ impl MemoryPlugin {
     }
 
     /// 関連する記憶の検索（シンプルな類似度計算）
+    #[tracing::instrument(skip(self, memories, _context))]
     async fn search_relevant_memories(
         &self,
         memories: &[Memory],
@@ -183,6 +186,7 @@ impl ProviderPlugin for MemoryPlugin {
         CapabilityType::Memory
     }
 
+    #[tracing::instrument(skip(self, context))]
     async fn generate_section<'a>(&self, context: &PluginContext<'a>) -> ProviderResult<Section> {
         // 関連する記憶の取得
         let memories = self.retrieve_relevant_memories(context).await?;
@@ -195,6 +199,7 @@ impl ProviderPlugin for MemoryPlugin {
         })
     }
 
+    #[tracing::instrument(skip(self, context, response))]
     async fn process_response<'a>(
         &self,
         context: &PluginContext<'a>,
