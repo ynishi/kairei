@@ -1587,6 +1587,7 @@ dependencies = [
  "dashmap",
  "hyper",
  "kairei-core",
+ "regex",
  "reqwest",
  "secrecy",
  "serde",

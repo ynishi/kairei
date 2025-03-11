@@ -3,10 +3,10 @@ use kairei_core::{
     event_bus::{EventError, RequestBuilder, Value},
     system::{System, SystemError},
 };
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
-use super::DslLoader;
+use super::{DslLoader, DslSplitter};
 
 /// Manager for System instances used by the compiler service
 #[derive(Clone, Default)]
@@ -113,5 +113,34 @@ impl CompilerSystemManager {
                 "system not initialized".to_string(),
             ))
         }
+    }
+
+    /// Split DSL code into blocks by keyword
+    ///
+    /// # Arguments
+    /// * `code` - The DSL code to split
+    ///
+    /// # Returns
+    /// A HashMap with keywords as keys and lists of related blocks as values
+    pub fn split_dsl_blocks(&self, code: &str) -> HashMap<String, Vec<String>> {
+        let splitter = DslSplitter::new();
+        splitter.split_dsl_blocks(code)
+    }
+
+    /// Split DSL code into one-tier blocks (only top-level elements within a specified block)
+    ///
+    /// # Arguments
+    /// * `code` - The DSL code to split
+    /// * `parent_block` - The parent block to extract from (e.g., "micro")
+    ///
+    /// # Returns
+    /// A HashMap with keywords as keys and lists of related blocks as values
+    pub fn split_dsl_blocks_one_tier(
+        &self,
+        code: &str,
+        parent_block: &str,
+    ) -> HashMap<String, Vec<String>> {
+        let splitter = DslSplitter::new();
+        splitter.split_dsl_blocks_one_tier(code, parent_block)
     }
 }
