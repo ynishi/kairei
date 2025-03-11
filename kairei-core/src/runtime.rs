@@ -234,13 +234,16 @@ impl RuntimeAgent for RuntimeAgentData {
     fn agent_type(&self) -> AgentType {
         self.base_context.agent_info().agent_type.clone()
     }
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn status(&self) -> LastStatus {
         self.last_status.read().await.clone()
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn state(&self, key: &str) -> Option<expression::Value> {
         self.base_context.get_state(key).await.ok()
     }
+    #[tracing::instrument(skip(self, shutdown_rx), level = "debug")]
     async fn run(&self, shutdown_rx: broadcast::Receiver<AgentType>) -> RuntimeResult<()> {
         self.update_last_status(EventType::AgentStarting).await?;
 
@@ -372,6 +375,7 @@ impl RuntimeAgent for RuntimeAgentData {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn shutdown(&self) -> RuntimeResult<()> {
         self.private_shutdown_start_tx
             .send(())
@@ -391,6 +395,7 @@ impl RuntimeAgent for RuntimeAgentData {
     }
 
     // シャットダウン時のクリーンアップ処理
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn cleanup(&self) -> RuntimeResult<()> {
         // 1. OnDestroy処理の実行
         self.handle_lifecycle_event(&LifecycleEvent::OnDestroy)
@@ -411,6 +416,7 @@ impl RuntimeAgent for RuntimeAgentData {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn handle_lifecycle_event(&self, event: &LifecycleEvent) -> RuntimeResult<()> {
         if let Some(handler) = self.lifecycle_handlers.get(event) {
             return handler().await;
@@ -418,6 +424,7 @@ impl RuntimeAgent for RuntimeAgentData {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn handle_runtime_error(&self, _error: RuntimeError) {
         todo!()
     }
