@@ -9,6 +9,7 @@ use kairei_core::{
     system::{System, SystemError},
     tokenizer,
 };
+use tracing::debug;
 
 /// Test that tokenization errors preserve span information through the System interface
 #[tokio::test]
@@ -41,13 +42,13 @@ async fn test_system_tokenization_error_preserves_span() {
             // Extract the problematic token from the source using span information
             let token_from_source = &invalid_dsl[span.start..span.end];
 
-            println!("Tokenization error: {}", message);
-            println!("Found: {}", found);
-            println!(
+            debug!("Tokenization error: {}", message);
+            debug!("Found: {}", found);
+            debug!(
                 "Span: line {}, column {}, start {}, end {}",
                 span.line, span.column, span.start, span.end
             );
-            println!("Token from source: {}", token_from_source);
+            debug!("Token from source: {}", token_from_source);
         }
         other => {
             panic!("Expected TokenizeError, got unexpected error: {:?}", other);
@@ -81,13 +82,13 @@ async fn test_system_parsing_error_preserves_span() {
             // Extract the problematic token from the source using span information
             let token_from_source = &invalid_dsl[span.start..span.end];
 
-            println!("Parsing error: {}", message);
-            println!("Error: {}", error);
-            println!(
+            debug!("Parsing error: {}", message);
+            debug!("Error: {}", error);
+            debug!(
                 "Span: line {}, column {}, start {}, end {}",
                 span.line, span.column, span.start, span.end
             );
-            println!("Token from source: {}", token_from_source);
+            debug!("Token from source: {}", token_from_source);
         }
         other => {
             panic!("Expected SystemError::Ast(ParseError), got: {:?}", other);
