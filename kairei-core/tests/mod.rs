@@ -1,7 +1,7 @@
+mod integration;
 mod micro_agent_tests;
 mod provider_tests;
 mod type_checker_tests;
-mod integration;
 
 use std::collections::HashMap;
 
