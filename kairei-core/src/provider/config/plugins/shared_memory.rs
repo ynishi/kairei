@@ -21,6 +21,7 @@ pub struct SharedMemoryConfig {
     /// Time-to-live for entries, after which they are automatically removed
     /// Setting to 0 means entries don't expire
     #[serde(default = "default_ttl", with = "crate::config::duration_ms")]
+    #[schema(value_type = u64, pattern = "uint64 as milliseconds")]
     pub ttl: Duration,
 
     /// Default namespace prefix for keys
