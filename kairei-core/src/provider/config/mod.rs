@@ -52,7 +52,7 @@ pub mod doc_references;
 mod errors;
 mod events;
 mod formatters;
-mod plugins;
+pub mod plugins;
 mod providers;
 mod suggestions;
 mod utils;
