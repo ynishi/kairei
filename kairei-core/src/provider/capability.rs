@@ -482,7 +482,7 @@ mod tests {
     }
 
     #[test]
-    fn test_requires_capabilities() {
+    fn test_requires_capabilities_validation() {
         struct TestProvider {
             capabilities: Capabilities,
         }
