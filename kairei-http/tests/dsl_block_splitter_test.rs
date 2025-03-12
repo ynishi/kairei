@@ -1,4 +1,5 @@
 use kairei_http::services::compiler::DslSplitter;
+use tracing::debug;
 
 #[test]
 fn test_split_dsl_blocks() {
@@ -74,12 +75,12 @@ micro StateValidator {
 
     if let Some(think_blocks) = blocks.get("think") {
         assert_eq!(think_blocks.len(), 1, "Should have 1 think block");
-        println!("Think block: {}", think_blocks[0]);
+        debug!("Think block: {}", think_blocks[0]);
         // We're not checking the content of the think block, just that it exists
     }
 
     // Print the blocks for debugging
-    println!("Blocks: {:#?}", blocks);
+    debug!("Blocks: {:#?}", blocks);
 
     // Test the one-tier extraction
     let one_tier_blocks = splitter.split_dsl_blocks_one_tier(dsl, "micro");
@@ -112,5 +113,5 @@ micro StateValidator {
     }
 
     // Print the one-tier blocks for debugging
-    println!("One-tier blocks: {:#?}", one_tier_blocks);
+    debug!("One-tier blocks: {:#?}", one_tier_blocks);
 }
