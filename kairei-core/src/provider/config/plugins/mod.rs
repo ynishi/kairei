@@ -3,10 +3,12 @@
 mod memory;
 mod rag;
 mod search;
+mod shared_memory;
 
 pub use memory::*;
 pub use rag::*;
 pub use search::*;
+pub use shared_memory::*;
 
 use crate::provider::config::base::ConfigError;
 use serde::{Deserialize, Serialize};
