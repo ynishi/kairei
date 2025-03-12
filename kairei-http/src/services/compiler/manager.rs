@@ -4,6 +4,7 @@ use kairei_core::{
     system::{System, SystemError},
 };
 use std::{collections::HashMap, sync::Arc};
+use tracing::debug;
 use uuid::Uuid;
 
 use super::{DslLoader, DslSplitter};
@@ -52,7 +53,7 @@ impl CompilerSystemManager {
     pub async fn validate_dsl(&self, code: &str) -> Result<String, CompilerError> {
         if let Some(system) = self.system.clone() {
             let parsed = system.parse_dsl(code).await;
-            println!("parsed: {:?}", parsed);
+            debug!("parsed: {:?}", parsed);
             match parsed {
                 Ok(_) => Ok("Successfully parsed DSL".to_string()),
                 Err(err) => {

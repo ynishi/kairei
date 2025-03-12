@@ -602,7 +602,7 @@ where
         match self.parser.parse(input, pos) {
             Ok((new_pos, value)) => Ok((new_pos, Some(value))),
             Err(e) => {
-                tracing::warn!(
+                tracing::debug!(
                     target: "parser::optional",
                     error = ?e,
                     position = pos,

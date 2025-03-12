@@ -9,6 +9,7 @@ use kairei_core::{
     config::{SecretConfig, SystemConfig},
     system::{System, SystemError},
 };
+use tracing::debug;
 
 /// Test multi-line string tokenization and error location tracking
 #[tokio::test]
@@ -61,9 +62,9 @@ string with an unclosed quote;
             assert!(span.column > 0);
             assert!(span.start < span.end);
 
-            println!("Tokenization error: {}", message);
-            println!("Found: {}", found);
-            println!(
+            debug!("Tokenization error: {}", message);
+            debug!("Found: {}", found);
+            debug!(
                 "Span: line {}, column {}, start {}, end {}",
                 span.line, span.column, span.start, span.end
             );
@@ -100,8 +101,8 @@ async fn test_multi_line_block_parsing() {
             token_span,
             error,
         }) => {
-            println!("Parse error: {}", message);
-            println!("Error: {}", error);
+            debug!("Parse error: {}", message);
+            debug!("Error: {}", error);
 
             if let Some(ts) = token_span {
                 // Verify that the span points to a valid location
@@ -110,12 +111,12 @@ async fn test_multi_line_block_parsing() {
                 assert!(span.column > 0);
                 assert!(span.start < span.end);
 
-                println!(
+                debug!(
                     "Span: line {}, column {}, start {}, end {}",
                     span.line, span.column, span.start, span.end
                 );
             } else {
-                println!("No span information available (this is expected for some parse errors)");
+                debug!("No span information available (this is expected for some parse errors)");
             }
         }
         other => {
@@ -150,8 +151,8 @@ async fn test_system_multi_line_error_tracking() {
             token_span,
             error,
         })) => {
-            println!("Parse error: {}", message);
-            println!("Error: {}", error);
+            debug!("Parse error: {}", message);
+            debug!("Error: {}", error);
 
             if let Some(ts) = token_span {
                 // Verify that the span points to a valid location
@@ -160,17 +161,17 @@ async fn test_system_multi_line_error_tracking() {
                 assert!(span.column > 0);
                 assert!(span.start < span.end);
 
-                println!(
+                debug!(
                     "Span: line {}, column {}, start {}, end {}",
                     span.line, span.column, span.start, span.end
                 );
 
                 // Extract the problematic token from the source
                 let lines: Vec<&str> = invalid_multi_line_dsl.lines().collect();
-                println!("Error context:");
+                debug!("Error context:");
                 for i in (span.line - 1)..(span.line + 1) {
                     if i < lines.len() {
-                        println!("{}: {}", i + 1, lines[i]);
+                        debug!("{}: {}", i + 1, lines[i]);
                     }
                 }
             }
@@ -213,8 +214,8 @@ async fn test_multi_line_error_visualization() {
             token_span,
             error,
         })) => {
-            println!("Parse error: {}", message);
-            println!("Error: {}", error);
+            debug!("Parse error: {}", message);
+            debug!("Error: {}", error);
 
             if let Some(ts) = token_span {
                 // Verify that the span points to a valid location
@@ -223,14 +224,14 @@ async fn test_multi_line_error_visualization() {
                 assert!(span.column > 0);
                 assert!(span.start < span.end);
 
-                println!(
+                debug!(
                     "Span: line {}, column {}, start {}, end {}",
                     span.line, span.column, span.start, span.end
                 );
 
                 // Extract and visualize the error context
                 let lines: Vec<&str> = invalid_multi_line_dsl.lines().collect();
-                println!("Error context with visualization:");
+                debug!("Error context with visualization:");
 
                 // Show a few lines before the error
                 let context_start = span.line.saturating_sub(2);
@@ -238,13 +239,13 @@ async fn test_multi_line_error_visualization() {
 
                 for i in context_start..context_end {
                     if i < lines.len() {
-                        println!("{:>3} | {}", i + 1, lines[i]);
+                        debug!("{:>3} | {}", i + 1, lines[i]);
 
                         // Add error markers
                         if i + 1 == span.line {
                             // Start of error
                             let marker = " ".repeat(span.column - 1) + "^ Error location";
-                            println!("    | {}", marker);
+                            debug!("    | {}", marker);
                         }
                     }
                 }

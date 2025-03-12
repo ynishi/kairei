@@ -260,7 +260,6 @@ impl Tokenizer {
                             span,
                         },
                     };
-                    tracing::error!("{}", error);
                     return Err(error);
                 }
             }
@@ -374,7 +373,7 @@ pub type TokenizerResult<'a, T> = Result<T, TokenizerError>;
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum TokenizerError {
     /// Error that occurs during parsing when invalid syntax is encountered.
-    #[error("Parse error: {message}, found: {found} at span {span}")]
+    #[error("Tokenizer Parse error: {message}, found: {found} at span {span}")]
     ParseError {
         /// Detailed error message describing the syntax error.
         message: String,
