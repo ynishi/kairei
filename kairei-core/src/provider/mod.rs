@@ -75,6 +75,7 @@
 pub mod provider_registry;
 pub mod provider_secret;
 
+pub mod capabilities;
 pub mod capability;
 pub mod config;
 pub mod generator;

@@ -280,6 +280,17 @@ mod tests {
     }
 
     #[test]
+    fn test_capability_shared_memory() {
+        let capability = CapabilityType::SharedMemory;
+        let capabilities = Capabilities::from(capability.clone());
+        assert!(capabilities.supports(&capability));
+
+        // Test that SharedMemory is distinct from Memory
+        let memory_capability = CapabilityType::Memory;
+        assert!(!capabilities.supports(&memory_capability));
+    }
+
+    #[test]
     fn test_capabilities_from() {
         let capabilities =
             Capabilities::from(vec![CapabilityType::Generate, CapabilityType::Policy]);
@@ -341,17 +352,6 @@ mod tests {
         let capability = CapabilityType::Custom("custom".to_string());
         let capabilities = Capabilities::from(vec![capability.clone()]);
         assert!(capabilities.supports(&capability));
-    }
-
-    #[test]
-    fn test_capability_shared_memory() {
-        let capability = CapabilityType::SharedMemory;
-        let capabilities = Capabilities::from(capability.clone());
-        assert!(capabilities.supports(&capability));
-
-        // Test that SharedMemory is distinct from Memory
-        let memory_capability = CapabilityType::Memory;
-        assert!(!capabilities.supports(&memory_capability));
     }
 
     #[test]
