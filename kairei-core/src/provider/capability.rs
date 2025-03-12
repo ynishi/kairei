@@ -23,6 +23,8 @@ pub enum CapabilityType {
     Thread,
     /// メモリ/状態保持機能
     Memory,
+    /// 共有メモリ機能
+    SharedMemory,
     /// ストリーミング処理機能
     // Streaming,
     // Knowledge Capabilities
@@ -339,6 +341,17 @@ mod tests {
         let capability = CapabilityType::Custom("custom".to_string());
         let capabilities = Capabilities::from(vec![capability.clone()]);
         assert!(capabilities.supports(&capability));
+    }
+
+    #[test]
+    fn test_capability_shared_memory() {
+        let capability = CapabilityType::SharedMemory;
+        let capabilities = Capabilities::from(capability.clone());
+        assert!(capabilities.supports(&capability));
+
+        // Test that SharedMemory is distinct from Memory
+        let memory_capability = CapabilityType::Memory;
+        assert!(!capabilities.supports(&memory_capability));
     }
 
     #[test]
