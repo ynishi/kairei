@@ -27,7 +27,7 @@ struct Cli {
         short,
         long,
         env = "KAIREI_SERVER_SECRET",
-        default_value = "/etc/secrets/kairei-secret.json"
+        default_value = "/etc/secrets/http/kairei-http-secret.json"
     )]
     secret_json: PathBuf,
 
@@ -35,7 +35,7 @@ struct Cli {
     #[arg(
         long,
         env = "KAIREI_SYSTEM_SECRET",
-        default_value = "/etc/secrets/kairei-system-secret.json"
+        default_value = "/etc/secrets/system/kairei-system-secret.json"
     )]
     system_secret_json: PathBuf,
 
