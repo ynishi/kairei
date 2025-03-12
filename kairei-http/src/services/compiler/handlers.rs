@@ -221,6 +221,8 @@ pub async fn validate_dsl(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    end_line: None,
+                    end_column: None,
                     start_position: None,
                     end_position: None,
                     context: "".to_string(),
@@ -244,6 +246,8 @@ pub async fn validate_dsl(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    end_line: None,
+                    end_column: None,
                     start_position: None,
                     end_position: None,
                     context: "".to_string(),
@@ -438,9 +442,11 @@ fn convert_system_error_to_validation_errors(
                     location: ErrorLocation {
                         line: 0,
                         column: 0,
+                        end_line: None,
+                        end_column: None,
                         start_position: None,
                         end_position: None,
-                        context: extract_context(code, 0, 0),
+                        context: extract_context(code, 0, 0, None, None),
                         token_text: None,
                     },
                     error_code: "E1005".to_string(),
@@ -455,9 +461,11 @@ fn convert_system_error_to_validation_errors(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    end_line: None,
+                    end_column: None,
                     start_position: None,
                     end_position: None,
-                    context: extract_context(code, 1, 1),
+                    context: extract_context(code, 1, 1, None, None),
                     token_text: None,
                 },
                 error_code: "E1006".to_string(),
@@ -471,9 +479,11 @@ fn convert_system_error_to_validation_errors(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    end_line: None,
+                    end_column: None,
                     start_position: None,
                     end_position: None,
-                    context: extract_context(code, 1, 1),
+                    context: extract_context(code, 1, 1, None, None),
                     token_text: None,
                 },
                 error_code: "E1007".to_string(),
@@ -487,9 +497,11 @@ fn convert_system_error_to_validation_errors(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    end_line: None,
+                    end_column: None,
                     start_position: None,
                     end_position: None,
-                    context: extract_context(code, 1, 1),
+                    context: extract_context(code, 1, 1, None, None),
                     token_text: None,
                 },
                 error_code: "E1008".to_string(),
@@ -504,11 +516,19 @@ fn convert_system_error_to_validation_errors(
                     message,
                     span,
                 } => {
-                    let (line, column, start_pos, end_pos) = if let Some(span) = span {
-                        (span.line, span.column, Some(span.start), Some(span.end))
-                    } else {
-                        (1, 1, None, None)
-                    };
+                    let (line, column, start_pos, end_pos, end_line, end_column) =
+                        if let Some(span) = span {
+                            (
+                                span.line,
+                                span.column,
+                                Some(span.start),
+                                Some(span.end),
+                                Some(span.end_line),
+                                Some(span.end_column),
+                            )
+                        } else {
+                            (1, 1, None, None, None, None)
+                        };
 
                     // Extract token text if span information is available
                     let token_text = if let (Some(start), Some(end)) = (start_pos, end_pos) {
@@ -526,9 +546,11 @@ fn convert_system_error_to_validation_errors(
                         location: ErrorLocation {
                             line,
                             column,
+                            end_line,
+                            end_column,
                             start_position: start_pos,
                             end_position: end_pos,
-                            context: extract_context(code, line, column),
+                            context: extract_context(code, line, column, end_line, end_column),
                             token_text,
                         },
                         error_code: "E1001".to_string(),
@@ -552,9 +574,17 @@ fn convert_system_error_to_validation_errors(
                         location: ErrorLocation {
                             line: span.line,
                             column: span.column,
+                            end_line: Some(span.end_line),
+                            end_column: Some(span.end_column),
                             start_position: Some(span.start),
                             end_position: Some(span.end),
-                            context: extract_context(code, span.line, span.column),
+                            context: extract_context(
+                                code,
+                                span.line,
+                                span.column,
+                                Some(span.end_line),
+                                Some(span.end_column),
+                            ),
                             token_text,
                         },
                         error_code: "E1002".to_string(),
@@ -567,9 +597,11 @@ fn convert_system_error_to_validation_errors(
                         location: ErrorLocation {
                             line: 1,
                             column: 1,
+                            end_line: None,
+                            end_column: None,
                             start_position: None,
                             end_position: None,
-                            context: extract_context(code, 1, 1),
+                            context: extract_context(code, 1, 1, None, None),
                             token_text: None,
                         },
                         error_code: "E1003".to_string(),
@@ -582,9 +614,11 @@ fn convert_system_error_to_validation_errors(
                         location: ErrorLocation {
                             line: 1,
                             column: 1,
+                            end_line: None,
+                            end_column: None,
                             start_position: None,
                             end_position: None,
-                            context: extract_context(code, 1, 1),
+                            context: extract_context(code, 1, 1, None, None),
                             token_text: None,
                         },
                         error_code: "E1004".to_string(),
@@ -600,9 +634,11 @@ fn convert_system_error_to_validation_errors(
                 location: ErrorLocation {
                     line: 1,
                     column: 1,
+                    end_line: None,
+                    end_column: None,
                     start_position: None,
                     end_position: None,
-                    context: extract_context(code, 1, 1),
+                    context: extract_context(code, 1, 1, None, None),
                     token_text: None,
                 },
                 error_code: "E1000".to_string(),
@@ -615,18 +651,29 @@ fn convert_system_error_to_validation_errors(
 }
 
 /// Extract context around an error location
-fn extract_context(code: &str, line: usize, column: usize) -> String {
+fn extract_context(
+    code: &str,
+    line: usize,
+    column: usize,
+    end_line: Option<usize>,
+    end_column: Option<usize>,
+) -> String {
     let lines: Vec<&str> = code.lines().collect();
     let mut context = String::new();
 
     // Get a few lines before and after the error
-    let start_line = line.saturating_sub(2);
-    let end_line = (line + 2).min(lines.len());
+    // For multi-line errors, include all lines in the span plus context
+    let start_context_line = line.saturating_sub(2);
+    let end_context_line = if let Some(end_line_val) = end_line {
+        (end_line_val + 2).min(lines.len())
+    } else {
+        (line + 2).min(lines.len())
+    };
 
     // Calculate line number width for consistent formatting
-    let line_num_width = end_line.to_string().len();
+    let line_num_width = end_context_line.to_string().len();
 
-    for i in start_line..end_line {
+    for i in start_context_line..end_context_line {
         if i < lines.len() {
             // Add line number prefix with consistent width
             context.push_str(&format!("{:>width$} | ", i + 1, width = line_num_width));
@@ -635,13 +682,49 @@ fn extract_context(code: &str, line: usize, column: usize) -> String {
             context.push_str(line_content);
             context.push('\n');
 
-            // Add a marker pointing to the error position for the error line
-            if i + 1 == line && column > 0 {
+            // Add markers for error positions
+            let is_start_line = i + 1 == line && column > 0;
+            let is_end_line = if let Some(end_line_val) = end_line {
+                i + 1 == end_line_val && end_column.is_some()
+            } else {
+                false
+            };
+            let is_middle_line = if let Some(end_line_val) = end_line {
+                i + 1 > line && i + 1 < end_line_val
+            } else {
+                false
+            };
+
+            if is_start_line || is_end_line || is_middle_line {
                 // Add consistent spacing for the marker line
                 context.push_str(&format!("{:>width$} | ", "", width = line_num_width));
-                let marker_indent = column.saturating_sub(1);
-                context.push_str(&" ".repeat(marker_indent));
-                context.push_str("^ Error occurs here");
+
+                if is_start_line {
+                    // Start marker
+                    let marker_indent = column.saturating_sub(1);
+                    context.push_str(&" ".repeat(marker_indent));
+
+                    if is_end_line {
+                        // Single line error
+                        let end_col = end_column.unwrap_or(column + 1);
+                        let marker_length = end_col.saturating_sub(column);
+                        context.push_str(&"^".repeat(marker_length.max(1)));
+                        context.push_str(" Error occurs here");
+                    } else {
+                        // Multi-line error start
+                        context.push_str("^ Error starts here");
+                    }
+                } else if is_end_line {
+                    // End marker for multi-line error
+                    let end_col = end_column.unwrap_or(1);
+                    let marker_indent = end_col.saturating_sub(1);
+                    context.push_str(&" ".repeat(marker_indent));
+                    context.push_str("^ Error ends here");
+                } else if is_middle_line {
+                    // Middle line of multi-line error
+                    context.push_str("| Error continues on this line");
+                }
+
                 context.push('\n');
             }
         }

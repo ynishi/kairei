@@ -53,6 +53,10 @@ pub struct ErrorLocation {
     pub line: usize,
     /// Column number (1-based)
     pub column: usize,
+    /// End line number for multi-line errors (1-based)
+    pub end_line: Option<usize>,
+    /// End column number for multi-line errors (1-based)
+    pub end_column: Option<usize>,
     /// Start position in the input string (byte offset)
     pub start_position: Option<usize>,
     /// End position in the input string (byte offset)

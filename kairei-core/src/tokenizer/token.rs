@@ -229,12 +229,27 @@ impl Tokenizer {
                     let consumed = &remaining[..(remaining.len() - new_remaining.len())];
                     self.update_position(consumed);
 
+                    // Calculate end line and column for multi-line tokens
+                    let consumed = &remaining[..(remaining.len() - new_remaining.len())];
+                    let lines = consumed.split('\n').collect::<Vec<_>>();
+                    let (end_line, end_column) = if lines.len() > 1 {
+                        // Multi-line token
+                        let end_line = start_line + lines.len() - 1;
+                        let end_column = lines.last().unwrap().chars().count() + 1;
+                        (end_line, end_column)
+                    } else {
+                        // Single-line token
+                        (start_line, start_column + consumed.chars().count())
+                    };
+
                     tokens.push(TokenSpan {
                         token,
                         start: start_position,
                         end: self.current_position,
                         line: start_line,
                         column: start_column,
+                        end_line,
+                        end_column,
                     });
 
                     remaining = new_remaining;
@@ -246,6 +261,8 @@ impl Tokenizer {
                         end: self.current_position + 1,
                         line: self.current_line,
                         column: self.current_column,
+                        end_line: self.current_line,
+                        end_column: self.current_column + 1,
                     };
                     let error = match e {
                         nom::Err::Incomplete(e) => TokenizerError::ParseError {
@@ -305,6 +322,10 @@ pub struct TokenSpan {
     pub line: usize,
     /// Column number where the token starts (1-based).
     pub column: usize,
+    /// Line number where the token ends (1-based).
+    pub end_line: usize,
+    /// Column number where the token ends (1-based).
+    pub end_column: usize,
 }
 
 /// Represents a span of text in the source code.
@@ -321,14 +342,18 @@ pub struct Span {
     pub line: usize,
     /// Column number where the span starts (1-based).
     pub column: usize,
+    /// Line number where the span ends (1-based).
+    pub end_line: usize,
+    /// Column number where the span ends (1-based).
+    pub end_column: usize,
 }
 
 impl std::fmt::Display for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "line: {}, column: {}, start: {}, end: {}",
-            self.line, self.column, self.start, self.end
+            "line: {}, column: {}, end_line: {}, end_column: {}, start: {}, end: {}",
+            self.line, self.column, self.end_line, self.end_column, self.start, self.end
         )
     }
 }
