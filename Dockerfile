@@ -26,6 +26,9 @@ WORKDIR /app
 # Copy the binary from the builder stage
 COPY --from=builder /usr/src/kairei/target/release/kairei-http /app/
 
+# Copy the files
+COPY --from=builder /usr/src/kairei/kairei-http/dsl /app/dsl
+
 # Expose the API port
 EXPOSE 8080
 
