@@ -205,8 +205,6 @@ async fn test_suggest_fixes_handler() {
         location: kairei_http::services::compiler::models::ErrorLocation {
             line: 1,
             column: 15,
-            end_line: None,
-            end_column: None,
             start_position: None,
             end_position: None,
             context: "micro TestAgent { ERROR }".to_string(),

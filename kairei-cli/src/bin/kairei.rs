@@ -329,7 +329,11 @@ async fn format_file(args: &FmtArgs) -> Result<(), Error> {
         .map_err(|e| Error::Internal(format!("Failed to tokenize: {}", e)))?;
 
     let preprocessor = kairei_core::preprocessor::TokenPreprocessor::default();
-    let tokens: Vec<Token> = preprocessor.process(tokens);
+    let tokens: Vec<Token> = preprocessor
+        .process(tokens)
+        .iter()
+        .map(|t| t.token.clone())
+        .collect();
 
     let (_, root) = kairei_core::analyzer::parsers::world::parse_root()
         .parse(tokens.as_slice(), 0)

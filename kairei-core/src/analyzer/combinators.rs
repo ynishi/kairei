@@ -58,16 +58,19 @@ impl<P, I, O> Parser<I, O> for Expected<P, I, O>
 where
     P: Parser<I, O>,
     I: Clone,
-    O: Clone + PartialEq,
+    O: Clone + PartialEq + fmt::Display,
 {
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<O> {
         let (new_pos, parsed_value) = self.parser.parse(input, pos)?;
         if parsed_value == self.value {
             Ok((new_pos, parsed_value))
         } else {
-            Err(ParseError::Fail(
-                "parsed value does not equal to expected value".to_string(),
-            ))
+            Err(ParseError::Unexpected {
+                expected: self.value.to_string(),
+                parsed: parsed_value.to_string(),
+                position: pos,
+                context: None,
+            })
         }
     }
 }
@@ -100,15 +103,19 @@ impl<I: Clone + PartialEq + fmt::Display> Parser<I, I> for Equal<I> {
             if found == self.value {
                 Ok((next_pos, found))
             } else {
-                Err(ParseError::Fail(format!(
-                    "expected not matched: expected: {}, found: {}, at {}",
-                    self.value,
-                    found,
-                    pos + 1
-                )))
+                Err(ParseError::Unexpected {
+                    expected: self.value.to_string(),
+                    parsed: found.to_string(),
+                    position: pos,
+                    context: None,
+                })
             }
         } else {
-            Err(ParseError::EOF)
+            Err(ParseError::UnexpectedEOF {
+                message: format!("input length is less than target, len:{}", input.len()),
+                position: pos,
+                context: None,
+            })
         }
     }
 }
@@ -142,7 +149,11 @@ impl<I: Clone> Parser<I, I> for Identity<I> {
         input
             .get(pos)
             .map(|x| (pos + 1, x.clone()))
-            .ok_or(ParseError::EOF)
+            .ok_or(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: pos,
+                context: None,
+            })
     }
 }
 
@@ -184,8 +195,12 @@ impl<I, O> Fail<I, O> {
 }
 
 impl<I, O> Parser<I, O> for Fail<I, O> {
-    fn parse(&self, _input: &[I], _pos: usize) -> ParseResult<O> {
-        Err(ParseError::Fail(self.message.clone()))
+    fn parse(&self, _input: &[I], pos: usize) -> ParseResult<O> {
+        Err(ParseError::Failure {
+            message: self.message.clone(),
+            position: pos,
+            context: None,
+        })
     }
 }
 
@@ -212,7 +227,11 @@ where
         input
             .get(pos)
             .and_then(|x| (self.f)(x).map(|result| (pos + 1, result)))
-            .ok_or(ParseError::EOF)
+            .ok_or(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: pos,
+                context: None,
+            })
     }
 }
 
@@ -244,7 +263,10 @@ impl<I, O> Parser<I, O> for Choice<I, O> {
                 return Ok(result);
             }
         }
-        Err(ParseError::NoAlternative)
+        Err(ParseError::NoAlternative {
+            position: pos,
+            context: None,
+        })
     }
 }
 #[derive(Clone)]
@@ -418,8 +440,7 @@ where
                     current_pos = new_pos;
                 }
                 Err(e) => {
-                    // エラー情報をトレースログに出力
-                    tracing::warn!(
+                    tracing::debug!(
                         target: "parser::many",
                         error = ?e,
                         position = current_pos,
@@ -477,7 +498,7 @@ where
                     current_pos = new_pos;
                 }
                 Err(e) => {
-                    tracing::warn!(
+                    tracing::debug!(
                         target: "parser::many1",
                         error = ?e,
                         position = current_pos,
@@ -859,23 +880,9 @@ where
     P: Parser<I, O>,
 {
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<O> {
-        self.parser.parse(input, pos).map_err(|e| {
-            // Extract span information from the inner error if available
-            let span = match &e {
-                ParseError::ParseError { span, .. } => span.clone(),
-                ParseError::WithContext { inner, .. } => match &**inner {
-                    ParseError::ParseError { span, .. } => span.clone(),
-                    _ => None,
-                },
-                _ => None,
-            };
-
-            ParseError::WithContext {
-                message: self.context.to_string(),
-                inner: Box::new(e),
-                span,
-            }
-        })
+        self.parser
+            .parse(input, pos)
+            .map_err(|e| e.with_context(&self.context.to_string()))
     }
 }
 
@@ -916,14 +923,24 @@ mod tests {
         let parser = Expected::new(Satisfy::new(|x: &i32| Some(*x)), 4);
         assert_eq!(
             parser.parse(&input, 2),
-            Err(ParseError::Fail(
-                "parsed value does not equal to expected value".to_string()
-            ))
+            Err(ParseError::Unexpected {
+                expected: "4".to_string(),
+                position: 2,
+                context: None,
+                parsed: "3".to_string()
+            })
         );
 
         // 失敗するケース (入力範囲外)
         let parser = Expected::new(Satisfy::new(|x: &i32| Some(*x)), 3);
-        assert_eq!(parser.parse(&input, 5), Err(ParseError::EOF));
+        assert_eq!(
+            parser.parse(&input, 5),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 5,
+                context: None
+            })
+        );
 
         let input = vec!['a', 'b', 'c', 'd'];
 
@@ -936,7 +953,14 @@ mod tests {
             Satisfy::new(|x: &char| if *x == 'b' { None } else { Some(*x) }),
             'c',
         );
-        assert_eq!(parser.parse(&input, 1), Err(ParseError::EOF));
+        assert_eq!(
+            parser.parse(&input, 1),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 1,
+                context: None
+            })
+        );
     }
 
     #[test]
@@ -950,7 +974,14 @@ mod tests {
 
         // 失敗するケース (入力範囲外)
         let parser = Identity::new();
-        assert_eq!(parser.parse(&input, 3), Err(ParseError::EOF));
+        assert_eq!(
+            parser.parse(&input, 3),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 3,
+                context: None
+            })
+        );
     }
 
     #[test]
@@ -976,11 +1007,19 @@ mod tests {
         let parser = Fail::<i32, i32>::new("error message");
         assert_eq!(
             parser.parse(&input, 0),
-            Err(ParseError::Fail("error message".to_string()))
+            Err(ParseError::Failure {
+                message: "error message".to_string(),
+                position: 0,
+                context: None
+            })
         );
         assert_eq!(
             parser.parse(&input, 2),
-            Err(ParseError::Fail("error message".to_string()))
+            Err(ParseError::Failure {
+                message: "error message".to_string(),
+                position: 2,
+                context: None
+            })
         );
 
         // 失敗するケース (空入力)
@@ -988,7 +1027,11 @@ mod tests {
         let parser = Fail::<i32, i32>::new("error message");
         assert_eq!(
             parser.parse(&input, 0),
-            Err(ParseError::Fail("error message".to_string()))
+            Err(ParseError::Failure {
+                message: "error message".to_string(),
+                position: 0,
+                context: None
+            })
         );
     }
 
@@ -1003,12 +1046,33 @@ mod tests {
 
         // 失敗するケース (条件を満たさない)
         let parser = Satisfy::new(|x: &i32| if *x % 2 == 0 { Some(*x) } else { None });
-        assert_eq!(parser.parse(&input, 0), Err(ParseError::EOF));
-        assert_eq!(parser.parse(&input, 2), Err(ParseError::EOF));
+        assert_eq!(
+            parser.parse(&input, 0),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 0,
+                context: None
+            })
+        );
+        assert_eq!(
+            parser.parse(&input, 2),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 2,
+                context: None
+            })
+        );
 
         // 失敗するケース (入力範囲外)
         let parser = Satisfy::new(|x: &i32| Some(*x));
-        assert_eq!(parser.parse(&input, 5), Err(ParseError::EOF));
+        assert_eq!(
+            parser.parse(&input, 5),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 5,
+                context: None
+            })
+        );
     }
     #[test]
     fn test_choice() {
@@ -1049,7 +1113,10 @@ mod tests {
         ]);
         assert_eq!(
             choice_parser.parse(&input, 0),
-            Err(ParseError::NoAlternative)
+            Err(ParseError::NoAlternative {
+                position: 0,
+                context: None
+            })
         );
 
         // 失敗するケース (入力範囲外)
@@ -1060,7 +1127,10 @@ mod tests {
         ]);
         assert_eq!(
             choice_parser.parse(&input, 3),
-            Err(ParseError::NoAlternative)
+            Err(ParseError::NoAlternative {
+                position: 3,
+                context: None
+            })
         );
     }
 
@@ -1087,7 +1157,11 @@ mod tests {
         ]);
         assert_eq!(
             sequence_parser.parse(&input, 0),
-            Err(ParseError::Fail("fail".to_string()))
+            Err(ParseError::Failure {
+                message: "fail".to_string(),
+                position: 1,
+                context: None
+            })
         );
 
         // 失敗するケース (入力範囲外)
@@ -1096,7 +1170,14 @@ mod tests {
             Box::new(parser2.clone()),
             Box::new(parser3.clone()),
         ]);
-        assert_eq!(sequence_parser.parse(&input, 2), Err(ParseError::EOF));
+        assert_eq!(
+            sequence_parser.parse(&input, 2),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 2,
+                context: None
+            })
+        );
     }
 
     #[test]
@@ -1113,12 +1194,23 @@ mod tests {
         let map_parser = Map::new(Fail::new("fail"), |x: i32| x * 2);
         assert_eq!(
             map_parser.parse(&input, 0),
-            Err(ParseError::Fail("fail".to_string()))
+            Err(ParseError::Failure {
+                message: "fail".to_string(),
+                position: 0,
+                context: None
+            })
         );
 
         // 失敗するケース (入力範囲外)
         let map_parser = Map::new(parser.clone(), |x| x * 2);
-        assert_eq!(map_parser.parse(&input, 3), Err(ParseError::EOF));
+        assert_eq!(
+            map_parser.parse(&input, 3),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 3,
+                context: None
+            })
+        );
     }
 
     #[test]
@@ -1150,11 +1242,25 @@ mod tests {
 
         // 失敗するケース (0回成功)
         let many1_parser = Many1::new(parser.clone());
-        assert_eq!(many1_parser.parse(&input, 3), Err(ParseError::EOF));
+        assert_eq!(
+            many1_parser.parse(&input, 3),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 3,
+                context: None
+            })
+        );
 
         // 失敗するケース (入力範囲外)
         let many1_parser = Many1::new(parser.clone());
-        assert_eq!(many1_parser.parse(&input, 5), Err(ParseError::EOF));
+        assert_eq!(
+            many1_parser.parse(&input, 5),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 5,
+                context: None
+            })
+        );
     }
     #[test]
     fn test_separated_list() {
@@ -1220,12 +1326,23 @@ mod tests {
         );
         assert_eq!(
             sequence3_parser.parse(&input, 0),
-            Err(ParseError::Fail("fail".to_string()))
+            Err(ParseError::Failure {
+                message: "fail".to_string(),
+                position: 1,
+                context: None
+            })
         );
 
         // 失敗するケース (入力範囲外)
         let sequence3_parser = Tuple3::new(parser1.clone(), parser2.clone(), parser3.clone());
-        assert_eq!(sequence3_parser.parse(&input, 2), Err(ParseError::EOF));
+        assert_eq!(
+            sequence3_parser.parse(&input, 2),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 2,
+                context: None
+            })
+        );
     }
 
     #[test]
@@ -1249,7 +1366,11 @@ mod tests {
         let delimited_parser = Delimited::new(Fail::new("fail"), parser.clone(), right.clone());
         assert_eq!(
             delimited_parser.parse(&input, 0),
-            Err(ParseError::Fail("fail".to_string()))
+            Err(ParseError::Failure {
+                message: "fail".to_string(),
+                position: 0,
+                context: None
+            })
         );
 
         // 失敗するケース (パーサーが失敗)
@@ -1257,18 +1378,33 @@ mod tests {
             Delimited::new(left.clone(), Fail::<char, i32>::new("fail"), right.clone());
         assert_eq!(
             delimited_parser.parse(&input, 0),
-            Err(ParseError::Fail("fail".to_string()))
+            Err(ParseError::Failure {
+                message: "fail".to_string(),
+                position: 1,
+                context: None
+            })
         );
 
         // 失敗するケース (右デリミタが失敗)
         let delimited_parser = Delimited::new(left.clone(), parser.clone(), Fail::new("fail"));
         assert_eq!(
             delimited_parser.parse(&input, 0),
-            Err(ParseError::Fail("fail".to_string()))
+            Err(ParseError::Failure {
+                message: "fail".to_string(),
+                position: 2,
+                context: None
+            })
         );
 
         // 失敗するケース (入力範囲外)
         let delimited_parser = Delimited::new(left.clone(), parser.clone(), right.clone());
-        assert_eq!(delimited_parser.parse(&input, 6), Err(ParseError::EOF));
+        assert_eq!(
+            delimited_parser.parse(&input, 6),
+            Err(ParseError::UnexpectedEOF {
+                message: "input is needed but end of input".to_string(),
+                position: 6,
+                context: None
+            })
+        );
     }
 }

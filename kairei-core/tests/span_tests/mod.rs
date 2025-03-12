@@ -5,5 +5,4 @@
 
 pub mod multi_line_span_tracking;
 pub mod span_tracking;
-pub mod span_tracking_fixed_v4;
 pub mod system_span_tracking;

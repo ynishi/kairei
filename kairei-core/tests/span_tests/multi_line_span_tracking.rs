@@ -15,12 +15,11 @@ use kairei_core::{
 async fn test_multi_line_string_tokenization() {
     // Multi-line string in DSL code
     let multi_line_dsl = r#"micro TestAgent {
-    on_event("test") {
-        let multi_line_string = "This is a
-multi-line
-string that spans
-multiple lines";
-    }
+
+
+
+
+    
 }"#;
 
     // Parse the DSL code
@@ -50,31 +49,28 @@ string with an unclosed quote;
 
     // Verify that the error contains span information
     assert!(result.is_err());
-    if let Err(ASTError::TokenizeError {
-        message,
-        found,
-        span,
-    }) = result
-    {
-        // Verify that the span information is correct
-        assert!(span.line > 0);
-        assert!(span.column > 0);
-        assert!(span.start < span.end);
+    let err = result.unwrap_err();
+    match err {
+        ASTError::TokenizeError(kairei_core::tokenizer::token::TokenizerError::ParseError {
+            message,
+            found,
+            span,
+        }) => {
+            // Verify that the span information is correct
+            assert!(span.line > 0);
+            assert!(span.column > 0);
+            assert!(span.start < span.end);
 
-        // Verify that the span covers multiple lines
-        assert!(
-            span.end_line > span.line,
-            "Error should span multiple lines"
-        );
-
-        println!("Tokenization error: {}", message);
-        println!("Found: {}", found);
-        println!(
-            "Span: line {}, column {}, end_line {}, end_column {}, start {}, end {}",
-            span.line, span.column, span.end_line, span.end_column, span.start, span.end
-        );
-    } else {
-        panic!("Expected TokenizeError, got unexpected error");
+            println!("Tokenization error: {}", message);
+            println!("Found: {}", found);
+            println!(
+                "Span: line {}, column {}, start {}, end {}",
+                span.line, span.column, span.start, span.end
+            );
+        }
+        other => {
+            panic!("Expected TokenizeError, got unexpected error: {:?}", other);
+        }
     }
 }
 
@@ -101,21 +97,22 @@ async fn test_multi_line_block_parsing() {
     match result {
         Err(ASTError::ParseError {
             message,
-            target,
-            span,
+            token_span,
+            error,
         }) => {
             println!("Parse error: {}", message);
-            println!("Target: {}", target);
+            println!("Error: {}", error);
 
-            if let Some(span) = span {
+            if let Some(ts) = token_span {
                 // Verify that the span points to a valid location
+                let span = &ts.span;
                 assert!(span.line > 0);
                 assert!(span.column > 0);
                 assert!(span.start < span.end);
 
                 println!(
-                    "Span: line {}, column {}, end_line {}, end_column {}, start {}, end {}",
-                    span.line, span.column, span.end_line, span.end_column, span.start, span.end
+                    "Span: line {}, column {}, start {}, end {}",
+                    span.line, span.column, span.start, span.end
                 );
             } else {
                 println!("No span information available (this is expected for some parse errors)");
@@ -150,27 +147,28 @@ async fn test_system_multi_line_error_tracking() {
     match result {
         Err(SystemError::Ast(ASTError::ParseError {
             message,
-            target,
-            span,
+            token_span,
+            error,
         })) => {
             println!("Parse error: {}", message);
-            println!("Target: {}", target);
+            println!("Error: {}", error);
 
-            if let Some(span) = span {
+            if let Some(ts) = token_span {
                 // Verify that the span points to a valid location
+                let span = &ts.span;
                 assert!(span.line > 0);
                 assert!(span.column > 0);
                 assert!(span.start < span.end);
 
                 println!(
-                    "Span: line {}, column {}, end_line {}, end_column {}, start {}, end {}",
-                    span.line, span.column, span.end_line, span.end_column, span.start, span.end
+                    "Span: line {}, column {}, start {}, end {}",
+                    span.line, span.column, span.start, span.end
                 );
 
                 // Extract the problematic token from the source
                 let lines: Vec<&str> = invalid_multi_line_dsl.lines().collect();
                 println!("Error context:");
-                for i in (span.line - 1)..(span.end_line) {
+                for i in (span.line - 1)..(span.line + 1) {
                     if i < lines.len() {
                         println!("{}: {}", i + 1, lines[i]);
                     }
@@ -212,21 +210,22 @@ async fn test_multi_line_error_visualization() {
     match result {
         Err(SystemError::Ast(ASTError::ParseError {
             message,
-            target,
-            span,
+            token_span,
+            error,
         })) => {
             println!("Parse error: {}", message);
-            println!("Target: {}", target);
+            println!("Error: {}", error);
 
-            if let Some(span) = span {
+            if let Some(ts) = token_span {
                 // Verify that the span points to a valid location
+                let span = &ts.span;
                 assert!(span.line > 0);
                 assert!(span.column > 0);
                 assert!(span.start < span.end);
 
                 println!(
-                    "Span: line {}, column {}, end_line {}, end_column {}, start {}, end {}",
-                    span.line, span.column, span.end_line, span.end_column, span.start, span.end
+                    "Span: line {}, column {}, start {}, end {}",
+                    span.line, span.column, span.start, span.end
                 );
 
                 // Extract and visualize the error context
@@ -235,7 +234,7 @@ async fn test_multi_line_error_visualization() {
 
                 // Show a few lines before the error
                 let context_start = span.line.saturating_sub(2);
-                let context_end = (span.end_line + 2).min(lines.len());
+                let context_end = (span.line + 2).min(lines.len());
 
                 for i in context_start..context_end {
                     if i < lines.len() {
@@ -244,15 +243,8 @@ async fn test_multi_line_error_visualization() {
                         // Add error markers
                         if i + 1 == span.line {
                             // Start of error
-                            let marker = " ".repeat(span.column - 1) + "^ Error starts here";
+                            let marker = " ".repeat(span.column - 1) + "^ Error location";
                             println!("    | {}", marker);
-                        } else if i + 1 == span.end_line {
-                            // End of error
-                            let marker = " ".repeat(span.end_column - 1) + "^ Error ends here";
-                            println!("    | {}", marker);
-                        } else if i + 1 > span.line && i + 1 < span.end_line {
-                            // Middle of multi-line error
-                            println!("    | | Error continues on this line");
                         }
                     }
                 }

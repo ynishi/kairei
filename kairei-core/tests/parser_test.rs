@@ -6,11 +6,15 @@ use tracing::debug;
 extern crate kairei_core;
 
 fn parse_agent(input: &str) -> MicroAgentDef {
-    let result = kairei_core::tokenizer::token::Tokenizer::new()
+    let token_spans = kairei_core::tokenizer::token::Tokenizer::new()
         .tokenize(input)
         .unwrap();
     let preprocessor = kairei_core::preprocessor::TokenPreprocessor::default();
-    let tokens: Vec<Token> = preprocessor.process(result);
+    let tokens: Vec<Token> = preprocessor
+        .process(token_spans)
+        .iter()
+        .map(|e| e.token.clone())
+        .collect();
     debug!("{:?}", tokens);
     let (_, agent_def) = kairei_core::analyzer::parsers::agent::parse_agent_def()
         .parse(tokens.as_slice(), 0)
@@ -174,7 +178,11 @@ fn it_parse_micro_agent() {
         .tokenize(input)
         .unwrap();
     let preprocessor = kairei_core::preprocessor::TokenPreprocessor::default();
-    let tokens: Vec<Token> = preprocessor.process(result);
+    let tokens: Vec<Token> = preprocessor
+        .process(result)
+        .iter()
+        .map(|e| e.token.clone())
+        .collect();
     debug!("{:?}", tokens);
     let (_, agent_def) = kairei_core::analyzer::parsers::agent::parse_agent_def()
         .parse(tokens.as_slice(), 0)

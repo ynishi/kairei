@@ -229,28 +229,14 @@ impl Tokenizer {
                     let consumed = &remaining[..(remaining.len() - new_remaining.len())];
                     self.update_position(consumed);
 
-                    // Calculate end line and column for multi-line tokens
-                    let consumed = &remaining[..(remaining.len() - new_remaining.len())];
-                    let lines = consumed.split('\n').collect::<Vec<_>>();
-                    let (end_line, end_column) = if lines.len() > 1 {
-                        // Multi-line token
-                        let end_line = start_line + lines.len() - 1;
-                        let end_column = lines.last().unwrap().chars().count() + 1;
-                        (end_line, end_column)
-                    } else {
-                        // Single-line token
-                        (start_line, start_column + consumed.chars().count())
-                    };
-
-                    tokens.push(TokenSpan {
-                        token,
+                    let span = Span {
                         start: start_position,
                         end: self.current_position,
                         line: start_line,
                         column: start_column,
-                        end_line,
-                        end_column,
-                    });
+                    };
+
+                    tokens.push(TokenSpan { token, span });
 
                     remaining = new_remaining;
                 }
@@ -261,8 +247,6 @@ impl Tokenizer {
                         end: self.current_position + 1,
                         line: self.current_line,
                         column: self.current_column,
-                        end_line: self.current_line,
-                        end_column: self.current_column + 1,
                     };
                     let error = match e {
                         nom::Err::Incomplete(e) => TokenizerError::ParseError {
@@ -314,6 +298,23 @@ impl Tokenizer {
 pub struct TokenSpan {
     /// The token itself.
     pub token: Token,
+    pub span: Span,
+}
+
+impl fmt::Display for TokenSpan {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} at {}", self.token, self.span)
+    }
+}
+
+impl PartialEq for TokenSpan {
+    fn eq(&self, other: &Self) -> bool {
+        self.token == other.token
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Span {
     /// Start position in the input string (byte offset).
     pub start: usize,
     /// End position in the input string (byte offset).
@@ -322,38 +323,14 @@ pub struct TokenSpan {
     pub line: usize,
     /// Column number where the token starts (1-based).
     pub column: usize,
-    /// Line number where the token ends (1-based).
-    pub end_line: usize,
-    /// Column number where the token ends (1-based).
-    pub end_column: usize,
 }
 
-/// Represents a span of text in the source code.
-///
-/// Used for error reporting and source mapping to provide precise location
-/// information for syntax errors.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Span {
-    /// Start position in the input string (byte offset).
-    pub start: usize,
-    /// End position in the input string (byte offset).
-    pub end: usize,
-    /// Line number where the span starts (1-based).
-    pub line: usize,
-    /// Column number where the span starts (1-based).
-    pub column: usize,
-    /// Line number where the span ends (1-based).
-    pub end_line: usize,
-    /// Column number where the span ends (1-based).
-    pub end_column: usize,
-}
-
-impl std::fmt::Display for Span {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "line: {}, column: {}, end_line: {}, end_column: {}, start: {}, end: {}",
-            self.line, self.column, self.end_line, self.end_column, self.start, self.end
+            "Span{{start: {}, end: {}, line: {}, column: {}}}",
+            self.start, self.end, self.line, self.column
         )
     }
 }
@@ -397,7 +374,7 @@ pub type TokenizerResult<'a, T> = Result<T, TokenizerError>;
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum TokenizerError {
     /// Error that occurs during parsing when invalid syntax is encountered.
-    #[error("Parse error: {message} at position {span}")]
+    #[error("Parse error: {message}, found: {found} at span {span}")]
     ParseError {
         /// Detailed error message describing the syntax error.
         message: String,
@@ -437,14 +414,88 @@ mod tests {
         let input = "x\nother";
         let tokens = tokenizer.tokenize(input).unwrap();
 
-        assert_eq!(tokens[0].line, 1);
-        assert_eq!(tokens[0].column, 1);
+        assert_eq!(tokens[0].span.line, 1);
+        assert_eq!(tokens[0].span.column, 1);
         assert_eq!(tokens[0].token, Token::Identifier("x".to_string()));
 
         // 2行目のtokenを確認
         let print_token = &tokens[2];
-        assert_eq!(print_token.line, 2);
-        assert_eq!(print_token.column, 1);
+        assert_eq!(print_token.span.line, 2);
+        assert_eq!(print_token.span.column, 1);
+    }
+
+    #[test]
+    fn test_tokenizer_with_position_multiline() {
+        let mut tokenizer = Tokenizer::new();
+        let input = r#"x
+        y
+        z"#;
+        let tokens = tokenizer.tokenize(input).unwrap();
+
+        let mut iter = tokens.iter();
+
+        let token0 = iter.next().unwrap();
+        assert_eq!(token0.token, Token::Identifier("x".to_string()));
+
+        let span0 = &token0.span;
+        assert_eq!(span0.line, 1);
+        assert_eq!(span0.column, 1);
+        assert_eq!(span0.start, 0);
+        assert_eq!(span0.end, 1);
+
+        let token1 = iter.next().unwrap();
+        assert_eq!(token1.token, Token::Newline);
+
+        let span1 = &token1.span;
+        assert_eq!(span1.line, 1);
+        assert_eq!(span1.column, 2);
+        assert_eq!(span1.start, 1);
+        assert_eq!(span1.end, 2);
+
+        let token2 = iter.next().unwrap();
+        assert_eq!(token2.token, Token::Whitespace("        ".to_string()));
+
+        let span2 = &token2.span;
+        assert_eq!(span2.line, 2);
+        assert_eq!(span2.column, 1);
+        assert_eq!(span2.start, 2);
+        assert_eq!(span2.end, 10);
+
+        let token3 = iter.next().unwrap();
+        assert_eq!(token3.token, Token::Identifier("y".to_string()));
+
+        let span3 = &token3.span;
+        assert_eq!(span3.line, 2);
+        assert_eq!(span3.column, 9);
+        assert_eq!(span3.start, 10);
+        assert_eq!(span3.end, 11);
+
+        let token4 = iter.next().unwrap();
+        assert_eq!(token4.token, Token::Newline);
+
+        let span4 = &token4.span;
+        assert_eq!(span4.line, 2);
+        assert_eq!(span4.column, 10);
+        assert_eq!(span4.start, 11);
+        assert_eq!(span4.end, 12);
+
+        let token5 = iter.next().unwrap();
+        assert_eq!(token5.token, Token::Whitespace("        ".to_string()));
+
+        let span5 = &token5.span;
+        assert_eq!(span5.line, 3);
+        assert_eq!(span5.column, 1);
+        assert_eq!(span5.start, 12);
+        assert_eq!(span5.end, 20);
+
+        let token6 = iter.next().unwrap();
+        assert_eq!(token6.token, Token::Identifier("z".to_string()));
+
+        let span6 = &token6.span;
+        assert_eq!(span6.line, 3);
+        assert_eq!(span6.column, 9);
+        assert_eq!(span6.start, 20);
+        assert_eq!(span6.end, 21);
     }
 
     #[test]
