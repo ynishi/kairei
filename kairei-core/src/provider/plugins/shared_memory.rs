@@ -274,6 +274,7 @@ mod tests {
             base: Default::default(),
             max_keys: 100,
             ttl: Duration::from_secs(3600),
+            namespace: "test".to_string(),
         })
     }
 
@@ -317,6 +318,7 @@ mod tests {
             base: Default::default(),
             max_keys: 100,
             ttl: Duration::from_millis(10), // Extremely short TTL for testing
+            namespace: "test".to_string(),
         });
 
         plugin.set("expiring_key", json!("test")).await.unwrap();
@@ -339,6 +341,7 @@ mod tests {
             base: Default::default(),
             max_keys: 100,
             ttl: Duration::from_secs(3600), // Long TTL
+            namespace: "test".to_string(),
         });
 
         // Set a key
@@ -373,6 +376,7 @@ mod tests {
             base: Default::default(),
             max_keys: 2,
             ttl: Duration::from_secs(3600),
+            namespace: "test".to_string(),
         });
 
         // Fill to capacity
