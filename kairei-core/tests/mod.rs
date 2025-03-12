@@ -1,5 +1,6 @@
 mod micro_agent_tests;
 mod provider_tests;
+mod span_tests;
 mod type_checker_tests;
 
 use std::collections::HashMap;

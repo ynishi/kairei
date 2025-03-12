@@ -56,7 +56,10 @@ use crate::{
     ast,
     config::AgentConfig,
     preprocessor::{self, Preprocessor},
-    tokenizer::{self, token::Token},
+    tokenizer::{
+        self,
+        token::{Token, TokenSpan},
+    },
     type_checker::run_type_checker,
 };
 
@@ -119,15 +122,21 @@ impl AstRegistry {
 
         // 2. Preprocessing: Apply token transformations
         let preprocessor = preprocessor::TokenPreprocessor::default();
-        let tokens: Vec<Token> = preprocessor.process(tokens);
-        debug!("{:?}", tokens);
+        let token_spans: Vec<TokenSpan> = preprocessor.process(tokens);
+        debug!("create_ast_from_dsl: token_spans: {:?}", token_spans);
+        let tokens: Vec<Token> = token_spans
+            .iter()
+            .map(|ts| ts.token.clone())
+            .collect::<Vec<Token>>();
+        debug!("create_ast_from_dsl: tokens: {:?}", tokens);
 
         // 3. Parsing: Convert tokens into AST structure
         let (pos, mut root) = analyzer::parsers::world::parse_root()
             .parse(tokens.as_slice(), 0)
             .map_err(|e: analyzer::ParseError| ASTError::ParseError {
-                message: format!("failed to parse DSL {}", e),
-                target: "root".to_string(),
+                message: "failed to parse DSL".to_string(),
+                token_span: token_spans.get(e.get_position()).cloned(),
+                error: e.to_string(),
             })?;
         debug!("{:?}", root);
 
@@ -141,7 +150,8 @@ impl AstRegistry {
             );
             return Err(ASTError::ParseError {
                 message: "failed to parse DSL".to_string(),
-                target: "root".to_string(),
+                token_span: token_spans.get(pos).cloned(),
+                error: "not all tokens were consumed".to_string(),
             });
         }
 

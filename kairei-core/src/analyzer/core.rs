@@ -42,40 +42,85 @@ pub type ParseResult<O> = Result<(usize, O), ParseError>;
 /// error messages, position information, and context.
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum ParseError {
-    /// General parse error with message, found token, and position
-    #[error("Parse error: {message}")]
-    ParseError {
-        /// Error message
-        message: String,
-        /// The token that was found
-        found: String,
-        /// Position information (line, column)
-        position: (usize, usize),
-    },
     /// Unexpected end of file
-    #[error("Unexpected EOF")]
-    UnexpectedEOF,
-    /// End of file
-    #[error("EOF")]
-    EOF,
-    /// Unexpected token
-    #[error("Unexpected")]
-    Unexpected,
-    /// No alternative matched
-    #[error("No alternative")]
-    NoAlternative,
-    /// Explicit failure
-    #[error("Fail: {0}")]
-    Fail(String),
-    /// Predicate error
-    #[error("PredicateError")]
-    PredicateError,
-    /// Error with context
-    #[error("WithContext: {message}, {inner}")]
-    WithContext {
-        /// Context message
+    #[error("Unexpected EOF: {message} at position {position}, context: {context:?}")]
+    UnexpectedEOF {
         message: String,
-        /// Inner error
-        inner: Box<ParseError>,
+        position: usize,
+        context: Option<String>,
     },
+    /// Unexpected token
+    #[error(
+        "Unexpected: Parsed value is not equal to, expected {expected}, parsed {parsed} at position {position}, context: {context:?}"
+    )]
+    Unexpected {
+        expected: String,
+        parsed: String,
+        position: usize,
+        context: Option<String>,
+    },
+    /// No alternative matched
+    #[error(
+        "No alternative: Parsed value is not matched any alternative at position {position}, context: {context:?}"
+    )]
+    NoAlternative {
+        position: usize,
+        context: Option<String>,
+    },
+    /// Explicit failure
+    #[error("Failure: {message} at position {position}, context: {context:?}")]
+    Failure {
+        message: String,
+        position: usize,
+        context: Option<String>,
+    },
+}
+
+impl ParseError {
+    pub fn with_context(self, ctx: &str) -> Self {
+        match self {
+            ParseError::UnexpectedEOF {
+                message,
+                position,
+                context,
+            } => ParseError::UnexpectedEOF {
+                message,
+                position,
+                context: context.map(|c| format!("{} -> {}", c, ctx)),
+            },
+            ParseError::Unexpected {
+                expected,
+                parsed,
+                position,
+                context,
+            } => ParseError::Unexpected {
+                expected,
+                parsed,
+                position,
+                context: context.map(|c| format!("{} -> {}", c, ctx)),
+            },
+            ParseError::NoAlternative { position, context } => ParseError::NoAlternative {
+                position,
+                context: context.map(|c| format!("{} -> {}", c, ctx)),
+            },
+            ParseError::Failure {
+                message,
+                position,
+                context,
+            } => ParseError::Failure {
+                message,
+                position,
+                context: context.map(|c| format!("{} -> {}", c, ctx)),
+            },
+        }
+    }
+
+    pub fn get_position(&self) -> usize {
+        match self {
+            ParseError::UnexpectedEOF { position, .. } => *position,
+            ParseError::Unexpected { position, .. } => *position,
+            ParseError::NoAlternative { position, .. } => *position,
+            ParseError::Failure { position, .. } => *position,
+        }
+    }
 }

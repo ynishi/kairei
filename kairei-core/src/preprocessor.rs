@@ -59,7 +59,7 @@
 //!
 //! // Preprocess tokens
 //! let preprocessor = TokenPreprocessor::default();
-//! let tokens: Vec<Token> = preprocessor.process(token_spans);
+//! let tokens: Vec<Token> = preprocessor.process(token_spans).iter().map(|span| span.token.clone()).collect();
 //! ```
 //!
 //! ## Integration Points
@@ -67,7 +67,7 @@
 //! * **Tokenizer**: Receives the initial token stream from the tokenization process
 //! * **Parser**: Provides the preprocessed token stream to the parsing phase
 
-use crate::tokenizer::token::{Token, TokenSpan};
+use crate::tokenizer::token::TokenSpan;
 use regex::Regex;
 
 /// A trait for preprocessing different types of input
@@ -91,23 +91,14 @@ impl TokenPreprocessor {
     }
 }
 
-impl Preprocessor<Vec<TokenSpan>, Vec<Token>> for TokenPreprocessor {
-    fn process(&self, input: Vec<TokenSpan>) -> Vec<Token> {
-        // Filter out comments and normalize whitespace
-        input
-            .into_iter()
-            .map(|span| span.token)
-            .filter(|token| !token.is_comment() && !token.is_whitespace() && !token.is_newline())
-            .collect()
-    }
-}
-
 impl Preprocessor<Vec<TokenSpan>> for TokenPreprocessor {
     fn process(&self, input: Vec<TokenSpan>) -> Vec<TokenSpan> {
         // Filter out comments and normalize whitespace
         input
             .into_iter()
-            .filter(|span| !span.token.is_comment())
+            .filter(|span| {
+                !span.token.is_comment() && !span.token.is_whitespace() && !span.token.is_newline()
+            })
             .collect()
     }
 }

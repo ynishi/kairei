@@ -190,7 +190,10 @@ pub async fn test_validate_dsl(Json(payload): Json<ValidationRequest>) -> Json<V
             location: ErrorLocation {
                 line: 1,
                 column: payload.code.find("ERROR").unwrap_or(1),
+                start_position: None,
+                end_position: None,
                 context: payload.code.clone(),
+                token_text: None,
             },
             error_code: "E1001".to_string(),
             suggestion: "Check syntax for errors".to_string(),
@@ -202,7 +205,10 @@ pub async fn test_validate_dsl(Json(payload): Json<ValidationRequest>) -> Json<V
                 location: ErrorLocation {
                     line: 1,
                     column: payload.code.find("WARNING").unwrap_or(1),
+                    start_position: None,
+                    end_position: None,
                     context: payload.code.clone(),
+                    token_text: None,
                 },
                 warning_code: "W1001".to_string(),
             }]

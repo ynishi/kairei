@@ -607,7 +607,7 @@ use proc_macro2::TokenStream;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::tokenizer::token::TokenizerError;
+use crate::tokenizer::token::{TokenSpan, TokenizerError};
 use crate::type_checker::TypeCheckError;
 
 // リクエストオプション
@@ -963,14 +963,18 @@ pub trait CodeGen {
 
 #[derive(Error, Debug)]
 pub enum ASTError {
-    #[error("Parse error: {target}: {message}")]
-    ParseError { target: String, message: String },
+    #[error("Parse error: {message}, {error} for {token_span:?}")]
+    ParseError {
+        message: String,
+        token_span: Option<TokenSpan>,
+        error: String,
+    },
     #[error("AST not found: {0}")]
     ASTNotFound(String),
-    #[error("Type check error: {0}")]
-    TypeCheckError(#[from] TypeCheckError),
     #[error("Tokenization error: {0}")]
     TokenizeError(#[from] TokenizerError),
+    #[error("Type check error: {0}")]
+    TypeCheckError(#[from] TypeCheckError),
 }
 
 pub type ASTResult<T> = Result<T, ASTError>;
