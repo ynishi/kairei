@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::provider::{
-    capabilities::shared_memory::{MemoryError, Metadata, SharedMemoryCapability},
+    capabilities::shared_memory::{Metadata, SharedMemoryCapability, SharedMemoryError},
     capability::CapabilityType,
     llm::LLMResponse,
     plugin::{PluginContext, ProviderPlugin},
@@ -59,27 +59,27 @@ impl ProviderPlugin for SharedMemoryPluginAdapter {
 // Forward SharedMemoryCapability methods to the wrapped plugin
 #[async_trait]
 impl SharedMemoryCapability for SharedMemoryPluginAdapter {
-    async fn get(&self, key: &str) -> Result<Value, MemoryError> {
+    async fn get(&self, key: &str) -> Result<Value, SharedMemoryError> {
         self.plugin.get(key).await
     }
 
-    async fn set(&self, key: &str, value: Value) -> Result<(), MemoryError> {
+    async fn set(&self, key: &str, value: Value) -> Result<(), SharedMemoryError> {
         self.plugin.set(key, value).await
     }
 
-    async fn delete(&self, key: &str) -> Result<(), MemoryError> {
+    async fn delete(&self, key: &str) -> Result<(), SharedMemoryError> {
         self.plugin.delete(key).await
     }
 
-    async fn exists(&self, key: &str) -> Result<bool, MemoryError> {
+    async fn exists(&self, key: &str) -> Result<bool, SharedMemoryError> {
         self.plugin.exists(key).await
     }
 
-    async fn get_metadata(&self, key: &str) -> Result<Metadata, MemoryError> {
+    async fn get_metadata(&self, key: &str) -> Result<Metadata, SharedMemoryError> {
         self.plugin.get_metadata(key).await
     }
 
-    async fn list_keys(&self, pattern: &str) -> Result<Vec<String>, MemoryError> {
+    async fn list_keys(&self, pattern: &str) -> Result<Vec<String>, SharedMemoryError> {
         self.plugin.list_keys(pattern).await
     }
 }

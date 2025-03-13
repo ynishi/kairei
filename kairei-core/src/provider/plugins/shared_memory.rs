@@ -8,7 +8,9 @@ use serde_json::Value;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::provider::capabilities::shared_memory::{MemoryError, Metadata, SharedMemoryCapability};
+use crate::provider::capabilities::shared_memory::{
+    Metadata, SharedMemoryCapability, SharedMemoryError,
+};
 use crate::provider::capability::CapabilityType;
 use crate::provider::config::plugins::SharedMemoryConfig;
 use crate::provider::llm::LLMResponse;
@@ -40,40 +42,9 @@ impl InMemorySharedMemoryPlugin {
         }
     }
 
-    /// Check if a key has expired
-    fn is_expired(&self, key: &str) -> bool {
-        if let Some(entry) = self.data.get(key) {
-            if let Some(expiry) = entry.expiry {
-                let now = Instant::now();
-                return now >= expiry;
-            }
-        }
-        false
-    }
-
-    /// Remove expired keys (to be called periodically)
-    fn cleanup_expired(&self) {
-        let keys_to_remove: Vec<String> = self
-            .data
-            .iter()
-            .filter(|entry| {
-                if let Some(expiry) = entry.expiry {
-                    Instant::now() > expiry
-                } else {
-                    false
-                }
-            })
-            .map(|entry| entry.key().clone())
-            .collect();
-
-        for key in keys_to_remove {
-            self.data.remove(&key);
-        }
-    }
-
     /// Calculate expiry instant based on TTL
     fn calculate_expiry(&self) -> Option<Instant> {
-        if self.config.ttl.as_secs() > 0 {
+        if self.config.ttl.as_millis() > 0 {
             Some(Instant::now() + self.config.ttl)
         } else {
             None
@@ -81,14 +52,21 @@ impl InMemorySharedMemoryPlugin {
     }
 
     /// Check if we've reached the maximum capacity
-    fn check_capacity(&self) -> Result<(), MemoryError> {
-        if self.config.max_keys > 0 && self.data.len() >= self.config.max_keys {
-            // Try to clean up expired entries first
-            self.cleanup_expired();
+    fn check_capacity(&self) -> Result<(), SharedMemoryError> {
+        if self.config.max_keys > 0 {
+            // First, remove all expired keys atomically
+            let now = Instant::now();
+            self.data.retain(|_, value| {
+                if let Some(expiry) = value.expiry {
+                    now < expiry
+                } else {
+                    true
+                }
+            });
 
-            // If still at capacity, fail
+            // Now check capacity after cleanup
             if self.data.len() >= self.config.max_keys {
-                return Err(MemoryError::StorageError(format!(
+                return Err(SharedMemoryError::StorageError(format!(
                     "Maximum capacity reached ({} keys)",
                     self.config.max_keys
                 )));
@@ -98,9 +76,9 @@ impl InMemorySharedMemoryPlugin {
     }
 
     /// Validate key format
-    fn validate_key(&self, key: &str) -> Result<(), MemoryError> {
+    fn validate_key(&self, key: &str) -> Result<(), SharedMemoryError> {
         if key.is_empty() {
-            return Err(MemoryError::InvalidKey("Key cannot be empty".into()));
+            return Err(SharedMemoryError::InvalidKey("Key cannot be empty".into()));
         }
         // Add any other key validation logic here
         Ok(())
@@ -134,21 +112,34 @@ impl ProviderPlugin for InMemorySharedMemoryPlugin {
 
 #[async_trait]
 impl SharedMemoryCapability for InMemorySharedMemoryPlugin {
-    async fn get(&self, key: &str) -> Result<Value, MemoryError> {
-        // Check if key exists and is not expired
-        if self.is_expired(key) {
-            self.data.remove(key);
-            return Err(MemoryError::KeyNotFound(key.to_string()));
+    async fn get(&self, key: &str) -> Result<Value, SharedMemoryError> {
+        let now = Instant::now();
+
+        // Try to remove the key if it's expired
+        let expired = self
+            .data
+            .remove_if(key, |_, value| {
+                if let Some(expiry) = value.expiry {
+                    now >= expiry
+                } else {
+                    false
+                }
+            })
+            .is_some();
+
+        if expired {
+            return Err(SharedMemoryError::KeyNotFound(key.to_string()));
         }
 
+        // If not expired, get the value
         if let Some(entry) = self.data.get(key) {
             Ok(entry.value.clone())
         } else {
-            Err(MemoryError::KeyNotFound(key.to_string()))
+            Err(SharedMemoryError::KeyNotFound(key.to_string()))
         }
     }
 
-    async fn set(&self, key: &str, value: Value) -> Result<(), MemoryError> {
+    async fn set(&self, key: &str, value: Value) -> Result<(), SharedMemoryError> {
         // Validate key
         self.validate_key(key)?;
 
@@ -157,7 +148,7 @@ impl SharedMemoryCapability for InMemorySharedMemoryPlugin {
 
         // Calculate size
         let size = serde_json::to_string(&value)
-            .map_err(|e| MemoryError::InvalidValue(e.to_string()))?
+            .map_err(|e| SharedMemoryError::InvalidValue(e.to_string()))?
             .len();
 
         // Create metadata
@@ -193,70 +184,99 @@ impl SharedMemoryCapability for InMemorySharedMemoryPlugin {
         Ok(())
     }
 
-    async fn delete(&self, key: &str) -> Result<(), MemoryError> {
+    async fn delete(&self, key: &str) -> Result<(), SharedMemoryError> {
         if self.data.remove(key).is_some() {
             Ok(())
         } else {
-            Err(MemoryError::KeyNotFound(key.to_string()))
+            Err(SharedMemoryError::KeyNotFound(key.to_string()))
         }
     }
 
-    async fn exists(&self, key: &str) -> Result<bool, MemoryError> {
-        // Check for expiration
-        if self.is_expired(key) {
-            self.data.remove(key);
+    async fn exists(&self, key: &str) -> Result<bool, SharedMemoryError> {
+        // Use a single atomic operation to check and remove if expired
+        let now = Instant::now();
+
+        // Try to remove the key if it's expired
+        let expired = self
+            .data
+            .remove_if(key, |_, value| {
+                if let Some(expiry) = value.expiry {
+                    now >= expiry
+                } else {
+                    false
+                }
+            })
+            .is_some();
+
+        if expired {
             return Ok(false);
         }
 
-        // Double-check expiration with current time
-        if let Some(entry) = self.data.get(key) {
-            if let Some(expiry) = entry.expiry {
-                if Instant::now() >= expiry {
-                    self.data.remove(key);
-                    return Ok(false);
-                }
-            }
-        }
-
+        // If not expired, check if it exists
         Ok(self.data.contains_key(key))
     }
 
-    async fn get_metadata(&self, key: &str) -> Result<Metadata, MemoryError> {
-        // Check for expiration
-        if self.is_expired(key) {
-            self.data.remove(key);
-            return Err(MemoryError::KeyNotFound(key.to_string()));
+    async fn get_metadata(&self, key: &str) -> Result<Metadata, SharedMemoryError> {
+        let now = Instant::now();
+
+        // Try to remove the key if it's expired
+        let expired = self
+            .data
+            .remove_if(key, |_, value| {
+                if let Some(expiry) = value.expiry {
+                    now >= expiry
+                } else {
+                    false
+                }
+            })
+            .is_some();
+
+        if expired {
+            return Err(SharedMemoryError::KeyNotFound(key.to_string()));
         }
 
+        // If not expired, get the metadata
         if let Some(entry) = self.data.get(key) {
             Ok(entry.metadata.clone())
         } else {
-            Err(MemoryError::KeyNotFound(key.to_string()))
+            Err(SharedMemoryError::KeyNotFound(key.to_string()))
         }
     }
 
-    async fn list_keys(&self, pattern: &str) -> Result<Vec<String>, MemoryError> {
+    async fn list_keys(&self, pattern: &str) -> Result<Vec<String>, SharedMemoryError> {
+        if pattern.is_empty() {
+            return Err(SharedMemoryError::PatternError(
+                "Pattern cannot be empty".into(),
+            ));
+        }
+
         // Compile pattern
         let glob_pattern =
-            Pattern::new(pattern).map_err(|e| MemoryError::PatternError(e.to_string()))?;
+            Pattern::new(pattern).map_err(|e| SharedMemoryError::PatternError(e.to_string()))?;
 
-        // Filter keys by pattern and non-expired status
-        let mut result = Vec::new();
-
-        for entry in self.data.iter() {
-            let key = entry.key();
-
-            // Skip expired keys
-            if self.is_expired(key) {
-                self.data.remove(key);
-                continue;
+        // First, remove all expired keys atomically
+        let now = Instant::now();
+        self.data.retain(|_, value| {
+            if let Some(expiry) = value.expiry {
+                now < expiry
+            } else {
+                true
             }
+        });
 
-            // Match pattern
-            if glob_pattern.matches(key) {
-                result.push(key.clone());
-            }
-        }
+        // Then collect matching keys
+        let result: Vec<String> = self
+            .data
+            .iter()
+            .filter_map(|entry| {
+                let key = entry.key();
+                if glob_pattern.matches(key) {
+                    Some(key.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         Ok(result)
     }
@@ -310,9 +330,8 @@ mod tests {
         assert!(metadata.size > 0);
     }
 
-    // Skip this test as it's timing-dependent and can be flaky
+    // Test for TTL expiration
     #[tokio::test]
-    #[ignore]
     async fn test_ttl_expiration() {
         let plugin = InMemorySharedMemoryPlugin::new(SharedMemoryConfig {
             base: Default::default(),
@@ -327,10 +346,7 @@ mod tests {
         // Wait for expiration - use much longer sleep to ensure expiration
         sleep(Duration::from_millis(500)).await;
 
-        // Explicitly call cleanup to ensure expired keys are removed
-        plugin.cleanup_expired();
-
-        // Key should be gone
+        // Key should be gone - exists() will automatically handle expired keys
         assert!(!plugin.exists("expiring_key").await.unwrap());
     }
 
@@ -385,6 +401,149 @@ mod tests {
 
         // Should fail when capacity is reached
         let result = plugin.set("key3", json!(3)).await;
-        assert!(matches!(result, Err(MemoryError::StorageError(_))));
+        assert!(matches!(result, Err(SharedMemoryError::StorageError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_error_cases() -> ProviderResult<()> {
+        let plugin = create_test_plugin();
+
+        // Test empty key
+        let result = plugin.set("", json!("test")).await;
+        assert!(
+            matches!(result, Err(SharedMemoryError::InvalidKey(_))),
+            "Empty key should return InvalidKey error"
+        );
+
+        // Test key not found
+        let result = plugin.get("nonexistent").await;
+        assert!(
+            matches!(result, Err(SharedMemoryError::KeyNotFound(_))),
+            "Nonexistent key should return KeyNotFound error"
+        );
+
+        // Test delete nonexistent key
+        let result = plugin.delete("nonexistent").await;
+        assert!(
+            matches!(result, Err(SharedMemoryError::KeyNotFound(_))),
+            "Deleting nonexistent key should return KeyNotFound error"
+        );
+
+        // Test invalid pattern
+        let result = plugin.list_keys("[invalid-pattern").await;
+        assert!(
+            matches!(result, Err(SharedMemoryError::PatternError(_))),
+            "Invalid pattern should return PatternError"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_ttl_edge_cases() -> ProviderResult<()> {
+        // Create plugin with zero TTL (no expiration)
+        let unlimited_plugin = InMemorySharedMemoryPlugin::new(SharedMemoryConfig {
+            base: Default::default(),
+            max_keys: 100,
+            ttl: Duration::from_secs(0), // No expiration
+            namespace: "test_unlimited".to_string(),
+        });
+
+        // Set a key
+        unlimited_plugin
+            .set("unlimited_key", json!("value"))
+            .await
+            .unwrap();
+
+        // Wait a bit
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Key should still exist
+        assert!(unlimited_plugin.exists("unlimited_key").await.unwrap());
+
+        // Create plugin with very short TTL
+        let short_ttl_plugin = InMemorySharedMemoryPlugin::new(SharedMemoryConfig {
+            base: Default::default(),
+            max_keys: 100,
+            ttl: Duration::from_millis(50), // Very short TTL
+            namespace: "test_short".to_string(),
+        });
+
+        // Set a key
+        short_ttl_plugin
+            .set("short_key", json!("value"))
+            .await
+            .unwrap();
+
+        // Wait for expiration
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Key should be gone
+        assert!(!short_ttl_plugin.exists("short_key").await.unwrap());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_metadata_edge_cases() -> ProviderResult<()> {
+        let plugin = create_test_plugin();
+
+        // Test metadata for nonexistent key
+        let result = plugin.get_metadata("nonexistent").await;
+        assert!(
+            matches!(result, Err(SharedMemoryError::KeyNotFound(_))),
+            "Metadata for nonexistent key should return KeyNotFound error"
+        );
+
+        // Test metadata after setting and updating
+        plugin.set("meta_key", json!("initial")).await.unwrap();
+        let initial_metadata = plugin.get_metadata("meta_key").await.unwrap();
+
+        // Update value
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        plugin.set("meta_key", json!("updated_data")).await.unwrap();
+        let updated_metadata = plugin.get_metadata("meta_key").await.unwrap();
+
+        // created_at should be the same
+        assert_eq!(
+            initial_metadata.created_at, updated_metadata.created_at,
+            "created_at should not change on update"
+        );
+
+        // last_modified should be updated
+        assert!(
+            updated_metadata.last_modified > initial_metadata.last_modified,
+            "last_modified should be updated"
+        );
+
+        // size should reflect the new value
+        assert_ne!(
+            initial_metadata.size, updated_metadata.size,
+            "size should change when value changes"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_empty_pattern() -> ProviderResult<()> {
+        let plugin = create_test_plugin();
+
+        // Add some keys
+        plugin.set("test1", json!(1)).await.unwrap();
+        plugin.set("test2", json!(2)).await.unwrap();
+
+        // Test empty pattern
+        let result = plugin.list_keys("").await;
+        assert!(
+            matches!(result, Err(SharedMemoryError::PatternError(_))),
+            "Empty pattern should return PatternError"
+        );
+
+        // Test wildcard pattern
+        let keys = plugin.list_keys("*").await.unwrap();
+        assert!(!keys.is_empty(), "Wildcard pattern should return all keys");
+
+        Ok(())
     }
 }

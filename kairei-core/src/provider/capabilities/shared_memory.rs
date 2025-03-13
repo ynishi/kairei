@@ -20,8 +20,8 @@ pub trait SharedMemoryCapability: ProviderPlugin {
     ///
     /// # Returns
     /// * `Ok(Value)` - The stored value if found
-    /// * `Err(MemoryError::KeyNotFound)` - If the key doesn't exist
-    async fn get(&self, key: &str) -> Result<Value, MemoryError>;
+    /// * `Err(SharedMemoryError::KeyNotFound)` - If the key doesn't exist
+    async fn get(&self, key: &str) -> Result<Value, SharedMemoryError>;
 
     /// Store a value with the specified key
     ///
@@ -31,8 +31,8 @@ pub trait SharedMemoryCapability: ProviderPlugin {
     ///
     /// # Returns
     /// * `Ok(())` - If storage was successful
-    /// * `Err(MemoryError)` - If storage failed
-    async fn set(&self, key: &str, value: Value) -> Result<(), MemoryError>;
+    /// * `Err(SharedMemoryError)` - If storage failed
+    async fn set(&self, key: &str, value: Value) -> Result<(), SharedMemoryError>;
 
     /// Delete a value by key
     ///
@@ -41,8 +41,8 @@ pub trait SharedMemoryCapability: ProviderPlugin {
     ///
     /// # Returns
     /// * `Ok(())` - If deletion was successful
-    /// * `Err(MemoryError::KeyNotFound)` - If the key doesn't exist
-    async fn delete(&self, key: &str) -> Result<(), MemoryError>;
+    /// * `Err(SharedMemoryError::KeyNotFound)` - If the key doesn't exist
+    async fn delete(&self, key: &str) -> Result<(), SharedMemoryError>;
 
     /// Check if a key exists
     ///
@@ -52,7 +52,7 @@ pub trait SharedMemoryCapability: ProviderPlugin {
     /// # Returns
     /// * `Ok(true)` - If the key exists
     /// * `Ok(false)` - If the key doesn't exist
-    async fn exists(&self, key: &str) -> Result<bool, MemoryError>;
+    async fn exists(&self, key: &str) -> Result<bool, SharedMemoryError>;
 
     /// Get metadata about a stored value
     ///
@@ -61,8 +61,8 @@ pub trait SharedMemoryCapability: ProviderPlugin {
     ///
     /// # Returns
     /// * `Ok(Metadata)` - The metadata for the stored value
-    /// * `Err(MemoryError::KeyNotFound)` - If the key doesn't exist
-    async fn get_metadata(&self, key: &str) -> Result<Metadata, MemoryError>;
+    /// * `Err(SharedMemoryError::KeyNotFound)` - If the key doesn't exist
+    async fn get_metadata(&self, key: &str) -> Result<Metadata, SharedMemoryError>;
 
     /// List keys matching a pattern
     ///
@@ -71,8 +71,8 @@ pub trait SharedMemoryCapability: ProviderPlugin {
     ///
     /// # Returns
     /// * `Ok(Vec<String>)` - List of matching keys
-    /// * `Err(MemoryError)` - If listing failed
-    async fn list_keys(&self, pattern: &str) -> Result<Vec<String>, MemoryError>;
+    /// * `Err(SharedMemoryError)` - If listing failed
+    async fn list_keys(&self, pattern: &str) -> Result<Vec<String>, SharedMemoryError>;
 }
 
 /// Metadata associated with stored values in shared memory
@@ -109,7 +109,7 @@ impl Default for Metadata {
 
 /// Errors that can occur during shared memory operations
 #[derive(Debug, Error, Clone)]
-pub enum MemoryError {
+pub enum SharedMemoryError {
     #[error("Key not found: {0}")]
     KeyNotFound(String),
 
