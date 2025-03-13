@@ -3,9 +3,9 @@
 //! These benchmarks verify that the SharedMemoryCapability implementation
 //! meets the performance requirements.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use serde_json::json;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use kairei_core::provider::capabilities::shared_memory::SharedMemoryCapability;
 use kairei_core::provider::config::plugins::SharedMemoryConfig;
@@ -25,15 +25,15 @@ fn create_test_plugin() -> InMemorySharedMemoryPlugin {
 fn bench_set(c: &mut Criterion) {
     let plugin = create_test_plugin();
     let rt = tokio::runtime::Runtime::new().unwrap();
-    
+
     let mut group = c.benchmark_group("shared_memory_set");
-    
+
     // Benchmark with different payload sizes
     for size in [10, 100, 1000, 10000].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let value = json!(vec!["x"; size]);
             let mut i = 0;
-            
+
             b.iter(|| {
                 let key = format!("bench_set_key_{}", i);
                 i += 1;
@@ -43,7 +43,7 @@ fn bench_set(c: &mut Criterion) {
             });
         });
     }
-    
+
     group.finish();
 }
 
@@ -51,7 +51,7 @@ fn bench_set(c: &mut Criterion) {
 fn bench_get(c: &mut Criterion) {
     let plugin = create_test_plugin();
     let rt = tokio::runtime::Runtime::new().unwrap();
-    
+
     // Setup: Create keys with different payload sizes
     for size in [10, 100, 1000, 10000].iter() {
         let value = json!(vec!["x"; *size]);
@@ -62,14 +62,14 @@ fn bench_get(c: &mut Criterion) {
             });
         }
     }
-    
+
     let mut group = c.benchmark_group("shared_memory_get");
-    
+
     // Benchmark with different payload sizes
     for size in [10, 100, 1000, 10000].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let mut i = 0;
-            
+
             b.iter(|| {
                 let key = format!("bench_get_key_{}_{}", size, i % 1000);
                 i += 1;
@@ -79,7 +79,7 @@ fn bench_get(c: &mut Criterion) {
             });
         });
     }
-    
+
     group.finish();
 }
 
@@ -87,7 +87,7 @@ fn bench_get(c: &mut Criterion) {
 fn bench_pattern_matching(c: &mut Criterion) {
     let plugin = create_test_plugin();
     let rt = tokio::runtime::Runtime::new().unwrap();
-    
+
     // Setup: Create keys with different prefixes
     for prefix in ["user", "admin", "system", "temp"].iter() {
         for i in 0..1000 {
@@ -97,30 +97,28 @@ fn bench_pattern_matching(c: &mut Criterion) {
             });
         }
     }
-    
+
     let mut group = c.benchmark_group("shared_memory_pattern");
-    
+
     // Benchmark with different patterns
     let patterns = [
-        "user_*",
-        "admin_*",
-        "system_*",
-        "temp_*",
-        "*_1*",
-        "*_2*",
-        "*_*",
+        "user_*", "admin_*", "system_*", "temp_*", "*_1*", "*_2*", "*_*",
     ];
-    
+
     for pattern in patterns.iter() {
-        group.bench_with_input(BenchmarkId::from_parameter(pattern), pattern, |b, &pattern| {
-            b.iter(|| {
-                rt.block_on(async {
-                    black_box(plugin.list_keys(pattern).await.unwrap());
+        group.bench_with_input(
+            BenchmarkId::from_parameter(pattern),
+            pattern,
+            |b, &pattern| {
+                b.iter(|| {
+                    rt.block_on(async {
+                        black_box(plugin.list_keys(pattern).await.unwrap());
+                    });
                 });
-            });
-        });
+            },
+        );
     }
-    
+
     group.finish();
 }
 
@@ -128,13 +126,13 @@ fn bench_pattern_matching(c: &mut Criterion) {
 #[tokio::test]
 async fn test_performance() {
     use std::time::Instant;
-    
+
     // Create plugin
     let plugin = create_test_plugin();
-    
+
     // Number of operations
     let num_operations = 10000;
-    
+
     // SET performance
     let start = Instant::now();
     for i in 0..num_operations {
@@ -147,7 +145,7 @@ async fn test_performance() {
         "SET: {} operations in {:?} (avg: {}ns per op)",
         num_operations, set_duration, set_avg_ns
     );
-    
+
     // GET performance
     let start = Instant::now();
     for i in 0..num_operations {
@@ -160,7 +158,7 @@ async fn test_performance() {
         "GET: {} operations in {:?} (avg: {}ns per op)",
         num_operations, get_duration, get_avg_ns
     );
-    
+
     // Performance requirement: Operations should take less than 1ms (1,000,000ns) each
     assert!(
         set_avg_ns < 1_000_000,
@@ -174,10 +172,5 @@ async fn test_performance() {
     );
 }
 
-criterion_group!(
-    benches,
-    bench_set,
-    bench_get,
-    bench_pattern_matching
-);
+criterion_group!(benches, bench_set, bench_get, bench_pattern_matching);
 criterion_main!(benches);

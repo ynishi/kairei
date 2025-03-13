@@ -1,5 +1,6 @@
 mod micro_agent_tests;
 mod provider_tests;
+mod shared_memory_tests;
 mod span_tests;
 mod type_checker_tests;
 

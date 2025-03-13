@@ -6,7 +6,10 @@ use thiserror::Error;
 
 use crate::{config::ProviderConfig, timestamp::Timestamp};
 
-use super::{capability::CapabilityType, provider::ProviderSecret};
+use super::{
+    capabilities::shared_memory::SharedMemoryError, capability::CapabilityType,
+    provider::ProviderSecret,
+};
 
 /// LLMプロバイダーの基本トレイト
 #[async_trait]
@@ -105,6 +108,10 @@ pub enum ProviderError {
 
     #[error("Config validation failed: {0}")]
     ConfigValidationFailed(String),
+
+    // Memory error
+    #[error("Memory error: {0}")]
+    SharedMemoryError(#[from] SharedMemoryError),
 }
 
 pub type ProviderResult<T> = Result<T, ProviderError>;
