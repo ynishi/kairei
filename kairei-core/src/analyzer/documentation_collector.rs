@@ -4,10 +4,10 @@
 //! from self-documenting parsers. It allows the KAIREI system to generate
 //! comprehensive documentation for the DSL based on the actual parser implementations.
 
-use std::collections::{HashMap, HashSet};
-use serde::{Serialize, Deserialize};
 use crate::analyzer::doc_parser::{DocParserExt, ParserCategory, ParserDocumentation};
 use crate::tokenizer::token::Token;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 /// Represents a collection of parser documentation organized by category.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -36,7 +36,7 @@ impl DocumentationCollection {
         // Add to by_category map
         self.by_category
             .entry(doc.category.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(doc.clone());
 
         // Add to by_name map
@@ -101,7 +101,7 @@ impl DocumentationCollection {
                 if names.contains(related_name) {
                     additions
                         .entry(related_name.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(name.clone());
                 }
             }
@@ -160,37 +160,41 @@ impl DocumentationCollection {
     /// A string containing the Markdown representation of the documentation.
     pub fn export_markdown(&self) -> String {
         let mut md = String::new();
-        
+
         // Title
         md.push_str("# KAIREI Language Documentation\n\n");
-        
+
         // Table of Contents
         md.push_str("## Table of Contents\n\n");
-        
+
         for category in self.get_categories() {
-            md.push_str(&format!("- [{}](#{})\n", category, category.to_string().to_lowercase().replace(" ", "-")));
+            md.push_str(&format!(
+                "- [{}](#{})\n",
+                category,
+                category.to_string().to_lowercase().replace(" ", "-")
+            ));
         }
-        md.push_str("\n");
-        
+        md.push('\n');
+
         // Categories
         for category in self.get_categories() {
             md.push_str(&format!("## {}\n\n", category));
-            
+
             // Sort parsers alphabetically by name within category
             let mut parsers = self.get_by_category(category);
             parsers.sort_by(|a, b| a.name.cmp(&b.name));
-            
+
             for doc in parsers {
                 md.push_str(&format!("### {}\n\n", doc.name));
                 md.push_str(&format!("{}\n\n", doc.description));
-                
+
                 if !doc.examples.is_empty() {
                     md.push_str("**Examples**:\n\n");
                     for example in &doc.examples {
                         md.push_str(&format!("```\n{}\n```\n\n", example));
                     }
                 }
-                
+
                 if !doc.related_parsers.is_empty() {
                     md.push_str("**Related**:\n\n");
                     for related in &doc.related_parsers {
@@ -200,18 +204,18 @@ impl DocumentationCollection {
                             md.push_str(&format!("- {} (undefined)\n", related));
                         }
                     }
-                    md.push_str("\n");
+                    md.push('\n');
                 }
-                
+
                 if let Some(deprecated) = &doc.deprecated {
                     md.push_str(&format!("**Deprecated**: {}\n\n", deprecated));
                 }
             }
         }
-        
+
         md
     }
-    
+
     /// Export the collection to JSON format.
     ///
     /// # Returns
@@ -225,7 +229,9 @@ impl DocumentationCollection {
 /// A trait for systems that can provide documented parsers.
 pub trait DocumentationProvider {
     /// Returns a list of documented parsers.
-    fn provide_documented_parsers(&self) -> Vec<Box<dyn DocParserExt<Token, Box<dyn std::any::Any>>>>;
+    fn provide_documented_parsers(
+        &self,
+    ) -> Vec<Box<dyn DocParserExt<Token, Box<dyn std::any::Any>>>>;
 }
 
 /// The central documentation collector that aggregates documentation from multiple providers.
@@ -282,7 +288,7 @@ impl DocumentationCollector {
     pub fn validate(&self) -> Vec<String> {
         self.collection.validate()
     }
-    
+
     /// Exports the collected documentation to Markdown format.
     ///
     /// # Returns
@@ -291,7 +297,7 @@ impl DocumentationCollector {
     pub fn export_markdown(&self) -> String {
         self.collection.export_markdown()
     }
-    
+
     /// Exports the collected documentation to JSON format.
     ///
     /// # Returns
@@ -338,36 +344,43 @@ mod tests {
     }
 
     impl DocumentationProvider for TestDocProvider {
-        fn provide_documented_parsers(&self) -> Vec<Box<dyn DocParserExt<Token, Box<dyn std::any::Any>>>> {
+        fn provide_documented_parsers(
+            &self,
+        ) -> Vec<Box<dyn DocParserExt<Token, Box<dyn std::any::Any>>>> {
             // In tests, we don't need actual parsers - we just need the documentation
             // Create dummy parsers with documentation for testing
             let mut result = Vec::new();
-            
+
             for doc in &self.docs {
                 // Create a simple struct that implements DocParserExt for testing
                 struct DummyParser {
                     doc: ParserDocumentation,
                 }
-                
+
                 impl<I, O> crate::analyzer::core::Parser<I, O> for DummyParser {
-                    fn parse(&self, _input: &[I], _pos: usize) -> crate::analyzer::core::ParseResult<O> {
+                    fn parse(
+                        &self,
+                        _input: &[I],
+                        _pos: usize,
+                    ) -> crate::analyzer::core::ParseResult<O> {
                         panic!("This is a dummy parser for testing documentation only")
                     }
                 }
-                
+
                 impl<I, O> DocParserExt<I, O> for DummyParser {
                     fn documentation(&self) -> &ParserDocumentation {
                         &self.doc
                     }
                 }
-                
+
                 let dummy = DummyParser { doc: doc.clone() };
                 // This is safe for testing since we never call parse()
-                let boxed: Box<dyn DocParserExt<Token, Box<dyn std::any::Any>>> = 
-                    unsafe { std::mem::transmute(Box::new(dummy) as Box<dyn DocParserExt<(), ()>>) };
+                let boxed: Box<dyn DocParserExt<Token, Box<dyn std::any::Any>>> = unsafe {
+                    std::mem::transmute(Box::new(dummy) as Box<dyn DocParserExt<(), ()>>)
+                };
                 result.push(boxed);
             }
-            
+
             result
         }
     }
@@ -500,18 +513,30 @@ mod tests {
 
         // Validate
         let issues = collection.validate();
-        
+
         // Should have 3 issues: empty description, no examples, and non-existent parser
         assert_eq!(issues.len(), 3);
-        assert!(issues.iter().any(|i| i.contains("invalid_parser1") && i.contains("empty description")));
-        assert!(issues.iter().any(|i| i.contains("invalid_parser2") && i.contains("no examples")));
-        assert!(issues.iter().any(|i| i.contains("invalid_parser3") && i.contains("non-existent")));
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.contains("invalid_parser1") && i.contains("empty description"))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.contains("invalid_parser2") && i.contains("no examples"))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.contains("invalid_parser3") && i.contains("non-existent"))
+        );
     }
-    
+
     #[test]
     fn test_markdown_export() {
         let mut collection = DocumentationCollection::new();
-        
+
         // Add some test documentation
         let doc1 = DocBuilder::new("parser1", ParserCategory::Expression)
             .description("Parser 1 description")
@@ -527,10 +552,10 @@ mod tests {
 
         collection.add(doc1);
         collection.add(doc2);
-        
+
         // Generate Markdown
         let markdown = collection.export_markdown();
-        
+
         // Basic assertions to verify markdown structure
         assert!(markdown.contains("# KAIREI Language Documentation"));
         assert!(markdown.contains("## Table of Contents"));
@@ -540,23 +565,23 @@ mod tests {
         assert!(markdown.contains("Parser 1 description"));
         assert!(markdown.contains("```\nexample1\n```"));
     }
-    
+
     #[test]
     fn test_json_export() {
         let mut collection = DocumentationCollection::new();
-        
+
         // Add some test documentation
         let doc = DocBuilder::new("test_parser", ParserCategory::Expression)
             .description("Test parser description")
             .example("example code")
             .build();
-            
+
         collection.add(doc);
-        
+
         // Generate JSON
         let json_result = collection.export_json();
         assert!(json_result.is_ok());
-        
+
         let json = json_result.unwrap();
         assert!(json.contains("test_parser"));
         assert!(json.contains("Test parser description"));

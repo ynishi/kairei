@@ -1,9 +1,8 @@
+use kairei_core::analyzer::doc_parser::DocBuilder;
 use kairei_core::analyzer::prelude::*;
 use kairei_core::analyzer::{
-    DocParser, DocParserExt, DocumentationCollector,
-    DocumentationProvider, ParserCategory, 
+    DocParser, DocParserExt, DocumentationCollector, DocumentationProvider, ParserCategory,
 };
-use kairei_core::analyzer::doc_parser::DocBuilder;
 use kairei_core::tokenizer::token::Token;
 use std::any::Any;
 
@@ -21,9 +20,15 @@ impl TestParserProvider {
         // In a real implementation, you'd want to handle this more safely
         unsafe {
             vec![
-                std::mem::transmute(Box::new(self.create_parser_1()) as Box<dyn DocParserExt<Token, Token>>),
-                std::mem::transmute(Box::new(self.create_parser_2()) as Box<dyn DocParserExt<Token, Token>>),
-                std::mem::transmute(Box::new(self.create_parser_3()) as Box<dyn DocParserExt<Token, Token>>),
+                std::mem::transmute(
+                    Box::new(self.create_parser_1()) as Box<dyn DocParserExt<Token, Token>>
+                ),
+                std::mem::transmute(
+                    Box::new(self.create_parser_2()) as Box<dyn DocParserExt<Token, Token>>
+                ),
+                std::mem::transmute(
+                    Box::new(self.create_parser_3()) as Box<dyn DocParserExt<Token, Token>>
+                ),
             ]
         }
     }
@@ -88,14 +93,26 @@ fn test_documentation_collector_integration() {
     // Verify categories
     let categories = collection.get_categories();
     assert_eq!(categories.len(), 2);
-    assert!(categories.iter().any(|c| matches!(c, ParserCategory::Expression)));
-    assert!(categories.iter().any(|c| matches!(c, ParserCategory::Statement)));
+    assert!(
+        categories
+            .iter()
+            .any(|c| matches!(c, ParserCategory::Expression))
+    );
+    assert!(
+        categories
+            .iter()
+            .any(|c| matches!(c, ParserCategory::Statement))
+    );
 
     // Verify expressions
     let expressions = collection.get_by_category(&ParserCategory::Expression);
     assert_eq!(expressions.len(), 2);
     assert!(expressions.iter().any(|d| d.name == "parse_identifier"));
-    assert!(expressions.iter().any(|d| d.name == "parse_qualified_identifier"));
+    assert!(
+        expressions
+            .iter()
+            .any(|d| d.name == "parse_qualified_identifier")
+    );
 
     // Verify statements
     let statements = collection.get_by_category(&ParserCategory::Statement);
@@ -106,10 +123,21 @@ fn test_documentation_collector_integration() {
     let identifier_doc = collection.get_by_name("parse_identifier").unwrap();
     assert_eq!(identifier_doc.description, "Parses an identifier token");
     assert_eq!(identifier_doc.examples.len(), 2);
-    assert!(identifier_doc.examples.contains(&"variable_name".to_string()));
-    assert!(identifier_doc.examples.contains(&"camelCaseName".to_string()));
+    assert!(
+        identifier_doc
+            .examples
+            .contains(&"variable_name".to_string())
+    );
+    assert!(
+        identifier_doc
+            .examples
+            .contains(&"camelCaseName".to_string())
+    );
     assert_eq!(identifier_doc.related_parsers.len(), 1);
-    assert_eq!(identifier_doc.related_parsers[0], "parse_qualified_identifier");
+    assert_eq!(
+        identifier_doc.related_parsers[0],
+        "parse_qualified_identifier"
+    );
 
     // Verify relation graph
     let graph = collection.build_relation_graph();
@@ -133,9 +161,12 @@ impl ExpressionParserProvider {
     fn create_expression_parsers(&self) -> Vec<Box<dyn DocParserExt<Token, Box<dyn Any>>>> {
         unsafe {
             vec![
-                std::mem::transmute(Box::new(self.create_expression_parser()) as Box<dyn DocParserExt<Token, Token>>),
-                std::mem::transmute(Box::new(self.create_binary_expression_parser()) as Box<dyn DocParserExt<Token, Token>>),
-                std::mem::transmute(Box::new(self.create_primary_expression_parser()) as Box<dyn DocParserExt<Token, Token>>),
+                std::mem::transmute(Box::new(self.create_expression_parser())
+                    as Box<dyn DocParserExt<Token, Token>>),
+                std::mem::transmute(Box::new(self.create_binary_expression_parser())
+                    as Box<dyn DocParserExt<Token, Token>>),
+                std::mem::transmute(Box::new(self.create_primary_expression_parser())
+                    as Box<dyn DocParserExt<Token, Token>>),
             ]
         }
     }
@@ -193,8 +224,11 @@ impl StatementParserProvider {
     fn create_statement_parsers(&self) -> Vec<Box<dyn DocParserExt<Token, Box<dyn Any>>>> {
         unsafe {
             vec![
-                std::mem::transmute(Box::new(self.create_statement_parser()) as Box<dyn DocParserExt<Token, Token>>),
-                std::mem::transmute(Box::new(self.create_if_statement_parser()) as Box<dyn DocParserExt<Token, Token>>),
+                std::mem::transmute(
+                    Box::new(self.create_statement_parser()) as Box<dyn DocParserExt<Token, Token>>
+                ),
+                std::mem::transmute(Box::new(self.create_if_statement_parser())
+                    as Box<dyn DocParserExt<Token, Token>>),
             ]
         }
     }
@@ -261,17 +295,22 @@ fn test_multiple_providers_integration() {
 
     // Verify cross-category relations in the graph
     let graph = collection.build_relation_graph();
-    
+
     // Check that parse_if_statement references parse_expression (cross-category)
     assert!(graph["parse_if_statement"].contains(&"parse_expression".to_string()));
-    
+
     // And that parse_expression has a back-reference to parse_if_statement
     assert!(graph["parse_expression"].contains(&"parse_if_statement".to_string()));
 
     // Validate for consistency
     let issues = collection.validate();
-    assert_eq!(issues.len(), 0, "Unexpected validation issues: {:?}", issues);
-    
+    assert_eq!(
+        issues.len(),
+        0,
+        "Unexpected validation issues: {:?}",
+        issues
+    );
+
     // Test exports
     let markdown = collector.export_markdown();
     assert!(markdown.contains("# KAIREI Language Documentation"));
@@ -282,7 +321,7 @@ fn test_multiple_providers_integration() {
     assert!(markdown.contains("## Statement"));
     assert!(markdown.contains("### parse_statement"));
     assert!(markdown.contains("### parse_if_statement"));
-    
+
     let json_result = collector.export_json();
     assert!(json_result.is_ok());
     let json = json_result.unwrap();
@@ -291,4 +330,3 @@ fn test_multiple_providers_integration() {
     assert!(json.contains("parse_if_statement"));
     assert!(json.contains("Parses an if statement with optional else clause"));
 }
-

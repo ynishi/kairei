@@ -5,9 +5,9 @@
 //! documentation for the KAIREI DSL based on the actual parser implementations.
 
 use crate::analyzer::core::{ParseResult, Parser};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::marker::PhantomData;
-use serde::{Serialize, Deserialize};
 
 /// Parser category indicating what part of the DSL the parser handles.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

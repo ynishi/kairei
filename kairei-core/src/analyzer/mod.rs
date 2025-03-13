@@ -52,6 +52,8 @@ pub use core::ParseError;
 pub use core::ParseResult;
 pub use core::Parser;
 pub use doc_parser::{DocParser, DocParserExt, ParserCategory, ParserDocumentation};
-pub use documentation_collector::{DocumentationCollection, DocumentationCollector, DocumentationProvider};
+pub use documentation_collector::{
+    DocumentationCollection, DocumentationCollector, DocumentationProvider,
+};
 
 pub use crate::ast;
