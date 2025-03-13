@@ -1,9 +1,6 @@
 name: Code Coverage
 
 on:
-  # Run on main branch pushes
-  push:
-    branches: [ main ]
   # Run daily at 2:00 UTC
   schedule:
     - cron: '0 2 * * *'
