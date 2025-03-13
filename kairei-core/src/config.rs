@@ -3,8 +3,8 @@ use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Durat
 use utoipa::ToSchema;
 
 use crate::{
-    Error, InternalResult, expression::Value, provider::provider::ProviderType,
-    type_checker::TypeCheckError,
+    Error, InternalResult, expression::Value, provider::config::plugins::SharedMemoryConfig,
+    provider::provider::ProviderType, type_checker::TypeCheckError,
 };
 use std::convert::TryFrom;
 
@@ -272,6 +272,7 @@ pub enum PluginConfig {
     Memory(MemoryConfig),
     Rag(RagConfig),
     Search(SearchConfig),
+    SharedMemory(SharedMemoryConfig),
     Unknown(HashMap<String, serde_json::Value>),
 }
 

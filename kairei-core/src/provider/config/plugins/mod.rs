@@ -13,9 +13,10 @@ pub use shared_memory::*;
 use crate::provider::config::base::ConfigError;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use utoipa::ToSchema;
 
 /// Base configuration shared by all plugins
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct BasePluginConfig {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
