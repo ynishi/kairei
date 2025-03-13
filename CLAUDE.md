@@ -22,6 +22,9 @@
 - **Error Messages**: Make error messages clear and actionable
 - **Event-Driven**: Follow event-driven architecture patterns in agent communication
 
+## Quick Reference
+- **docs/quick_reference/index.md** This guide provides a quick overview
+
 ## Repository Structure
 - **src/**: Core source code
   - **analyzer/**: DSL parsing and analysis
@@ -44,7 +47,7 @@
    - Title/headline
    - Background/context
    - Goals/objectives
-   - Implementation details or approach
+   - Clear interface/implement approach/core logic
    - Benefits/outcomes
 
 3. Standard labels for reference:
@@ -59,6 +62,7 @@ The `.claude_workspace/` directory is a dedicated workspace for Claude to:
 - Store temporary content like issue drafts, documentation, etc.
 - Test ideas before implementing them in the main repository
 - The directory is ignored by git (via .gitignore)
+- Under the top level of repository (it is safe, .gitignore contains)
 
 ## GitHub CLI Commands
 ### PR and Issue Management
