@@ -2,6 +2,7 @@ pub mod general_prompt;
 pub mod memory;
 pub mod policy;
 pub mod shared_memory;
+pub mod shared_memory_adapter;
 pub mod web_search_serper;
 
 #[cfg(test)]

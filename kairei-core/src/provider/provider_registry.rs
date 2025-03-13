@@ -7,17 +7,23 @@ use crate::{
     config::{PluginConfig, ProviderConfig, ProviderConfigs, SecretConfig},
     event_bus::{ErrorEvent, Event, EventBus, Value},
     event_registry::EventType,
-    provider::llms::simple_expert::SimpleExpertProviderLLM,
+    provider::{
+        capabilities::shared_memory::SharedMemoryCapability,
+        config::plugins::SharedMemoryConfig,
+        llms::{
+            openai_assistant::OpenAIAssistantProviderLLM, openai_chat::OpenAIChatProviderLLM,
+            simple_expert::SimpleExpertProviderLLM,
+        },
+        plugins::{
+            memory::MemoryPlugin, shared_memory::InMemorySharedMemoryPlugin,
+            shared_memory_adapter::SharedMemoryPluginAdapter, web_search_serper::WebSearchPlugin,
+        },
+        provider::{Provider, ProviderSecret, ProviderType},
+        provider_secret::SecretRegistry,
+        providers::standard::StandardProvider,
+        types::{ProviderError, ProviderMetrix, ProviderResult},
+    },
     timestamp::Timestamp,
-};
-
-use super::{
-    llms::{openai_assistant::OpenAIAssistantProviderLLM, openai_chat::OpenAIChatProviderLLM},
-    plugins::{memory::MemoryPlugin, web_search_serper::WebSearchPlugin},
-    provider::{Provider, ProviderSecret, ProviderType},
-    provider_secret::SecretRegistry,
-    providers::standard::StandardProvider,
-    types::{ProviderError, ProviderMetrix, ProviderResult},
 };
 
 // For Data in Registry
@@ -46,6 +52,7 @@ pub struct ProviderRegistry {
     secret_registry: Arc<SecretRegistry>,
     primary_provider: Arc<RwLock<Option<String>>>,
     event_bus: Arc<EventBus>,
+    shared_memory_plugins: Arc<DashMap<String, Arc<dyn SharedMemoryCapability>>>,
 }
 
 impl ProviderRegistry {
@@ -63,6 +70,7 @@ impl ProviderRegistry {
             secret_registry: Arc::new(SecretRegistry::new(secret_config.clone())),
             primary_provider,
             event_bus,
+            shared_memory_plugins: Arc::new(DashMap::new()),
         }
     }
 
@@ -201,6 +209,54 @@ impl ProviderRegistry {
 
     pub fn get_providers(&self) -> Arc<DashMap<String, Arc<ProviderInstance>>> {
         self.providers.clone()
+    }
+    /// Get or create a shared memory plugin instance
+    ///
+    /// This method ensures that only one instance of a shared memory plugin
+    /// exists for each namespace, allowing multiple providers to share the same
+    /// memory space when configured with the same namespace.
+    pub fn get_or_create_shared_memory_plugin(
+        &self,
+        config: &SharedMemoryConfig,
+    ) -> Arc<dyn SharedMemoryCapability> {
+        // Use the namespace as the key for shared instances
+        let namespace = &config.namespace;
+
+        // Try to find an existing instance with the same namespace
+        if let Some(entry) = self.shared_memory_plugins.get(namespace) {
+            return entry.value().clone();
+        }
+
+        // Create a new instance if none exists
+        let plugin = Arc::new(InMemorySharedMemoryPlugin::new(config.clone()));
+        self.shared_memory_plugins
+            .insert(namespace.clone(), plugin.clone());
+        plugin
+    }
+    /// Clean up shared memory plugins during shutdown
+    async fn cleanup_shared_memory_plugins(&self) -> ProviderResult<()> {
+        // Clear the shared memory plugins map
+        self.shared_memory_plugins.clear();
+        Ok(())
+    }
+    /// Get a shared memory plugin by namespace
+    pub async fn get_shared_memory_plugin(
+        &self,
+        namespace: &str,
+    ) -> ProviderResult<Option<Arc<dyn SharedMemoryCapability>>> {
+        if let Some(entry) = self.shared_memory_plugins.get(namespace) {
+            Ok(Some(entry.value().clone()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// List all available shared memory namespaces
+    pub fn list_shared_memory_namespaces(&self) -> Vec<String> {
+        self.shared_memory_plugins
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 
     /// プロバイダーの取得
@@ -343,6 +399,9 @@ impl ProviderRegistry {
                 .await;
         }
 
+        // Clean up shared memory plugins
+        self.cleanup_shared_memory_plugins().await?;
+
         Ok(())
     }
 
@@ -370,13 +429,30 @@ impl ProviderRegistry {
     ) -> ProviderResult<Arc<dyn Provider>> {
         let llm = OpenAIAssistantProviderLLM::new(ProviderType::OpenAIAssistant);
         let mut provider = StandardProvider::new(llm, vec![]);
+
+        // Register shared memory plugin if configured
+        if let Some(PluginConfig::SharedMemory(shared_memory_config)) =
+            config.plugin_configs.get("shared_memory")
+        {
+            // Get or create a shared instance
+            let shared_memory_plugin =
+                self.get_or_create_shared_memory_plugin(shared_memory_config);
+            // Use adapter to bridge SharedMemoryCapability to ProviderPlugin
+            let plugin_adapter = Arc::new(SharedMemoryPluginAdapter::new(shared_memory_plugin));
+            provider.register_plugin(plugin_adapter)?;
+        }
+
         provider.initialize(config, secret).await?;
         Ok(Arc::new(provider))
     }
 
     pub async fn create_simple_expert(&self) -> ProviderResult<Arc<dyn Provider>> {
         let llm = SimpleExpertProviderLLM::new(ProviderType::SimpleExpert);
-        Ok(Arc::new(StandardProvider::new(llm, vec![])))
+        let provider = StandardProvider::new(llm, vec![]);
+
+        // No configuration available for SimpleExpert, so no shared memory plugin
+
+        Ok(Arc::new(provider))
     }
 
     pub async fn create_chat(
@@ -386,6 +462,8 @@ impl ProviderRegistry {
     ) -> ProviderResult<Arc<dyn Provider>> {
         let llm = OpenAIChatProviderLLM::new(ProviderType::OpenAIChat);
         let mut provider = StandardProvider::new(llm, vec![]);
+
+        // Register memory plugin if configured
         let memory_config = config
             .plugin_configs
             .get("memory")
@@ -397,6 +475,19 @@ impl ProviderRegistry {
             .unwrap_or_default();
         let memory_plugin = MemoryPlugin::new(memory_config);
         provider.register_plugin(Arc::new(memory_plugin))?;
+
+        // Register shared memory plugin if configured
+        if let Some(PluginConfig::SharedMemory(shared_memory_config)) =
+            config.plugin_configs.get("shared_memory")
+        {
+            // Get or create a shared instance
+            let shared_memory_plugin =
+                self.get_or_create_shared_memory_plugin(shared_memory_config);
+            // Use adapter to bridge SharedMemoryCapability to ProviderPlugin
+            let plugin_adapter = Arc::new(SharedMemoryPluginAdapter::new(shared_memory_plugin));
+            provider.register_plugin(plugin_adapter)?;
+        }
+
         // secretが適切に設定してあれば採用する
         let search_config = config
             .plugin_configs
@@ -414,6 +505,10 @@ impl ProviderRegistry {
         Ok(Arc::new(provider))
     }
 }
+
+// Registry access methods for shared memory plugins have been implemented above
+
+// Unit tests for shared memory plugin functionality
 
 #[cfg(test)]
 mod tests {
@@ -572,5 +667,66 @@ mod tests {
         // 登録されたプロバイダーの確認
         let providers = registry.providers.iter().collect::<Vec<_>>();
         assert_eq!(providers.len(), 10);
+    }
+
+    use crate::provider::config::plugins::SharedMemoryConfig;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn test_shared_memory_plugin_sharing() {
+        let registry =
+            Arc::new(get_registry(&["provider1".to_string(), "provider2".to_string()]).await);
+
+        // Create a shared memory config with a specific namespace
+        let config = SharedMemoryConfig {
+            base: Default::default(),
+            max_keys: 100,
+            ttl: Duration::from_secs(3600),
+            namespace: "test_namespace".to_string(),
+        };
+
+        // Get two instances with the same namespace
+        let plugin1 = registry.get_or_create_shared_memory_plugin(&config);
+        let plugin2 = registry.get_or_create_shared_memory_plugin(&config);
+
+        // They should be the same instance (Arc points to the same object)
+        assert!(Arc::ptr_eq(&plugin1, &plugin2));
+
+        // Create a different namespace
+        let config2 = SharedMemoryConfig {
+            namespace: "different_namespace".to_string(),
+            ..config.clone()
+        };
+
+        // Get an instance with a different namespace
+        let plugin3 = registry.get_or_create_shared_memory_plugin(&config2);
+
+        // It should be a different instance
+        assert!(!Arc::ptr_eq(&plugin1, &plugin3));
+    }
+
+    #[tokio::test]
+    async fn test_shared_memory_cleanup() {
+        let registry = Arc::new(get_registry(&["provider1".to_string()]).await);
+
+        // Create a shared memory config
+        let config = SharedMemoryConfig {
+            base: Default::default(),
+            max_keys: 100,
+            ttl: Duration::from_secs(3600),
+            namespace: "test_namespace".to_string(),
+        };
+
+        // Get an instance
+        let _ = registry.get_or_create_shared_memory_plugin(&config);
+
+        // Verify it exists
+        assert_eq!(registry.list_shared_memory_namespaces().len(), 1);
+
+        // Clean up
+        registry.cleanup_shared_memory_plugins().await.unwrap();
+
+        // Verify it's gone
+        assert_eq!(registry.list_shared_memory_namespaces().len(), 0);
     }
 }
