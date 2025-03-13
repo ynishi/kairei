@@ -19,8 +19,8 @@ pub enum ParserCategory {
     Handler,
     /// Type parsers (string, number, bool, etc.)
     Type,
-    /// World parsers (world, agent, etc.)
-    World,
+    /// Definition parsers for top-level constructs (world, agent, sistence, etc.)
+    Definition,
     /// Other categories not fitting the main ones
     Other(String),
 }
@@ -32,7 +32,7 @@ impl fmt::Display for ParserCategory {
             ParserCategory::Statement => write!(f, "Statement"),
             ParserCategory::Handler => write!(f, "Handler"),
             ParserCategory::Type => write!(f, "Type"),
-            ParserCategory::World => write!(f, "World"),
+            ParserCategory::Definition => write!(f, "Definition"),
             ParserCategory::Other(name) => write!(f, "{}", name),
         }
     }
@@ -308,6 +308,27 @@ where
     DocParser::new(parser, doc)
 }
 
+/// Create a documented definition parser for top-level constructs.
+///
+/// # Arguments
+///
+/// * `parser` - The definition parser to document
+/// * `name` - The name of the parser
+/// * `description` - A description of what the parser does
+pub fn document_definition<P, I, O>(
+    parser: P,
+    name: impl Into<String>,
+    description: impl Into<String>,
+) -> DocParser<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    let doc = DocBuilder::new(name, ParserCategory::Definition)
+        .description(description)
+        .build();
+    DocParser::new(parser, doc)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -404,5 +425,13 @@ mod tests {
             "Parses the integer 42 as a handler",
         );
         assert_eq!(doc_handler.documentation().category, ParserCategory::Handler);
+        
+        // Test document_definition
+        let doc_def = document_definition(
+            parser.clone(),
+            "equal_42_definition",
+            "Parses the integer 42 as a definition",
+        );
+        assert_eq!(doc_def.documentation().category, ParserCategory::Definition);
     }
 }

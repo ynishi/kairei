@@ -519,3 +519,28 @@ where
         .build();
     DocParser::new(parser, doc)
 }
+
+/// Creates a documented definition parser for top-level constructs.
+///
+/// # Arguments
+///
+/// * `parser` - The definition parser to document
+/// * `name` - The name of the parser
+/// * `description` - A description of what the parser does
+///
+/// # Returns
+///
+/// A documented definition parser
+pub fn document_definition<P, I, O>(
+    parser: P,
+    name: impl Into<String>,
+    description: impl Into<String>,
+) -> DocParser<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    let doc = DocBuilder::new(name, ParserCategory::Definition)
+        .description(description)
+        .build();
+    DocParser::new(parser, doc)
+}
