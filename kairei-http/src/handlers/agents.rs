@@ -1,7 +1,8 @@
 use crate::auth::{AuthAdmin, AuthUser};
 use crate::models::{
-    GetAgentResponse, ListAgentsResponse, ScaleDownAgentRequest, ScaleUpAgentRequest,
-    SendRequestAgentRequest, SendRequestAgentResponse,
+    AgentCreationRequest, AgentCreationResponse, AgentStatus, GetAgentResponse, ListAgentsResponse,
+    ScaleDownAgentRequest, ScaleUpAgentRequest, SendRequestAgentRequest, SendRequestAgentResponse,
+    ValidationResult,
 };
 use crate::server::AppState;
 use axum::{
@@ -10,6 +11,102 @@ use axum::{
     response::Json,
 };
 use kairei_core::event_bus;
+
+/// Create a new agent in the system
+///
+/// Creates a new agent with the provided DSL code and adds it to the system.
+/// Requires authentication with admin role.
+#[utoipa::path(
+    post,
+    path = "/systems/{system_id}/agents",
+    request_body = AgentCreationRequest,
+    responses(
+        (status = 201, description = "Agent created successfully", body = AgentCreationResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("system_id" = String, Path, description = "System identifier")
+    )
+)]
+#[axum::debug_handler]
+pub async fn create_agent(
+    State(state): State<AppState>,
+    auth: AuthAdmin,
+    Path(system_id): Path<String>,
+    Json(payload): Json<AgentCreationRequest>,
+) -> Result<(StatusCode, Json<AgentCreationResponse>), StatusCode> {
+    if !auth.user().is_admin() {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let session = state
+        .session_manager
+        .get_session(&system_id)
+        .await
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let system = session.system.write().await;
+
+    // Parse the DSL to validate it
+    let ast = match system.parse_dsl(&payload.dsl_code).await {
+        Ok(ast) => ast,
+        Err(e) => {
+            tracing::error!("Failed to parse DSL: {}", e);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
+
+    // Find the agent definition in the parsed AST
+    let agent_def = ast
+        .micro_agent_defs
+        .iter()
+        .find(|def| def.name == payload.name)
+        .ok_or_else(|| {
+            tracing::error!("Agent definition not found in DSL");
+            StatusCode::BAD_REQUEST
+        })?;
+
+    // Register the agent AST
+    if let Err(e) = system.register_agent_ast(&payload.name, agent_def).await {
+        tracing::error!("Failed to register agent AST: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // Register the agent
+    if let Err(e) = system.register_agent(&payload.name).await {
+        tracing::error!("Failed to register agent: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // Start the agent if auto_start is true
+    if payload.options.auto_start {
+        if let Err(e) = system.start_agent(&payload.name).await {
+            tracing::error!("Failed to start agent: {}", e);
+            // We don't return an error here since the agent was created successfully
+            // Just log the error and continue
+        }
+    }
+
+    // Create the response
+    let response = AgentCreationResponse {
+        agent_id: payload.name.clone(),
+        status: if payload.options.auto_start {
+            AgentStatus::Running
+        } else {
+            AgentStatus::Created
+        },
+        validation_result: ValidationResult {
+            success: true,
+            warnings: vec![],
+        },
+    };
+
+    Ok((StatusCode::CREATED, Json(response)))
+}
 
 /// Get agent details
 ///
