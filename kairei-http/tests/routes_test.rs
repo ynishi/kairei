@@ -1,8 +1,15 @@
-use axum::{extract::Request, http::StatusCode};
+use axum::{
+    extract::Request,
+    http::StatusCode,
+};
 use kairei_http::{
     auth::auth_middleware,
     handlers::test_helpers::create_test_state,
-    models::{CreateSystemRequest, CreateSystemResponse, ListSystemsResponse, StartSystemRequest},
+    models::{
+        CreateSystemRequest, CreateSystemResponse, EventRequest, GetAgentResponse,
+        ListAgentsResponse, ListSystemsResponse, ScaleDownAgentRequest, ScaleUpAgentRequest,
+        StartSystemRequest,
+    },
     routes,
 };
 use serde_json::json;
@@ -166,7 +173,7 @@ async fn test_create_agent_in_system_route() {
 
     // Process the request
     let response = app.clone().oneshot(request).await.unwrap();
-
+    
     // Check the response status
     assert_eq!(response.status(), StatusCode::CREATED);
 
@@ -179,11 +186,7 @@ async fn test_create_agent_in_system_route() {
 
     // Verify the response structure
     assert_eq!(agent_response["agent_id"], "NewAgent");
-    assert!(
-        agent_response["validation_result"]["success"]
-            .as_bool()
-            .unwrap()
-    );
+    assert!(agent_response["validation_result"]["success"].as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -243,10 +246,10 @@ async fn test_create_agent_route_errors() {
 
     // Process the request
     let response = app.clone().oneshot(request).await.unwrap();
-
+    
     // Check the response status
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-
+    
     // Test non-existent system
     let request = Request::builder()
         .uri("/api/v1/systems/non-existent-system/agents")
@@ -258,7 +261,7 @@ async fn test_create_agent_route_errors() {
 
     // Process the request
     let response = app.clone().oneshot(request).await.unwrap();
-
+    
     // Check the response status
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

@@ -1,8 +1,10 @@
 use axum::http::StatusCode;
 use kairei_http::{
+    handlers::agents::create_agent,
     handlers::test_helpers::{create_test_state, create_test_user_with_api_key},
     models::agents::{AgentCreationOptions, AgentCreationRequest},
 };
+use serde_json::json;
 
 #[tokio::test]
 async fn test_auth_store_default_users() {
@@ -44,16 +46,17 @@ async fn test_create_agent_handler_integration() {
     let payload = AgentCreationRequest {
         name: "TestAgent".to_string(),
         dsl_code: "micro TestAgent { }".to_string(),
-        options: AgentCreationOptions { auto_start: true },
+        options: AgentCreationOptions {
+            auto_start: true,
+        },
     };
-
+    
     // Call the test helper function
-    let (status, json_response) =
-        kairei_http::handlers::test_helpers::test_create_agent(axum::response::Json(payload)).await;
-
+    let (status, json_response) = kairei_http::handlers::test_helpers::test_create_agent(axum::response::Json(payload)).await;
+    
     // Verify the status code
     assert_eq!(status, StatusCode::CREATED);
-
+    
     // Verify the response structure
     assert_eq!(json_response.0.agent_id, "testagent-001");
     assert_eq!(format!("{:?}", json_response.0.status), "Created");
