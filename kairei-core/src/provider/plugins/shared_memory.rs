@@ -56,10 +56,10 @@ use crate::provider::types::ProviderResult;
 struct ValueWithMetadata {
     /// The stored JSON value
     value: Value,
-    
+
     /// Metadata about the value
     metadata: Metadata,
-    
+
     /// Optional expiration time (None means no expiration)
     expiry: Option<Instant>,
 }
