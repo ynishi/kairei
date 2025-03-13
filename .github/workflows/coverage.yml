@@ -1,9 +1,10 @@
-name: Test Coverage
+name: Code Coverage
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
+  # Run daily at 2:00 UTC
+  schedule:
+    - cron: '0 2 * * *'
+  # Allow manual trigger
   workflow_dispatch:
 
 env:
@@ -12,6 +13,7 @@ env:
 
 jobs:
   coverage:
+    name: Generate Coverage Report
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -35,10 +37,14 @@ jobs:
         run: cargo install cargo-tarpaulin --force
 
       - name: Generate coverage report for kairei-core
-        run: cd kairei-core && cargo tarpaulin --out Xml
+        run: cd kairei-core && cargo tarpaulin --out Xml --output-dir ../coverage-reports
 
       - name: Generate coverage report for kairei-http
-        run: cd kairei-http && cargo tarpaulin --out Xml
+        run: cd kairei-http && cargo tarpaulin --out Xml --output-dir ../coverage-reports
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
+        with:
+          directory: ./coverage-reports/
+          fail_ci_if_error: true
+          verbose: true
