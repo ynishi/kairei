@@ -1,4 +1,35 @@
 //! Shared Memory plugin implementation.
+//!
+//! This module provides the reference implementation of the SharedMemoryCapability
+//! trait using in-memory storage. It offers thread-safe, high-performance shared
+//! memory operations with features like TTL-based expiration, capacity limits,
+//! and pattern-based key listing.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use kairei_core::provider::plugins::shared_memory::InMemorySharedMemoryPlugin;
+//! use kairei_core::provider::config::plugins::SharedMemoryConfig;
+//! use kairei_core::provider::capabilities::shared_memory::SharedMemoryCapability;
+//! use serde_json::json;
+//! use std::time::Duration;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create a shared memory plugin
+//! let plugin = InMemorySharedMemoryPlugin::new(SharedMemoryConfig {
+//!     base: Default::default(),
+//!     max_keys: 100,
+//!     ttl: Duration::from_secs(3600),
+//!     namespace: "my_namespace".to_string(),
+//! });
+//!
+//! // Store and retrieve values
+//! plugin.set("user_123", json!({"name": "Alice"})).await?;
+//! let user = plugin.get("user_123").await?;
+//! println!("User: {}", user["name"]);
+//! # Ok(())
+//! # }
+//! ```
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -19,13 +50,50 @@ use crate::provider::provider::Section;
 use crate::provider::types::ProviderResult;
 
 /// A thread-safe value container with expiration support
+///
+/// This structure stores a value along with its metadata and
+/// optional expiration time.
 struct ValueWithMetadata {
+    /// The stored JSON value
     value: Value,
+
+    /// Metadata about the value
     metadata: Metadata,
+
+    /// Optional expiration time (None means no expiration)
     expiry: Option<Instant>,
 }
 
 /// Reference implementation of SharedMemoryCapability using in-memory storage
+///
+/// This plugin provides a high-performance, thread-safe implementation of
+/// the SharedMemoryCapability trait using in-memory storage. It supports
+/// all features of the SharedMemoryCapability interface, including:
+///
+/// - Thread-safe concurrent access
+/// - TTL-based automatic expiration
+/// - Capacity limits
+/// - Pattern-based key listing
+/// - Rich metadata
+///
+/// # Thread Safety
+///
+/// The implementation uses DashMap for thread-safe concurrent access,
+/// allowing multiple tasks or threads to safely interact with the
+/// shared memory simultaneously.
+///
+/// # Performance Characteristics
+///
+/// - Get/Set/Delete operations: O(1) average time complexity
+/// - Exists operation: O(1) average time complexity
+/// - List keys operation: O(n) where n is the number of keys
+///
+/// # Memory Usage
+///
+/// Memory usage is proportional to:
+/// - Number of keys
+/// - Size of stored values
+/// - Metadata overhead (approximately 100 bytes per key)
 pub struct InMemorySharedMemoryPlugin {
     /// Thread-safe map for storing values
     data: Arc<DashMap<String, ValueWithMetadata>>,
@@ -35,6 +103,23 @@ pub struct InMemorySharedMemoryPlugin {
 
 impl InMemorySharedMemoryPlugin {
     /// Create a new instance with the given configuration
+    ///
+    /// # Arguments
+    /// * `config` - Configuration for the shared memory plugin
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use kairei_core::provider::plugins::shared_memory::InMemorySharedMemoryPlugin;
+    /// # use kairei_core::provider::config::plugins::SharedMemoryConfig;
+    /// # use std::time::Duration;
+    /// let plugin = InMemorySharedMemoryPlugin::new(SharedMemoryConfig {
+    ///     base: Default::default(),
+    ///     max_keys: 100,
+    ///     ttl: Duration::from_secs(3600),
+    ///     namespace: "my_namespace".to_string(),
+    /// });
+    /// ```
     pub fn new(config: SharedMemoryConfig) -> Self {
         Self {
             data: Arc::new(DashMap::new()),
