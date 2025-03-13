@@ -40,7 +40,7 @@ async fn test_system_route() {
 
     // Process the request
     let response = app.clone().oneshot(request).await.unwrap();
-    let body = axum::body::to_bytes(response.into_body(), 1000)
+    let _body = axum::body::to_bytes(response.into_body(), 1000)
         .await
         .unwrap();
 
@@ -72,7 +72,7 @@ async fn test_system_route() {
         .unwrap();
 
     let response = app.clone().oneshot(request).await.unwrap();
-    let body = axum::body::to_bytes(response.into_body(), 1000)
+    let _body = axum::body::to_bytes(response.into_body(), 1000)
         .await
         .unwrap();
 
@@ -86,7 +86,7 @@ async fn test_system_route() {
         .unwrap();
 
     let response = app.clone().oneshot(request).await.unwrap();
-    let body = axum::body::to_bytes(response.into_body(), 1000)
+    let _body = axum::body::to_bytes(response.into_body(), 1000)
         .await
         .unwrap();
 
@@ -179,6 +179,8 @@ async fn test_create_agent_in_system_route() {
 
     // Verify the response structure
     assert_eq!(agent_response["agent_id"], "NewAgent");
+    // Check status is either "Created" or "Running" based on auto_start option
+    assert!(agent_response["status"] == "Created" || agent_response["status"] == "Running");
     assert!(
         agent_response["validation_result"]["success"]
             .as_bool()
