@@ -231,7 +231,7 @@ impl DocBuilder {
 }
 
 /// Helper functions for creating documented parsers.
-
+///
 /// Create a documented parser with the provided parser and documentation.
 ///
 /// # Arguments
@@ -339,15 +339,15 @@ mod tests {
     fn test_doc_parser_delegates_parsing() {
         // Create a simple parser
         let parser = Equal::new(42);
-        
+
         // Create documentation
         let documentation = DocBuilder::new("equal_42", ParserCategory::Expression)
             .description("Parses the integer 42")
             .build();
-        
+
         // Create a documented parser
         let doc_parser = DocParser::new(parser, documentation);
-        
+
         // Test that parsing is correctly delegated
         let input = &[42, 43, 44];
         assert_eq!(doc_parser.parse(input, 0), Ok((1, 42)));
@@ -357,14 +357,14 @@ mod tests {
     #[test]
     fn test_doc_parser_provides_documentation() {
         let parser = Equal::new(42);
-        
+
         let documentation = DocBuilder::new("equal_42", ParserCategory::Expression)
             .description("Parses the integer 42")
             .example("42")
             .build();
-        
+
         let doc_parser = DocParser::new(parser, documentation);
-        
+
         // Test that we can access the documentation
         let doc = doc_parser.documentation();
         assert_eq!(doc.name, "equal_42");
@@ -384,7 +384,7 @@ mod tests {
             .related_parser("other_parser")
             .related_parsers(vec!["parser1", "parser2"])
             .build();
-        
+
         assert_eq!(doc.name, "test_parser");
         assert_eq!(doc.description, "A test parser");
         assert_eq!(
@@ -401,15 +401,14 @@ mod tests {
     #[test]
     fn test_helper_functions() {
         let parser = Equal::new(42);
-        
+
         // Test document_expression
-        let doc_expr = document_expression(
-            parser.clone(),
-            "equal_42",
-            "Parses the integer 42",
+        let doc_expr = document_expression(parser.clone(), "equal_42", "Parses the integer 42");
+        assert_eq!(
+            doc_expr.documentation().category,
+            ParserCategory::Expression
         );
-        assert_eq!(doc_expr.documentation().category, ParserCategory::Expression);
-        
+
         // Test document_statement
         let doc_stmt = document_statement(
             parser.clone(),
@@ -417,15 +416,18 @@ mod tests {
             "Parses the integer 42 as a statement",
         );
         assert_eq!(doc_stmt.documentation().category, ParserCategory::Statement);
-        
+
         // Test document_handler
         let doc_handler = document_handler(
             parser.clone(),
             "equal_42_handler",
             "Parses the integer 42 as a handler",
         );
-        assert_eq!(doc_handler.documentation().category, ParserCategory::Handler);
-        
+        assert_eq!(
+            doc_handler.documentation().category,
+            ParserCategory::Handler
+        );
+
         // Test document_definition
         let doc_def = document_definition(
             parser.clone(),
