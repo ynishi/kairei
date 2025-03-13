@@ -8,6 +8,7 @@
 
 use super::combinators::*;
 use super::core::Parser;
+use super::doc_parser::*;
 
 /// Creates a parser that matches a specific value
 ///
@@ -425,4 +426,96 @@ where
     P: Parser<I, O>,
 {
     Lazy::new(f)
+}
+
+/// Creates a documented parser with the provided parser and documentation.
+///
+/// # Arguments
+///
+/// * `parser` - The parser to document
+/// * `documentation` - Documentation metadata for the parser
+///
+/// # Returns
+///
+/// A parser that delegates parsing to the original parser while providing documentation
+pub fn document<P, I, O>(parser: P, documentation: ParserDocumentation) -> DocParser<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    DocParser::new(parser, documentation)
+}
+
+/// Creates a documented expression parser.
+///
+/// # Arguments
+///
+/// * `parser` - The expression parser to document
+/// * `name` - The name of the parser
+/// * `description` - A description of what the parser does
+///
+/// # Returns
+///
+/// A documented expression parser
+pub fn document_expression<P, I, O>(
+    parser: P,
+    name: impl Into<String>,
+    description: impl Into<String>,
+) -> DocParser<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    let doc = DocBuilder::new(name, ParserCategory::Expression)
+        .description(description)
+        .build();
+    DocParser::new(parser, doc)
+}
+
+/// Creates a documented statement parser.
+///
+/// # Arguments
+///
+/// * `parser` - The statement parser to document
+/// * `name` - The name of the parser
+/// * `description` - A description of what the parser does
+///
+/// # Returns
+///
+/// A documented statement parser
+pub fn document_statement<P, I, O>(
+    parser: P,
+    name: impl Into<String>,
+    description: impl Into<String>,
+) -> DocParser<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    let doc = DocBuilder::new(name, ParserCategory::Statement)
+        .description(description)
+        .build();
+    DocParser::new(parser, doc)
+}
+
+/// Creates a documented handler parser.
+///
+/// # Arguments
+///
+/// * `parser` - The handler parser to document
+/// * `name` - The name of the parser
+/// * `description` - A description of what the parser does
+///
+/// # Returns
+///
+/// A documented handler parser
+pub fn document_handler<P, I, O>(
+    parser: P,
+    name: impl Into<String>,
+    description: impl Into<String>,
+) -> DocParser<P, I, O>
+where
+    P: Parser<I, O>,
+{
+    let doc = DocBuilder::new(name, ParserCategory::Handler)
+        .description(description)
+        .build();
+    DocParser::new(parser, doc)
 }

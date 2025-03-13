@@ -43,11 +43,13 @@
 
 pub mod combinators;
 pub mod core;
+pub mod doc_parser;
 pub mod parsers;
 pub mod prelude;
 
 pub use core::ParseError;
 pub use core::ParseResult;
 pub use core::Parser;
+pub use doc_parser::{DocParser, DocParserExt, ParserDocumentation, ParserCategory};
 
 pub use crate::ast;
