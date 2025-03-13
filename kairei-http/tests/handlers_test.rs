@@ -1,5 +1,8 @@
 use axum::http::StatusCode;
-use kairei_http::handlers::test_helpers::{create_test_state, create_test_user_with_api_key};
+use kairei_http::{
+    handlers::test_helpers::{create_test_state, create_test_user_with_api_key},
+    models::agents::{AgentCreationOptions, AgentCreationRequest},
+};
 
 #[tokio::test]
 async fn test_auth_store_default_users() {
@@ -38,10 +41,10 @@ async fn test_create_custom_user() {
 #[tokio::test]
 async fn test_create_agent_handler_integration() {
     // Create a request payload
-    let payload = kairei_http::models::agents::AgentCreationRequest {
+    let payload = AgentCreationRequest {
         name: "TestAgent".to_string(),
         dsl_code: "micro TestAgent { }".to_string(),
-        options: kairei_http::models::agents::AgentCreationOptions { auto_start: true },
+        options: AgentCreationOptions { auto_start: true },
     };
 
     // Call the test helper function
