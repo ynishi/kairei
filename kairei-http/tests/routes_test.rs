@@ -53,11 +53,11 @@ async fn test_system_route() {
         .unwrap();
 
     let response = app.clone().oneshot(request).await.unwrap();
-    let body = axum::body::to_bytes(response.into_body(), 1000)
+    let _body = axum::body::to_bytes(response.into_body(), 1000)
         .await
         .unwrap();
 
-    let resp: ListSystemsResponse = serde_json::from_slice(&body).unwrap();
+    let resp: ListSystemsResponse = serde_json::from_slice(&_body).unwrap();
     assert!(!resp.system_statuses.is_empty());
 
     // Get first system ID
@@ -134,11 +134,11 @@ async fn test_create_agent_in_system_route() {
 
     // Process the request
     let response = app.clone().oneshot(request).await.unwrap();
-    let body = axum::body::to_bytes(response.into_body(), 1000)
+    let _body = axum::body::to_bytes(response.into_body(), 1000)
         .await
         .unwrap();
 
-    let resp: CreateSystemResponse = serde_json::from_slice(&body).unwrap();
+    let resp: CreateSystemResponse = serde_json::from_slice(&_body).unwrap();
     let system_id = resp.system_id.clone();
 
     // Create agent request
@@ -171,11 +171,11 @@ async fn test_create_agent_in_system_route() {
     assert_eq!(response.status(), StatusCode::CREATED);
 
     // Get the response body
-    let body = axum::body::to_bytes(response.into_body(), 1000)
+    let _body = axum::body::to_bytes(response.into_body(), 1000)
         .await
         .unwrap();
 
-    let agent_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let agent_response: serde_json::Value = serde_json::from_slice(&_body).unwrap();
 
     // Verify the response structure
     assert_eq!(agent_response["agent_id"], "NewAgent");
@@ -219,11 +219,11 @@ async fn test_create_agent_route_errors() {
 
     // Process the request
     let response = app.clone().oneshot(request).await.unwrap();
-    let body = axum::body::to_bytes(response.into_body(), 1000)
+    let _body = axum::body::to_bytes(response.into_body(), 1000)
         .await
         .unwrap();
 
-    let resp: CreateSystemResponse = serde_json::from_slice(&body).unwrap();
+    let resp: CreateSystemResponse = serde_json::from_slice(&_body).unwrap();
     let system_id = resp.system_id.clone();
 
     // Test unauthorized access
