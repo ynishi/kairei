@@ -7,9 +7,10 @@
 use crate::analyzer::core::{ParseResult, Parser};
 use std::fmt;
 use std::marker::PhantomData;
+use serde::{Serialize, Deserialize};
 
 /// Parser category indicating what part of the DSL the parser handles.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ParserCategory {
     /// Expression parsers (values, operations, etc.)
     Expression,
@@ -39,7 +40,7 @@ impl fmt::Display for ParserCategory {
 }
 
 /// Documentation metadata for a parser.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParserDocumentation {
     /// The name of the parser (e.g., "parse_expression", "parse_logical_or")
     pub name: String,

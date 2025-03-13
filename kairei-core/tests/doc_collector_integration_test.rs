@@ -271,4 +271,24 @@ fn test_multiple_providers_integration() {
     // Validate for consistency
     let issues = collection.validate();
     assert_eq!(issues.len(), 0, "Unexpected validation issues: {:?}", issues);
+    
+    // Test exports
+    let markdown = collector.export_markdown();
+    assert!(markdown.contains("# KAIREI Language Documentation"));
+    assert!(markdown.contains("## Expression"));
+    assert!(markdown.contains("### parse_expression"));
+    assert!(markdown.contains("### parse_binary_expression"));
+    assert!(markdown.contains("### parse_primary_expression"));
+    assert!(markdown.contains("## Statement"));
+    assert!(markdown.contains("### parse_statement"));
+    assert!(markdown.contains("### parse_if_statement"));
+    
+    let json_result = collector.export_json();
+    assert!(json_result.is_ok());
+    let json = json_result.unwrap();
+    assert!(json.contains("parse_expression"));
+    assert!(json.contains("parse_binary_expression"));
+    assert!(json.contains("parse_if_statement"));
+    assert!(json.contains("Parses an if statement with optional else clause"));
 }
+
