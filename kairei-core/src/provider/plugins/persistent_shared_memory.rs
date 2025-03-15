@@ -261,7 +261,41 @@ impl PersistentSharedMemoryPlugin {
     /// * `Ok(())` - If sync succeeds
     /// * `Err(SharedMemoryError)` - If sync fails
     pub async fn sync(&self) -> Result<(), SharedMemoryError> {
-        todo!("Implement sync in Phase 3")
+        // Emit sync started event
+        if let Some(ref event_bus) = self.event_bus {
+            let _ = event_bus.publish(Event {
+                event_type: EventType::Custom("PersistentMemorySyncStarted".to_string()),
+                parameters: HashMap::new(),
+            }).await;
+        }
+        
+        // Perform sync operation by saving all data to the backend
+        let result = self.save().await;
+        
+        // Update last sync time if successful
+        if result.is_ok() {
+            let now = Instant::now();
+            let mut last_sync_guard = self.last_sync.write().await;
+            *last_sync_guard = Some(now);
+            
+            // Emit sync completed event
+            if let Some(ref event_bus) = self.event_bus {
+                let _ = event_bus.publish(Event {
+                    event_type: EventType::Custom("PersistentMemorySyncCompleted".to_string()),
+                    parameters: HashMap::new(),
+                }).await;
+            }
+        } else {
+            // Emit sync failed event
+            if let Some(ref event_bus) = self.event_bus {
+                let _ = event_bus.publish(Event {
+                    event_type: EventType::Custom("PersistentMemorySyncFailed".to_string()),
+                    parameters: HashMap::new(),
+                }).await;
+            }
+        }
+        
+        result
     }
     
     /// Load data from storage backend
@@ -273,7 +307,46 @@ impl PersistentSharedMemoryPlugin {
     /// * `Ok(())` - If loading succeeds
     /// * `Err(SharedMemoryError)` - If loading fails
     pub async fn load(&self) -> Result<(), SharedMemoryError> {
-        todo!("Implement load in Phase 3")
+        // Emit load started event
+        if let Some(ref event_bus) = self.event_bus {
+            let _ = event_bus.publish(Event {
+                event_type: EventType::Custom("PersistentMemoryLoadStarted".to_string()),
+                parameters: HashMap::new(),
+            }).await;
+        }
+        
+        // Load data from storage backend
+        let namespace = &self.config.base.namespace;
+        let result = match self.backend.load(namespace).await {
+            Ok(data) => {
+                // Clear existing cache
+                self.cache.clear();
+                
+                // Populate cache with loaded data
+                for (key, value) in data {
+                    self.cache.insert(key, value);
+                }
+                
+                Ok(())
+            },
+            Err(err) => Err(SharedMemoryError::from(err)),
+        };
+        
+        // Emit appropriate event based on result
+        if let Some(ref event_bus) = self.event_bus {
+            let event_type = if result.is_ok() {
+                EventType::Custom("PersistentMemoryLoadCompleted".to_string())
+            } else {
+                EventType::Custom("PersistentMemoryLoadFailed".to_string())
+            };
+            
+            let _ = event_bus.publish(Event {
+                event_type,
+                parameters: HashMap::new(),
+            }).await;
+        }
+        
+        result
     }
     
     /// Save data to storage backend
@@ -284,7 +357,43 @@ impl PersistentSharedMemoryPlugin {
     /// * `Ok(())` - If saving succeeds
     /// * `Err(SharedMemoryError)` - If saving fails
     pub async fn save(&self) -> Result<(), SharedMemoryError> {
-        todo!("Implement save in Phase 3")
+        // Emit save started event
+        if let Some(ref event_bus) = self.event_bus {
+            let _ = event_bus.publish(Event {
+                event_type: EventType::Custom("PersistentMemorySaveStarted".to_string()),
+                parameters: HashMap::new(),
+            }).await;
+        }
+        
+        // Convert cache to HashMap for storage
+        let data: HashMap<String, ValueWithMetadata> = self
+            .cache
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+            .collect();
+        
+        // Save data to storage backend
+        let namespace = &self.config.base.namespace;
+        let result = match self.backend.save(namespace, &data).await {
+            Ok(_) => Ok(()),
+            Err(err) => Err(SharedMemoryError::from(err)),
+        };
+        
+        // Emit appropriate event based on result
+        if let Some(ref event_bus) = self.event_bus {
+            let event_type = if result.is_ok() {
+                EventType::Custom("PersistentMemorySaveCompleted".to_string())
+            } else {
+                EventType::Custom("PersistentMemorySaveFailed".to_string())
+            };
+            
+            let _ = event_bus.publish(Event {
+                event_type,
+                parameters: HashMap::new(),
+            }).await;
+        }
+        
+        result
     }
     
     /// Calculate expiry instant based on TTL
