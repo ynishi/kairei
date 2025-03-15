@@ -182,6 +182,7 @@ mod tests {
     use super::*;
 
     // Mock implementation of StorageBackend for testing
+    #[allow(dead_code)]
     struct MockStorageBackend {
         available: bool,
         data: HashMap<String, HashMap<String, StorableValue>>,
