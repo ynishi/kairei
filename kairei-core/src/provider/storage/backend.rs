@@ -6,7 +6,6 @@
 //! interact with the underlying storage.
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
@@ -52,12 +51,12 @@ pub enum StorageError {
     StorageError(String),
 }
 
-/// A storable value with associated metadata for persistence.
+/// A value with associated metadata for persistence.
 ///
-/// This structure is similar to the internal ValueWithMetadata in the
-/// shared_memory plugin, but is designed for storage backends to use.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StorableValue {
+/// This structure represents a value stored in the shared memory system,
+/// along with its metadata and optional expiration time.
+#[derive(Debug, Clone)]
+pub struct ValueWithMetadata {
     /// The stored JSON value
     pub value: Value,
 
@@ -65,8 +64,6 @@ pub struct StorableValue {
     pub metadata: Metadata,
 
     /// Optional expiration time as seconds since epoch
-    /// This is converted from Instant for serialization purposes
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry_timestamp: Option<i64>,
 }
 
@@ -89,7 +86,7 @@ pub trait StorageBackend: Send + Sync {
     /// * `namespace` - The namespace to load data from
     ///
     /// # Returns
-    /// * `Ok(HashMap<String, StorableValue>)` - The loaded data
+    /// * `Ok(HashMap<String, ValueWithMetadata>)` - The loaded data
     /// * `Err(StorageError)` - If loading fails
     ///
     /// # Expected Behavior
@@ -98,7 +95,7 @@ pub trait StorageBackend: Send + Sync {
     /// - Should handle non-existent namespaces gracefully (return empty HashMap)
     /// - Should deserialize stored data into the correct format
     /// - Should preserve metadata (creation time, modification time, etc.)
-    async fn load(&self, namespace: &str) -> Result<HashMap<String, StorableValue>, StorageError>;
+    async fn load(&self, namespace: &str) -> Result<HashMap<String, ValueWithMetadata>, StorageError>;
 
     /// Save all data for a namespace
     ///
@@ -119,7 +116,7 @@ pub trait StorageBackend: Send + Sync {
     async fn save(
         &self,
         namespace: &str,
-        data: &HashMap<String, StorableValue>,
+        data: &HashMap<String, ValueWithMetadata>,
     ) -> Result<(), StorageError>;
 
     /// Save a single key
@@ -143,7 +140,7 @@ pub trait StorageBackend: Send + Sync {
         &self,
         namespace: &str,
         key: &str,
-        value: &StorableValue,
+        value: &ValueWithMetadata,
     ) -> Result<(), StorageError>;
 
     /// Delete a single key
@@ -185,7 +182,7 @@ mod tests {
     #[allow(dead_code)]
     struct MockStorageBackend {
         available: bool,
-        data: HashMap<String, HashMap<String, StorableValue>>,
+        data: HashMap<String, HashMap<String, ValueWithMetadata>>,
     }
 
     #[async_trait]
@@ -193,7 +190,7 @@ mod tests {
         async fn load(
             &self,
             namespace: &str,
-        ) -> Result<HashMap<String, StorableValue>, StorageError> {
+        ) -> Result<HashMap<String, ValueWithMetadata>, StorageError> {
             if !self.available {
                 return Err(StorageError::BackendUnavailable(
                     "Mock backend unavailable".to_string(),
@@ -206,7 +203,7 @@ mod tests {
         async fn save(
             &self,
             _namespace: &str,
-            _data: &HashMap<String, StorableValue>,
+            _data: &HashMap<String, ValueWithMetadata>,
         ) -> Result<(), StorageError> {
             if !self.available {
                 return Err(StorageError::BackendUnavailable(
@@ -221,7 +218,7 @@ mod tests {
             &self,
             _namespace: &str,
             _key: &str,
-            _value: &StorableValue,
+            _value: &ValueWithMetadata,
         ) -> Result<(), StorageError> {
             if !self.available {
                 return Err(StorageError::BackendUnavailable(
@@ -248,20 +245,17 @@ mod tests {
     }
 
     #[test]
-    fn test_storable_value_serialization() {
+    fn test_value_with_metadata() {
         let metadata = Metadata::default();
         let value = serde_json::json!({"name": "test", "value": 42});
 
-        let storable = StorableValue {
+        let value_with_metadata = ValueWithMetadata {
             value: value.clone(),
             metadata: metadata.clone(),
             expiry_timestamp: Some(1234567890),
         };
 
-        let serialized = serde_json::to_string(&storable).unwrap();
-        let deserialized: StorableValue = serde_json::from_str(&serialized).unwrap();
-
-        assert_eq!(deserialized.value, value);
-        assert_eq!(deserialized.expiry_timestamp, Some(1234567890));
+        assert_eq!(value_with_metadata.value, value);
+        assert_eq!(value_with_metadata.expiry_timestamp, Some(1234567890));
     }
 }
