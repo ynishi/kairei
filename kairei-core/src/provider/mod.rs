@@ -87,4 +87,5 @@ pub mod plugins;
 pub mod provider;
 pub mod providers;
 pub mod request;
+pub mod storage;
 pub mod types;
