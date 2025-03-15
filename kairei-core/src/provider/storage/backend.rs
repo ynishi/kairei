@@ -180,7 +180,6 @@ pub trait StorageBackend: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     // Mock implementation of StorageBackend for testing
     struct MockStorageBackend {
