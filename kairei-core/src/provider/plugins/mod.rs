@@ -1,5 +1,6 @@
 pub mod general_prompt;
 pub mod memory;
+pub mod persistent_shared_memory;
 pub mod policy;
 pub mod shared_memory;
 pub mod shared_memory_adapter;
