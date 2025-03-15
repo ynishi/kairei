@@ -1,11 +1,13 @@
 //! Plugin-specific configuration types and validation.
 
 mod memory;
+mod persistent_shared_memory;
 mod rag;
 mod search;
 mod shared_memory;
 
 pub use memory::*;
+pub use persistent_shared_memory::*;
 pub use rag::*;
 pub use search::*;
 pub use shared_memory::*;
