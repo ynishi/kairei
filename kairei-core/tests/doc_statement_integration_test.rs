@@ -53,7 +53,7 @@ fn test_collecting_statement_docs() {
 
     // Validate the collection
     let validation_issues = collector.validate();
-    
+
     // Print any validation issues for debugging
     if !validation_issues.is_empty() {
         println!("Validation issues:");
@@ -61,7 +61,7 @@ fn test_collecting_statement_docs() {
             println!("  - {}", issue);
         }
     }
-    
+
     // Skip validation for now as we're focusing on documentation structure
     // assert!(validation_issues.is_empty());
 }
