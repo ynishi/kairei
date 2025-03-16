@@ -820,20 +820,20 @@ mod tests {
             base: Default::default(),
             persistence: Default::default(),
         };
-        
+
         // Create plugin with default settings (which should have a high max_keys)
         let plugin = PersistentSharedMemoryPlugin::new(config).await;
-        
+
         // Store a key and verify it works
         let result = plugin.set("test_key", json!(123)).await;
         assert!(result.is_ok());
-        
+
         // Verify we can retrieve it
         let value = plugin.get("test_key").await;
         assert!(value.is_ok());
         assert_eq!(value.unwrap(), json!(123));
-        
-        // This test verifies that the basic functionality works 
+
+        // This test verifies that the basic functionality works
         // without hitting capacity limits with default settings
     }
 }

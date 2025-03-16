@@ -418,7 +418,7 @@ mod tests {
             let namespace = namespace.to_string(); // Clone for task
             let handle = tokio::spawn(async move {
                 let key = format!("key{}", i);
-                
+
                 // Load the data
                 let data = backend_clone.load(&namespace).await.unwrap();
                 assert!(data.contains_key(&key), "Key {} should exist", key);
@@ -437,7 +437,11 @@ mod tests {
         assert_eq!(data.len(), 5);
         for i in 0..5 {
             let key = format!("key{}", i);
-            assert!(data.contains_key(&key), "Key {} not found in final data", key);
+            assert!(
+                data.contains_key(&key),
+                "Key {} not found in final data",
+                key
+            );
             assert_eq!(data[&key].value, json!(format!("value{}", i)));
         }
     }
