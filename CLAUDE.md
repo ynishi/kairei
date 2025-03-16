@@ -126,11 +126,48 @@ Implement [feature] following the pattern in PR #XXX. This involves creating [fi
 Additional information about implementation, edge cases, etc.
 ```
 
+### Effective Issue Design and Implementation Flow
+
+#### Two-Phase Implementation Process
+1. **Plan Review Phase**:
+   - Create a preliminary issue with the task description
+   - Have the AI agent develop and submit an implementation plan
+   - Review the plan to identify potential complexities, dependencies, and gaps
+   - Based on the review, either proceed with implementation or re-divide the issue
+
+2. **Implementation Phase**:
+   - Once the plan is approved, proceed with the actual implementation
+   - For complex issues that were re-divided, create new focused issues
+   - Stop the original AI session and start fresh with the refined issues
+
+#### Issue Size and Scope Guidelines
+- **Prefer Small, Self-Contained Issues**:
+  - Each issue should focus on a single conceptual change
+  - Issues should be completable in a single AI session
+  - Avoid issues that require maintaining complex state across multiple changes
+
+- **Technical Complexity Considerations**:
+  - Issues involving async code should be particularly focused
+  - Trait changes that affect multiple components should be separated
+  - Issues requiring architectural understanding should be simplified or divided
+
+- **Dependencies Between Issues**:
+  - Clearly mark dependency relationships between issues
+  - Sequence implementation to minimize dependency chains
+  - Consider implementing foundation components with human developers
+
+#### Success Criteria
+- Every issue should have clear, objective success criteria
+- Include specific tests that must pass
+- Define what "done" looks like in concrete terms
+
 ### What to Avoid
 - Vague descriptions requiring deep project understanding
 - References to undocumented patterns or conventions
 - Assuming knowledge of project-specific workflows
 - Open-ended design decisions without clear guidance
+- Issues that require adapting to unexpected implementation challenges
+- Tasks that require coordinating multiple interdependent changes
 
 ### When to Use Human Collaboration Instead
 Issues requiring any of the following should involve human collaboration:
@@ -139,3 +176,5 @@ Issues requiring any of the following should involve human collaboration:
 - Security-critical implementations
 - Features requiring subjective design choices
 - Implementations without clear precedents in the codebase
+- Changes requiring subtle performance optimization
+- Issues where planning reveals significant complexity or unknown factors
