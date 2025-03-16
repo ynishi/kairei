@@ -1,4 +1,5 @@
 use kairei_core::analyzer::doc_parser::DocBuilder;
+use kairei_core::analyzer::parsers::doc_answer_handlers::AnswerHandlerDocProvider;
 use kairei_core::analyzer::{
     DocParserExt, DocumentationCollector, ParserCategory, ParserDocumentation,
 };
@@ -106,6 +107,9 @@ fn test_documentation_system_integration() {
         3,
     )));
 
+    // Register the answer handler documentation provider
+    collector.register_provider(Box::new(AnswerHandlerDocProvider));
+
     // Collect documentation
     collector.collect();
 
@@ -113,17 +117,22 @@ fn test_documentation_system_integration() {
     let collection = collector.get_collection();
 
     // Verify the collection has the right number of entries
-    assert_eq!(collection.count(), categories.len() * 3);
+    assert_eq!(collection.count(), categories.len() * 3 + 4); // +4 for answer handler parsers
 
     // Check that each category has the right number of parsers
     for category in &categories {
         let docs = collection.get_by_category(category);
-        assert_eq!(docs.len(), 3);
+        if *category == ParserCategory::Handler {
+            // Handler category now has 7 parsers (3 test + 4 answer handlers)
+            assert_eq!(docs.len(), 7);
+        } else {
+            assert_eq!(docs.len(), 3);
+        }
     }
 
     // Test the relation graph - in our test data, there are no related parsers
     let graph = collection.build_relation_graph();
-    assert_eq!(graph.len(), categories.len() * 3);
+    assert_eq!(graph.len(), categories.len() * 3 + 4); // +4 for answer handler parsers
 
     // Test validation - all our test documentation is valid
     let issues = collection.validate();
