@@ -75,12 +75,12 @@ pub fn documented_parse_statement() -> impl DocParserExt<Token, ast::Statement> 
         .example("emit UserCreated(id: user.id)")
         .example("return value")
         .example("{ statement1; statement2 }")
-        .related_parser("documented_parse_assignment_statement")
-        .related_parser("documented_parse_if_statement")
-        .related_parser("documented_parse_return_statement")
-        .related_parser("documented_parse_emit_statement")
-        .related_parser("documented_parse_block_statement")
-        .related_parser("documented_parse_expression_statement")
+        .related_parser("parse_assignment_statement")
+        .related_parser("parse_if_statement")
+        .related_parser("parse_return_statement")
+        .related_parser("parse_emit_statement")
+        .related_parser("parse_block_statement")
+        .related_parser("parse_expression_statement")
         .build();
 
     document(parser, doc)
@@ -99,7 +99,7 @@ pub fn documented_parse_assignment_statement() -> impl DocParserExt<Token, ast::
         .example("result = await fetch_data()")
         .example("user.name = \"John\"")
         .example("(firstName, lastName) = fullName.split(\" \")")
-        .related_parser("documented_parse_statement")
+        .related_parser("parse_statement")
         .build();
 
     document(parser, doc)
@@ -116,7 +116,7 @@ pub fn documented_parse_block_statement() -> impl DocParserExt<Token, ast::State
         .description("Block statements group multiple statements together into a single unit. They are enclosed in curly braces and can be used anywhere a single statement is expected.")
         .example("{ x = 42; y = x * 2; return y }")
         .example("{ think(\"What should I do?\"); emit Decision(choice: \"A\") }")
-        .related_parser("documented_parse_statement")
+        .related_parser("parse_statement")
         .build();
 
     document(parser, doc)
@@ -134,7 +134,7 @@ pub fn documented_parse_if_statement() -> impl DocParserExt<Token, ast::Statemen
         .example("if x > 10 { return \"High\" }")
         .example("if user.isAdmin { showAdminPanel() } else { showUserPanel() }")
         .example("if condition { action1() } else if otherCondition { action2() } else { action3() }")
-        .related_parser("documented_parse_statement")
+        .related_parser("parse_statement")
         .build();
 
     document(parser, doc)
@@ -153,7 +153,7 @@ pub fn documented_parse_expression_statement() -> impl DocParserExt<Token, ast::
         .example("calculateTotal()")
         .example("await asyncOperation()")
         .example("think(\"What is the capital of France?\")")
-        .related_parser("documented_parse_statement")
+        .related_parser("parse_statement")
         .build();
 
     document(parser, doc)
@@ -172,7 +172,7 @@ pub fn documented_parse_return_statement() -> impl DocParserExt<Token, ast::Stat
         .example("return user.profile")
         .example("return await fetchData()")
         .example("return { success: true, data: result }")
-        .related_parser("documented_parse_statement")
+        .related_parser("parse_statement")
         .build();
 
     document(parser, doc)
@@ -190,7 +190,7 @@ pub fn documented_parse_error_handler() -> impl DocParserExt<Token, ast::Stateme
         .example("await fetchData() onFail(err) { log(err); return Err(\"Failed to fetch data\") }")
         .example("processInput() onFail { return Ok(defaultValue) }")
         .example("validateUser() onFail(error) { rethrow }")
-        .related_parser("documented_parse_statement")
+        .related_parser("parse_statement")
         .build();
 
     document(parser, doc)
@@ -209,7 +209,7 @@ pub fn documented_parse_emit_statement() -> impl DocParserExt<Token, ast::Statem
         .example("emit DataReceived(data)")
         .example("emit RequestApproval(amount: payment.total) to manager")
         .example("emit Notification(message: \"Process complete\")")
-        .related_parser("documented_parse_statement")
+        .related_parser("parse_statement")
         .build();
 
     document(parser, doc)
