@@ -271,6 +271,33 @@ impl ApiClient {
         .await
     }
 
+    // Documentation endpoints
+
+    /// Get documentation map
+    pub async fn get_documentation_map(&self) -> ApiResult<Value> {
+        self.request(reqwest::Method::GET, "/api/v1/docs/dsl/map", None::<&()>)
+            .await
+    }
+
+    /// Export documentation
+    pub async fn export_documentation(
+        &self,
+        format: &str,
+        include_version: bool,
+    ) -> ApiResult<Value> {
+        let request = serde_json::json!({
+            "format": format,
+            "include_version": include_version
+        });
+
+        self.request(
+            reqwest::Method::POST,
+            "/api/v1/docs/dsl/export",
+            Some(&request),
+        )
+        .await
+    }
+
     // Utility functions
 
     pub async fn health_check(&self) -> ApiResult<Value> {
@@ -578,5 +605,90 @@ mod tests {
         // Verify
         assert_eq!(json["name"], "test");
         assert_eq!(json["value"], 42);
+    }
+
+    #[tokio::test]
+    async fn test_get_documentation_map() {
+        // Create a mock server
+        let mut server = mockito::Server::new_async().await;
+
+        let mock_response = serde_json::json!({
+            "version": "1.0.0",
+            "categories": ["Expression", "Statement", "Handler"],
+            "parsers_by_category": {
+                "Expression": ["parse_binary_expression", "parse_think"],
+                "Statement": ["parse_if_statement"],
+                "Handler": ["parse_observe_handler"]
+            }
+        })
+        .to_string();
+
+        // Setup mock
+        let _m = server
+            .mock("GET", "/api/v1/docs/dsl/map")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(&mock_response)
+            .create_async()
+            .await;
+
+        // Test API client
+        let client = create_test_client(&server);
+        let response = client.get_documentation_map().await.unwrap();
+
+        // Verify response
+        assert_eq!(response["version"], "1.0.0");
+        assert_eq!(response["categories"].as_array().unwrap().len(), 3);
+        assert!(
+            response["parsers_by_category"]
+                .as_object()
+                .unwrap()
+                .contains_key("Expression")
+        );
+        assert_eq!(
+            response["parsers_by_category"]["Expression"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn test_export_documentation() {
+        // Create a mock server
+        let mut server = mockito::Server::new_async().await;
+
+        let mock_response = serde_json::json!({
+            "format": "markdown",
+            "content": "# Documentation",
+            "version": "1.0.0"
+        })
+        .to_string();
+
+        // Setup mock
+        let _m = server
+            .mock("POST", "/api/v1/docs/dsl/export")
+            .match_header("content-type", "application/json")
+            .match_body("{\"format\":\"markdown\",\"include_version\":true}")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(&mock_response)
+            .create_async()
+            .await;
+
+        // Test API client
+        let client = create_test_client(&server);
+        let response = client.export_documentation("markdown", true).await.unwrap();
+
+        // Verify response
+        assert_eq!(response["format"], "markdown");
+        assert!(
+            response["content"]
+                .as_str()
+                .unwrap()
+                .contains("# Documentation")
+        );
+        assert_eq!(response["version"], "1.0.0");
     }
 }

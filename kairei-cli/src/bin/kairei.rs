@@ -58,9 +58,9 @@ struct Cli {
     #[arg(long, short = 'd', default_value = ".kairei", global = true)]
     credentials_dir: Option<String>,
 
-    /// Output format (json, yaml, table)
+    /// Format (json, yaml, table)
     #[arg(long, default_value = "json", global = true)]
-    output: String,
+    format: String,
 }
 
 #[derive(Subcommand)]
@@ -93,6 +93,12 @@ enum Commands {
     Event {
         #[command(subcommand)]
         command: EventCommands,
+    },
+
+    /// Documentation commands
+    Doc {
+        #[command(subcommand)]
+        command: DocCommands,
     },
 
     /// Manage API credentials
@@ -316,6 +322,30 @@ enum EventCommands {
         #[arg(short, long)]
         file: PathBuf,
     },
+}
+
+#[derive(Subcommand)]
+enum DocCommands {
+    /// Get documentation map
+    Map,
+
+    /// Export documentation
+    Export(DocExportArgs),
+}
+
+#[derive(Parser)]
+struct DocExportArgs {
+    /// Output format (markdown, json)
+    #[arg(short, long, default_value = "markdown")]
+    format: String,
+
+    /// Include version information
+    #[arg(long, default_value = "true")]
+    version: bool,
+
+    /// Output file (if not specified, prints to stdout)
+    #[arg(short = 'o', long)]
+    output_file: Option<PathBuf>,
 }
 
 async fn format_file(args: &FmtArgs) -> Result<(), Error> {
@@ -709,6 +739,79 @@ async fn handle_event_commands(cmd: &EventCommands, cli: &Cli) -> Result<(), Err
     Ok(())
 }
 
+async fn handle_doc_commands(cmd: &DocCommands, cli: &Cli) -> Result<(), Error> {
+    let client = get_api_client(cli);
+
+    match cmd {
+        DocCommands::Map => {
+            let response = client
+                .get_documentation_map()
+                .await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+
+            println!("Documentation Map (API Version: {})", response["version"]);
+            println!("Available Categories:");
+
+            if let Some(categories) = response["categories"].as_array() {
+                for category in categories {
+                    if let Some(category_str) = category.as_str() {
+                        println!("  - {}", category_str);
+                        if let Some(parsers) =
+                            response["parsers_by_category"][category_str].as_array()
+                        {
+                            for parser in parsers {
+                                if let Some(parser_str) = parser.as_str() {
+                                    println!("    - {}", parser_str);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        }
+
+        DocCommands::Export(args) => {
+            let response = client
+                .export_documentation(&args.format, args.version)
+                .await
+                .map_err(|e| Error::Internal(format!("API error: {}", e)))?;
+
+            if let Some(output_path) = &args.output_file {
+                // Write to file
+                if let Some(content) = response["content"].as_str() {
+                    std::fs::write(output_path, content).map_err(|e| {
+                        Error::Internal(format!("Failed to write output file: {}", e))
+                    })?;
+
+                    println!(
+                        "Documentation exported to {} in {} format (API Version: {})",
+                        output_path.to_string_lossy(),
+                        response["format"].as_str().unwrap_or("unknown"),
+                        response["version"].as_str().unwrap_or("unknown")
+                    );
+                } else {
+                    return Err(Error::Internal(
+                        "Content field not found in response".to_string(),
+                    ));
+                }
+            } else {
+                // Print to stdout
+                if let Some(content) = response["content"].as_str() {
+                    println!("{}", content);
+                } else {
+                    return Err(Error::Internal(
+                        "Content field not found in response".to_string(),
+                    ));
+                }
+            }
+
+            Ok(())
+        }
+    }
+}
+
 async fn handle_login_command(args: &LoginArgs) -> Result<(), Error> {
     // Start with existing credentials or defaults
     let credentials = Credentials::initialize(
@@ -752,6 +855,7 @@ async fn run(cli: &Cli) -> Result<(), Error> {
         Commands::System { command } => handle_system_commands(command, cli).await,
         Commands::Agent { command } => handle_agent_commands(command, cli).await,
         Commands::Event { command } => handle_event_commands(command, cli).await,
+        Commands::Doc { command } => handle_doc_commands(command, cli).await,
         Commands::Login(args) => handle_login_command(args).await,
     }
 }

@@ -141,3 +141,97 @@ async fn test_error_handling() {
         .stderr(predicate::str::contains("API error:"))
         .stderr(predicate::str::contains("System not found"));
 }
+
+#[tokio::test]
+async fn test_doc_map_command() {
+    // Mock API response
+    let mock_response = serde_json::json!({
+        "version": "1.0.0",
+        "categories": ["Expression", "Statement", "Handler"],
+        "parsers_by_category": {
+            "Expression": ["parse_binary_expression", "parse_think"],
+            "Statement": ["parse_if_statement"],
+            "Handler": ["parse_observe_handler"]
+        }
+    })
+    .to_string();
+
+    // Setup mock server
+    let mut server = mockito::Server::new_async().await;
+
+    let _m = server
+        .mock("GET", "/api/v1/docs/dsl/map")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(&mock_response)
+        .create_async()
+        .await;
+
+    // Run doc map command
+    let assert = kairei_cmd()
+        .arg("-u")
+        .arg(server.url())
+        .arg("-k")
+        .arg("test-key")
+        .arg("doc")
+        .arg("map")
+        .assert();
+
+    // Should run successfully
+    assert
+        .success()
+        .stdout(predicate::str::contains("Documentation Map"))
+        .stdout(predicate::str::contains("Expression"))
+        .stdout(predicate::str::contains("parse_binary_expression"));
+}
+
+#[tokio::test]
+async fn test_doc_export_command() {
+    // Mock API response
+    let mock_response = serde_json::json!({
+        "format": "markdown",
+        "content": "# Documentation",
+        "version": "1.0.0"
+    })
+    .to_string();
+
+    // Setup mock server
+    let mut server = mockito::Server::new_async().await;
+
+    let _m = server
+        .mock("POST", "/api/v1/docs/dsl/export")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(&mock_response)
+        .create_async()
+        .await;
+
+    // Create a temporary file path
+    let temp_dir = std::env::temp_dir();
+    let output_file = temp_dir.join("test_doc_export.md");
+    let output_path = output_file.to_str().unwrap();
+
+    // Run doc export command
+    let assert = kairei_cmd()
+        .arg("-u")
+        .arg(server.url())
+        .arg("-k")
+        .arg("test-key")
+        .arg("doc")
+        .arg("export")
+        .arg("--format")
+        .arg("markdown")
+        .arg("--output-file")
+        .arg(output_path)
+        .assert();
+
+    // Should run successfully
+    assert
+        .success()
+        .stdout(predicate::str::contains("Documentation exported to"));
+
+    // Clean up the temporary file
+    if output_file.exists() {
+        std::fs::remove_file(output_file).unwrap();
+    }
+}
