@@ -21,10 +21,16 @@ pub use common::*;
 pub mod agent;
 /// Documentation for answer handler parsers
 pub mod doc_answer_handlers;
+/// Documentation for event handler parsers
+pub mod doc_event_handlers;
 /// Documentation for expression parsers
 pub mod doc_expression;
+/// Documentation for lifecycle handler parsers
+pub mod doc_lifecycle_handlers;
 /// Documentation for statement parsers
 pub mod doc_statement;
+/// Documentation for type parsers
+pub mod doc_types;
 /// Parsers for expressions in the KAIREI DSL
 pub mod expression;
 /// Parsers for event handlers

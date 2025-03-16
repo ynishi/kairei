@@ -89,3 +89,53 @@ The `.claude_workspace/` directory is a dedicated workspace for Claude to:
 ## GitHub CLI Commands
 ### PR and Issue Management
 - use `gh pr`, `gh issue` and so on, instead of `git` command
+
+## Guidelines for Creating Agent-Friendly Issues
+When creating issues that will be implemented by AI coding agents (without extensive context understanding or human collaboration), follow these guidelines to ensure successful implementation:
+
+### Essential Components of an Agent-Ready Issue
+1. **Detailed Task Description**:
+   - Clear statement of what needs to be implemented
+   - Context about where the implementation fits in the project
+   - References to similar implementations or patterns to follow (PRs, files)
+
+2. **Step-by-Step Procedure**:
+   - Explicit file paths for all files to be created or modified
+   - Complete code snippets or templates showing the expected implementation
+   - Clear instructions for verification (tests, formatting, linting)
+   - Explicit Git workflow instructions (branching, commit messages)
+
+3. **Self-Contained Context**:
+   - All necessary information within the issue itself
+   - Minimal assumptions about project-specific knowledge
+   - Examples of similar, successful implementations
+
+### Example Structure
+```
+## Task description
+Implement [feature] following the pattern in PR #XXX. This involves creating [file] in [directory] with [functionality].
+
+## Procedure (all steps, including verification strategy, git strategy if any)
+1. Create file at [exact path] with [exact content]
+2. Modify [exact path] to add [exact line]
+3. Create test at [exact path] with [exact content]
+4. Run [exact commands] to verify
+5. Commit with message: "[exact message]"
+
+## Details
+Additional information about implementation, edge cases, etc.
+```
+
+### What to Avoid
+- Vague descriptions requiring deep project understanding
+- References to undocumented patterns or conventions
+- Assuming knowledge of project-specific workflows
+- Open-ended design decisions without clear guidance
+
+### When to Use Human Collaboration Instead
+Issues requiring any of the following should involve human collaboration:
+- Complex architectural decisions
+- Refactoring that spans multiple systems
+- Security-critical implementations
+- Features requiring subjective design choices
+- Implementations without clear precedents in the codebase
