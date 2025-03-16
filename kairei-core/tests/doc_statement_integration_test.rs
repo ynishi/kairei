@@ -62,6 +62,6 @@ fn test_collecting_statement_docs() {
         }
     }
 
-    // Skip validation for now as we're focusing on documentation structure
-    // assert!(validation_issues.is_empty());
+    // Now validate there are no issues
+    assert!(validation_issues.is_empty());
 }
