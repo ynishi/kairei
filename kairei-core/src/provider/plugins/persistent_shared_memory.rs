@@ -389,7 +389,7 @@ impl PersistentSharedMemoryPlugin {
                     .await;
             }
         }
-        
+
         result
     }
 
@@ -1124,7 +1124,7 @@ mod tests {
     async fn test_sync_failure() {
         // Create a mock backend that fails only for save operations but not for set
         let mock_backend = Arc::new(MockStorageBackend::new());
-        
+
         // Create a plugin with the mock backend
         let mut config = PersistentSharedMemoryConfig::default();
         config.persistence.sync_interval = Duration::from_secs(3600); // Long interval to avoid auto-sync
@@ -1135,7 +1135,7 @@ mod tests {
 
         // Add some data
         plugin.set("test_key", json!("test_value")).await.unwrap();
-        
+
         // Now make the backend fail for the sync operation
         let mut backend = MockStorageBackend::new();
         backend.should_fail = true;
@@ -1143,7 +1143,10 @@ mod tests {
 
         // Call sync and expect failure
         let result = plugin.sync().await;
-        assert!(result.is_err(), "Expected sync to fail with mock backend that should fail");
+        assert!(
+            result.is_err(),
+            "Expected sync to fail with mock backend that should fail"
+        );
     }
 
     #[tokio::test]
@@ -1221,7 +1224,7 @@ mod tests {
         config.persistence.auto_save = false; // Disable auto-save to avoid interference
 
         let mut plugin = PersistentSharedMemoryPlugin::new(config).await;
-        
+
         // Manually trigger the background sync task to start
         plugin.stop_sync_task().await; // Ensure no existing task
         plugin.backend = mock_backend.clone_backend();
@@ -1238,7 +1241,11 @@ mod tests {
 
         // Verify that save was called at least once
         let save_count = mock_backend.save_called_count().await;
-        assert!(save_count >= 1, "Expected at least one save call, got {}", save_count);
+        assert!(
+            save_count >= 1,
+            "Expected at least one save call, got {}",
+            save_count
+        );
 
         // Stop the sync task
         plugin.stop_sync_task().await;
