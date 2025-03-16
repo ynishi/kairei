@@ -992,11 +992,7 @@ mod tests {
             }
         }
 
-        fn with_failure() -> Self {
-            let mut backend = Self::new();
-            backend.should_fail = true;
-            backend
-        }
+        // Removed unused method
 
         async fn save_called_count(&self) -> usize {
             *self.save_called.read().await
