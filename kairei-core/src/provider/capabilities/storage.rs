@@ -97,8 +97,11 @@ pub trait StorageBackend: Send + Sync {
     ///
     /// - If the namespace doesn't exist, an empty HashMap should be returned
     /// - Implementations should handle deserialization of stored data
-    async fn load(&self, namespace: &str) -> Result<HashMap<String, ValueWithMetadata>, StorageError>;
-    
+    async fn load(
+        &self,
+        namespace: &str,
+    ) -> Result<HashMap<String, ValueWithMetadata>, StorageError>;
+
     /// Save all data for a namespace
     ///
     /// # Arguments
@@ -113,8 +116,12 @@ pub trait StorageBackend: Send + Sync {
     ///
     /// - If the namespace already exists, it should be overwritten
     /// - Implementations should handle serialization of data
-    async fn save(&self, namespace: &str, data: &HashMap<String, ValueWithMetadata>) -> Result<(), StorageError>;
-    
+    async fn save(
+        &self,
+        namespace: &str,
+        data: &HashMap<String, ValueWithMetadata>,
+    ) -> Result<(), StorageError>;
+
     /// Save a single key
     ///
     /// # Arguments
@@ -131,8 +138,13 @@ pub trait StorageBackend: Send + Sync {
     /// - If the key already exists, it should be overwritten
     /// - If the namespace doesn't exist, it should be created
     /// - This method should be more efficient than calling `save` for a single key
-    async fn save_key(&self, namespace: &str, key: &str, value: &ValueWithMetadata) -> Result<(), StorageError>;
-    
+    async fn save_key(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &ValueWithMetadata,
+    ) -> Result<(), StorageError>;
+
     /// Delete a single key
     ///
     /// # Arguments
@@ -148,7 +160,7 @@ pub trait StorageBackend: Send + Sync {
     /// - If the key doesn't exist, this should not be considered an error
     /// - This operation should not affect other keys in the namespace
     async fn delete_key(&self, namespace: &str, key: &str) -> Result<(), StorageError>;
-    
+
     /// Check if the backend is available
     ///
     /// # Returns
@@ -171,31 +183,31 @@ pub trait StorageBackend: Send + Sync {
 pub enum StorageError {
     #[error("File not found: {0}")]
     FileNotFound(String),
-    
+
     #[error("Invalid path: {0}")]
     InvalidPath(String),
-    
+
     #[error("Access denied: {0}")]
     AccessDenied(String),
-    
+
     #[error("Storage error: {0}")]
     StorageError(String),
-    
+
     #[error("Serialization error: {0}")]
     SerializationError(String),
-    
+
     #[error("Deserialization error: {0}")]
     DeserializationError(String),
-    
+
     #[error("Sync error: {0}")]
     SyncError(String),
-    
+
     #[error("Network error: {0}")]
     NetworkError(String),
-    
+
     #[error("Authentication error: {0}")]
     AuthenticationError(String),
-    
+
     #[error("Configuration error: {0}")]
     ConfigurationError(String),
 }
@@ -209,25 +221,42 @@ mod tests {
 
     #[async_trait]
     impl StorageBackend for MockStorageBackend {
-        async fn load(&self, _namespace: &str) -> Result<HashMap<String, ValueWithMetadata>, StorageError> {
+        async fn load(
+            &self,
+            _namespace: &str,
+        ) -> Result<HashMap<String, ValueWithMetadata>, StorageError> {
             todo!()
         }
-        
-        async fn save(&self, _namespace: &str, _data: &HashMap<String, ValueWithMetadata>) -> Result<(), StorageError> {
+
+        async fn save(
+            &self,
+            _namespace: &str,
+            _data: &HashMap<String, ValueWithMetadata>,
+        ) -> Result<(), StorageError> {
             todo!()
         }
-        
-        async fn save_key(&self, _namespace: &str, _key: &str, _value: &ValueWithMetadata) -> Result<(), StorageError> {
+
+        async fn save_key(
+            &self,
+            _namespace: &str,
+            _key: &str,
+            _value: &ValueWithMetadata,
+        ) -> Result<(), StorageError> {
             todo!()
         }
-        
+
         async fn delete_key(&self, _namespace: &str, _key: &str) -> Result<(), StorageError> {
             todo!()
         }
-        
+
         async fn is_available(&self) -> bool {
             todo!()
         }
+    }
+
+    #[test]
+    fn test_init_mock_storage_backend() {
+        let _backend = MockStorageBackend {};
     }
 
     #[test]

@@ -58,8 +58,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::provider::plugin::ProviderPlugin;
 use crate::provider::capabilities::storage::StorageError;
+use crate::provider::plugin::ProviderPlugin;
 
 /// Shared Memory capability for Provider Plugins
 ///
