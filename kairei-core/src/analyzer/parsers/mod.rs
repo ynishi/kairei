@@ -29,6 +29,8 @@ pub mod doc_expression;
 pub mod doc_lifecycle_handlers;
 /// Documentation for statement parsers
 pub mod doc_statement;
+/// Documentation for system handler parsers
+pub mod doc_system_handlers;
 /// Documentation for type parsers
 pub mod doc_types;
 /// Parsers for expressions in the KAIREI DSL
