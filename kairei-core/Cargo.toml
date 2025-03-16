@@ -30,8 +30,9 @@ serde_with = {version = "3.12.0", features = ["chrono"]}
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 syn = { version = "2.0.93", features = ["full"] }
+tempfile = "3.19.0"
 thiserror = "2.0.9"
-tokio = { version = "1.42.0", features = ["full"] }
+tokio = { version = "1.42.0", features = ["fs", "full", "io-util"] }
 tokio-stream = { version = "0.1.17", features = ["full"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
@@ -42,6 +43,7 @@ uuid = { version = "1.11.0", features = ["v4"] }
 pretty_assertions = "1.4.1"
 ctor = "0.2.9"
 proptest = "1.6.0"
+tempfile = "3.19.0"
 
 [[bench]]
 name = "benchmark"

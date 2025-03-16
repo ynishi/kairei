@@ -4,6 +4,7 @@ pub mod persistent_shared_memory;
 pub mod policy;
 pub mod shared_memory;
 pub mod shared_memory_adapter;
+pub mod storage;
 pub mod web_search_serper;
 
 #[cfg(test)]
