@@ -13,9 +13,18 @@ use std::any::Any;
 use std::marker::PhantomData;
 
 /// Custom filter combinator that filters the output of a parser based on a predicate
+///
+/// This struct is a key innovation in our approach to documenting statement parsers.
+/// Instead of duplicating the parsing logic for each statement type, we use the main
+/// statement parser and filter its results based on the statement type we want.
+///
+/// This approach has several advantages:
+/// 1. We avoid code duplication and maintain a single source of truth for parsing logic
+/// 2. We ensure that our documentation matches the actual parsing behavior
+/// 3. We can easily add documentation for new statement types without modifying the parser code
 struct FilterParser<P, F> {
-    parser: P,
-    predicate: F,
+    parser: P,    // The underlying parser to filter
+    predicate: F, // The predicate function that determines which outputs to accept
 }
 
 impl<P, F, I, O> Parser<I, O> for FilterParser<P, F>
@@ -24,19 +33,29 @@ where
     F: Fn(&O) -> bool,
 {
     fn parse(&self, input: &[I], pos: usize) -> ParseResult<O> {
+        // First, try to parse using the underlying parser
         match self.parser.parse(input, pos) {
+            // If parsing succeeds and the predicate is satisfied, return the result
             Ok((next_pos, output)) if (self.predicate)(&output) => Ok((next_pos, output)),
+
+            // If parsing succeeds but the predicate fails, return a failure
+            // This is how we filter for specific statement types
             Ok(_) => Err(ParseError::Failure {
                 message: "Predicate failed".to_string(),
                 position: pos,
                 context: None,
             }),
+
+            // If parsing fails, propagate the error
             Err(e) => Err(e),
         }
     }
 }
 
 /// Helper function to create a filter parser
+///
+/// This function makes it easier to create FilterParser instances
+/// by handling the type inference and construction.
 fn filter_parser<P, F, I, O>(parser: P, predicate: F) -> FilterParser<P, F>
 where
     P: Parser<I, O>,
@@ -197,10 +216,21 @@ pub fn documented_parse_emit_statement() -> impl DocParserExt<Token, ast::Statem
 }
 
 /// Documentation provider for statement parsers
+///
+/// This struct implements the DocumentationProvider trait to provide
+/// documentation for all statement parsers in the KAIREI DSL.
+///
+/// It aggregates all the documented statement parsers and converts them
+/// to a common type using the as_any_doc_parser helper function.
+/// This allows the documentation collection system to gather and organize
+/// documentation from different parser types.
 pub struct StatementDocProvider;
 
 impl DocumentationProvider for StatementDocProvider {
     fn provide_documented_parsers(&self) -> Vec<Box<dyn DocParserExt<Token, Box<dyn Any>>>> {
+        // Return a vector of all documented statement parsers
+        // Each parser is converted to the common Box<dyn DocParserExt<Token, Box<dyn Any>>> type
+        // using the as_any_doc_parser helper function
         vec![
             as_any_doc_parser(documented_parse_statement()),
             as_any_doc_parser(documented_parse_assignment_statement()),
@@ -215,13 +245,26 @@ impl DocumentationProvider for StatementDocProvider {
 }
 
 /// Helper function to convert `DocParserExt<Token, T>` to `DocParserExt<Token, Box<dyn Any>>`
+///
+/// This function is a critical part of the documentation system that enables type erasure
+/// for different parser output types. It allows us to store parsers with different output types
+/// in the same collection by converting them to a common type (Box<dyn Any>).
+///
+/// The type conversion mechanism works as follows:
+/// 1. We create a wrapper struct (AnyWrapper) that holds the original parser
+/// 2. We implement Parser for this wrapper to handle the type conversion during parsing
+/// 3. We implement DocParserExt for the wrapper to preserve documentation
+/// 4. The wrapper converts the specific output type O to Box<dyn Any> at runtime
+///
+/// This approach maintains both the parsing functionality and the documentation
+/// while allowing heterogeneous parser types to be stored in the same collection.
 fn as_any_doc_parser<O: 'static>(
     parser: impl DocParserExt<Token, O> + 'static,
 ) -> Box<dyn DocParserExt<Token, Box<dyn Any>>> {
     // Create a wrapper struct that will handle the type conversion
     struct AnyWrapper<P, O: 'static> {
         parser: P,
-        _phantom: PhantomData<O>,
+        _phantom: PhantomData<O>, // Needed to track the original output type O
     }
 
     // Implement Parser for the wrapper
@@ -234,8 +277,12 @@ fn as_any_doc_parser<O: 'static>(
             match self.parser.parse(input, pos) {
                 Ok((next_pos, result)) => {
                     // Convert the result to Box<dyn Any>
+                    // This is where the type erasure happens - we box the specific type O
+                    // and cast it to the trait object Box<dyn Any>
                     let boxed_result = Box::new(result) as Box<dyn Any>;
+
                     // Return the result with the correct types - ParseResult is (usize, O)
+                    // but we've converted O to Box<dyn Any>
                     Ok((next_pos, boxed_result))
                 }
                 Err(err) => Err(err),
@@ -244,16 +291,19 @@ fn as_any_doc_parser<O: 'static>(
     }
 
     // Implement DocParserExt for the wrapper
+    // This preserves the documentation from the original parser
     impl<P, O: 'static> DocParserExt<Token, Box<dyn Any>> for AnyWrapper<P, O>
     where
         P: DocParserExt<Token, O>,
     {
         fn documentation(&self) -> &crate::analyzer::doc_parser::ParserDocumentation {
+            // Simply delegate to the original parser's documentation
             self.parser.documentation()
         }
     }
 
     // Return the boxed wrapper
+    // This completes the type conversion process
     Box::new(AnyWrapper {
         parser,
         _phantom: PhantomData,
