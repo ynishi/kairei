@@ -178,7 +178,7 @@ impl DocumentationProvider for ExpressionDocProvider {
     }
 }
 
-/// Helper function to convert DocParserExt<Token, T> to DocParserExt<Token, Box<dyn Any>>
+/// Helper function to convert `DocParserExt<Token, T>` to `DocParserExt<Token, Box<dyn Any>>`
 fn as_any_doc_parser<O: 'static>(
     parser: impl DocParserExt<Token, O> + 'static,
 ) -> Box<dyn DocParserExt<Token, Box<dyn Any>>> {
