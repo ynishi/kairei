@@ -304,10 +304,14 @@ impl PersistentSharedMemoryPlugin {
         }));
     }
 
-    /// Stop the background sync task
+    /// Stops the background synchronization task
     ///
     /// This method stops the background sync task by sending a cancellation signal
-    /// and waiting for the task to complete.
+    /// and waiting for the task to complete. It is used internally for cleanup
+    /// during shutdown or when reconfiguring the plugin.
+    ///
+    /// # Note
+    /// This method is primarily for internal use during plugin lifecycle management.
     #[allow(dead_code)]
     async fn stop_sync_task(&mut self) {
         // Send cancellation signal if the task is running
@@ -329,23 +333,30 @@ impl PersistentSharedMemoryPlugin {
         self.event_bus = Some(event_bus);
     }
 
-    /// Explicitly sync with storage backend
+    /// Synchronize in-memory cache with storage backend
     ///
-    /// This method syncs the in-memory cache with the storage backend.
-    /// It saves all data in the cache to the storage backend.
+    /// This method manually triggers synchronization of all data in the in-memory cache
+    /// with the storage backend. It emits events for the start, completion, and failure
+    /// of the synchronization process.
     ///
     /// # Returns
-    /// * `Ok(())` - If sync succeeds
-    /// * `Err(SharedMemoryError)` - If sync fails
+    /// * `Ok(())` - If synchronization succeeds
+    /// * `Err(SharedMemoryError)` - If synchronization fails
     pub async fn sync(&self) -> Result<(), SharedMemoryError> {
         // Emit sync started event
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
             let _ = event_bus
                 .publish(Event {
                     event_type: EventType::Custom(
                         PersistentMemoryEventType::SyncStarted.to_string(),
                     ),
-                    parameters: HashMap::new(),
+                    parameters: params,
                 })
                 .await;
         }
@@ -361,12 +372,18 @@ impl PersistentSharedMemoryPlugin {
 
             // Emit sync completed event
             if let Some(ref event_bus) = self.event_bus {
+                let mut params = HashMap::new();
+                params.insert(
+                    "namespace".to_string(),
+                    crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+                );
+
                 let _ = event_bus
                     .publish(Event {
                         event_type: EventType::Custom(
                             PersistentMemoryEventType::SyncCompleted.to_string(),
                         ),
-                        parameters: HashMap::new(),
+                        parameters: params,
                     })
                     .await;
             }
@@ -374,6 +391,10 @@ impl PersistentSharedMemoryPlugin {
             // Emit sync failed event with error information
             if let Some(ref event_bus) = self.event_bus {
                 let mut params = HashMap::new();
+                params.insert(
+                    "namespace".to_string(),
+                    crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+                );
                 params.insert(
                     "error".to_string(),
                     crate::event::event_bus::Value::String(format!("{}", err)),
@@ -404,12 +425,18 @@ impl PersistentSharedMemoryPlugin {
     pub async fn load(&self) -> Result<(), SharedMemoryError> {
         // Emit load started event
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
             let _ = event_bus
                 .publish(Event {
                     event_type: EventType::Custom(
                         PersistentMemoryEventType::LoadStarted.to_string(),
                     ),
-                    parameters: HashMap::new(),
+                    parameters: params,
                 })
                 .await;
         }
@@ -433,6 +460,20 @@ impl PersistentSharedMemoryPlugin {
 
         // Emit appropriate event based on result
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
+            // Add error information if the operation failed
+            if let Err(ref err) = result {
+                params.insert(
+                    "error".to_string(),
+                    crate::event::event_bus::Value::String(format!("{}", err)),
+                );
+            }
+
             let event_type = if result.is_ok() {
                 EventType::Custom(PersistentMemoryEventType::LoadCompleted.to_string())
             } else {
@@ -442,7 +483,7 @@ impl PersistentSharedMemoryPlugin {
             let _ = event_bus
                 .publish(Event {
                     event_type,
-                    parameters: HashMap::new(),
+                    parameters: params,
                 })
                 .await;
         }
@@ -460,12 +501,18 @@ impl PersistentSharedMemoryPlugin {
     pub async fn save(&self) -> Result<(), SharedMemoryError> {
         // Emit save started event
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
             let _ = event_bus
                 .publish(Event {
                     event_type: EventType::Custom(
                         PersistentMemoryEventType::SaveStarted.to_string(),
                     ),
-                    parameters: HashMap::new(),
+                    parameters: params,
                 })
                 .await;
         }
@@ -486,6 +533,20 @@ impl PersistentSharedMemoryPlugin {
 
         // Emit appropriate event based on result
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
+            // Add error information if the operation failed
+            if let Err(ref err) = result {
+                params.insert(
+                    "error".to_string(),
+                    crate::event::event_bus::Value::String(format!("{}", err)),
+                );
+            }
+
             let event_type = if result.is_ok() {
                 EventType::Custom(PersistentMemoryEventType::SaveCompleted.to_string())
             } else {
@@ -495,7 +556,7 @@ impl PersistentSharedMemoryPlugin {
             let _ = event_bus
                 .publish(Event {
                     event_type,
-                    parameters: HashMap::new(),
+                    parameters: params,
                 })
                 .await;
         }
