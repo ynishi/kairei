@@ -79,7 +79,7 @@ pub fn parse_answer() -> impl Parser<Token, ast::AnswerDef> {
 ///     // Handler implementation
 /// }
 /// ```
-fn parse_request_handler() -> impl Parser<Token, ast::RequestHandler> {
+pub fn parse_request_handler() -> impl Parser<Token, ast::RequestHandler> {
     with_context(
         map(
             tuple6(
@@ -115,7 +115,7 @@ fn parse_request_handler() -> impl Parser<Token, ast::RequestHandler> {
 /// action.UpdateProfile
 /// request CustomOperation
 /// ```
-fn parse_request_type() -> impl Parser<Token, ast::RequestType> {
+pub fn parse_request_type() -> impl Parser<Token, ast::RequestType> {
     with_context(
         choice(vec![
             Box::new(map(
@@ -161,7 +161,7 @@ fn parse_request() -> impl Parser<Token, Token> {
 ///     latency: 1000     // 1 second response time limit
 /// }
 /// ```
-fn parse_constraints() -> impl Parser<Token, ast::Constraints> {
+pub fn parse_constraints() -> impl Parser<Token, ast::Constraints> {
     with_context(
         map(
             preceded(

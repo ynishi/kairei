@@ -19,6 +19,8 @@ pub use common::*;
 
 /// Parsers for MicroAgent DSL syntax
 pub mod agent;
+/// Documentation for answer handler parsers
+pub mod doc_answer_handlers;
 /// Documentation for expression parsers
 pub mod doc_expression;
 /// Documentation for statement parsers
