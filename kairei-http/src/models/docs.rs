@@ -82,3 +82,64 @@ pub struct DocumentationErrorResponse {
     /// Additional details about the error
     pub details: Option<String>,
 }
+
+/// Response containing a map of available documentation
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DocumentationMapResponse {
+    /// API version (matches kairei-core version)
+    pub version: String,
+    /// Available parser categories
+    pub categories: Vec<String>,
+    /// Parser names by category
+    pub parsers_by_category: HashMap<String, Vec<String>>,
+}
+
+/// Request to export documentation
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ExportDocumentationRequest {
+    /// Export format (json, markdown)
+    #[schema(example = "json", default = "json")]
+    pub format: String,
+
+    /// Include version information
+    #[schema(example = "true", default = "true")]
+    pub include_version: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum ExportFormat {
+    Json,
+    Markdown,
+}
+
+impl Default for ExportFormat {
+    fn default() -> Self {
+        Self::Json
+    }
+}
+
+impl TryFrom<&str> for ExportFormat {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "json" => Ok(Self::Json),
+            "markdown" => Ok(Self::Markdown),
+            "md" => Ok(Self::Markdown),
+            _ => Err(format!("Invalid export format: {}", value)),
+        }
+    }
+}
+
+/// Response from documentation export
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ExportDocumentationResponse {
+    /// Export format
+    pub format: String,
+
+    /// Documentation content
+    pub content: String,
+
+    /// API version
+    pub version: String,
+}

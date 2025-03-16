@@ -1,8 +1,10 @@
 //! Handlers for DSL documentation endpoints.
 
+use crate::models::ExportFormat;
 use crate::models::docs::{
-    CategoryDocumentation, DocumentationErrorResponse, DocumentationQueryParams,
-    DocumentationResponse, ParserDocumentationResponse,
+    CategoryDocumentation, DocumentationErrorResponse, DocumentationMapResponse,
+    DocumentationQueryParams, DocumentationResponse, ExportDocumentationRequest,
+    ExportDocumentationResponse, ParserDocumentationResponse,
 };
 use crate::server::AppState;
 use axum::Json;
@@ -223,6 +225,120 @@ pub async fn get_parser_documentation(
                 }
                 None => Err(StatusCode::NOT_FOUND),
             }
+        }
+        Err(e) => {
+            warn!("Failed to get documentation: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// Get a map of available documentation
+///
+/// Returns a map of available documentation categories and parsers.
+#[utoipa::path(
+    get,
+    path = "/docs/dsl/map",
+    responses(
+        (status = 200, description = "Documentation map retrieved successfully", body = DocumentationMapResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error", body = DocumentationErrorResponse)
+    )
+)]
+pub async fn get_documentation_map(
+    State(state): State<AppState>,
+) -> Result<Json<DocumentationMapResponse>, StatusCode> {
+    debug!("Getting documentation map");
+
+    match get_documentation_from_system(&state).await {
+        Ok(doc_collection) => {
+            let mut parsers_by_category = HashMap::new();
+
+            for category in doc_collection.get_categories() {
+                let category_name = category.to_string();
+                let parsers = doc_collection.get_by_category(category);
+                let parser_names = parsers.iter().map(|p| p.name.clone()).collect();
+
+                parsers_by_category.insert(category_name.clone(), parser_names);
+            }
+
+            let response = DocumentationMapResponse {
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                categories: doc_collection
+                    .get_categories()
+                    .iter()
+                    .map(|c| c.to_string())
+                    .collect(),
+                parsers_by_category,
+            };
+
+            Ok(Json(response))
+        }
+        Err(e) => {
+            warn!("Failed to get documentation: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// Export documentation in the specified format
+///
+/// Exports documentation in the specified format (markdown or json).
+#[utoipa::path(
+    post,
+    path = "/docs/dsl/export",
+    request_body = ExportDocumentationRequest,
+    responses(
+        (status = 200, description = "Documentation exported successfully", body = ExportDocumentationResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error", body = DocumentationErrorResponse)
+    )
+)]
+pub async fn export_documentation(
+    State(state): State<AppState>,
+    Json(request): Json<ExportDocumentationRequest>,
+) -> Result<Json<ExportDocumentationResponse>, StatusCode> {
+    debug!("Exporting documentation in format: {}", request.format);
+
+    match get_documentation_from_system(&state).await {
+        Ok(doc_collection) => {
+            let version = env!("CARGO_PKG_VERSION").to_string();
+
+            let format = ExportFormat::try_from(request.format.as_str()).unwrap_or_default();
+
+            let content = match format {
+                ExportFormat::Markdown => {
+                    let mut markdown = generate_markdown_documentation(&doc_collection);
+
+                    // Add version information if requested
+                    if request.include_version {
+                        let version_header =
+                            format!("# KAIREI DSL Documentation (v{})\n\n", version);
+                        markdown = version_header + &markdown[markdown.find('#').unwrap_or(0)..];
+                    }
+
+                    markdown
+                }
+                ExportFormat::Json => {
+                    let mut json_value = serde_json::to_value(&doc_collection).unwrap_or_default();
+
+                    // Add version information if requested
+                    if request.include_version && json_value.is_object() {
+                        json_value.as_object_mut().unwrap().insert(
+                            "version".to_string(),
+                            serde_json::Value::String(version.clone()),
+                        );
+                    }
+
+                    serde_json::to_string_pretty(&json_value).unwrap_or_default()
+                }
+            };
+
+            Ok(Json(ExportDocumentationResponse {
+                format: request.format,
+                content,
+                version,
+            }))
         }
         Err(e) => {
             warn!("Failed to get documentation: {}", e);

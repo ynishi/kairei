@@ -5,7 +5,8 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use kairei_http::{routes::api::v1::docs::routes as docs_routes, server::AppState};
+use kairei_http::{routes::api::v1::docs::routes, server::AppState};
+use serde_json::json;
 use tower::{Service, ServiceExt};
 
 // Create a test app with only the documentation routes for testing
@@ -15,7 +16,7 @@ fn create_test_app()
     let app_state = AppState::default();
     // Create a router with only docs routes, nested under /api/v1 to match our test paths
     Router::new()
-        .nest("/api/v1", docs_routes())
+        .nest("/api/v1", routes())
         .with_state(app_state)
         .into_service()
 }
@@ -129,4 +130,84 @@ async fn test_content_negotiation() {
     // Check content type
     let content_type = response.headers().get("content-type").unwrap();
     assert!(content_type.to_str().unwrap().contains("text/markdown"));
+}
+
+#[tokio::test]
+async fn test_get_documentation_map() {
+    // Create a request to get documentation map
+    let request = Request::builder()
+        .uri("/api/v1/docs/dsl/map")
+        .method("GET")
+        .header("content-type", "application/json")
+        .body(Body::empty())
+        .unwrap();
+
+    // Create a new app for this request and send it
+    let response = create_test_app().oneshot(request).await.unwrap();
+
+    // Check the response
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Get the response body
+    let body = axum::body::to_bytes(response.into_body(), 10000)
+        .await
+        .unwrap();
+    let response: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify the response structure
+    assert!(response.get("version").is_some());
+    assert!(response.get("categories").is_some());
+    assert!(response.get("parsers_by_category").is_some());
+}
+
+#[tokio::test]
+async fn test_export_documentation() {
+    // Create a request to export documentation
+    let request_body = json!({
+        "format": "markdown",
+        "include_version": true
+    });
+
+    let request = Request::builder()
+        .uri("/api/v1/docs/dsl/export")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+        .unwrap();
+
+    // Create a new app for this request and send it
+    let response = create_test_app().oneshot(request).await.unwrap();
+
+    // Check the response
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Get the response body
+    let body = axum::body::to_bytes(response.into_body(), 10000)
+        .await
+        .unwrap();
+    let response: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify the response structure
+    assert!(response.get("format").is_some());
+    assert!(response.get("content").is_some());
+    assert!(response.get("version").is_some());
+
+    // Test JSON format
+    let request_body = json!({
+        "format": "json",
+        "include_version": true
+    });
+
+    let request = Request::builder()
+        .uri("/api/v1/docs/dsl/export")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+        .unwrap();
+
+    // Create a new app for this request and send it
+    let response = create_test_app().oneshot(request).await.unwrap();
+
+    // Check the response
+    assert_eq!(response.status(), StatusCode::OK);
 }
