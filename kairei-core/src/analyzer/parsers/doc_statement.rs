@@ -22,6 +22,13 @@ use std::marker::PhantomData;
 /// 1. We avoid code duplication and maintain a single source of truth for parsing logic
 /// 2. We ensure that our documentation matches the actual parsing behavior
 /// 3. We can easily add documentation for new statement types without modifying the parser code
+///
+/// The FilterParser works by wrapping an existing parser and only accepting its output
+/// if it satisfies a predicate function. This allows us to reuse the main statement parser
+/// but filter for specific statement types (like assignments, if statements, etc.).
+///
+/// This design pattern is particularly valuable in a parser combinator system like ours,
+/// where we want to maintain the composability of parsers while adding specialized behavior.
 struct FilterParser<P, F> {
     parser: P,    // The underlying parser to filter
     predicate: F, // The predicate function that determines which outputs to accept
@@ -56,6 +63,14 @@ where
 ///
 /// This function makes it easier to create FilterParser instances
 /// by handling the type inference and construction.
+///
+/// It's used throughout this module to create parsers that filter
+/// the output of the main statement parser to focus on specific statement types.
+/// This approach maintains consistency with the actual parsing behavior.
+///
+/// By centralizing the creation of FilterParser instances in this helper function,
+/// we reduce code duplication and make it easier to modify the filtering behavior
+/// if needed in the future.
 fn filter_parser<P, F, I, O>(parser: P, predicate: F) -> FilterParser<P, F>
 where
     P: Parser<I, O>,
@@ -224,6 +239,14 @@ pub fn documented_parse_emit_statement() -> impl DocParserExt<Token, ast::Statem
 /// to a common type using the as_any_doc_parser helper function.
 /// This allows the documentation collection system to gather and organize
 /// documentation from different parser types.
+///
+/// The StatementDocProvider is a key component in the documentation system
+/// as it bridges the gap between the specific statement parsers and the
+/// general documentation collection mechanism.
+///
+/// By implementing the DocumentationProvider trait, this struct enables
+/// the documentation system to discover and collect documentation for
+/// all statement parsers without needing to know their specific types.
 pub struct StatementDocProvider;
 
 impl DocumentationProvider for StatementDocProvider {
@@ -258,6 +281,14 @@ impl DocumentationProvider for StatementDocProvider {
 ///
 /// This approach maintains both the parsing functionality and the documentation
 /// while allowing heterogeneous parser types to be stored in the same collection.
+///
+/// Without this type erasure mechanism, we would not be able to store parsers with
+/// different output types in the same collection, making it impossible to have a
+/// unified documentation system for all parser types.
+///
+/// The key innovation here is that we preserve both the parsing behavior and the
+/// documentation metadata while changing the output type, which allows the documentation
+/// collection system to work with parsers that produce different types of AST nodes.
 fn as_any_doc_parser<O: 'static>(
     parser: impl DocParserExt<Token, O> + 'static,
 ) -> Box<dyn DocParserExt<Token, Box<dyn Any>>> {
