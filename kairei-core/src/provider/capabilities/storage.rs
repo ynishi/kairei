@@ -84,6 +84,11 @@ pub struct ValueWithMetadata {
 /// components to use the same storage backend without collisions.
 #[async_trait]
 pub trait StorageBackend: Send + Sync {
+    /// Clone this backend
+    ///
+    /// # Returns
+    /// * A new instance of the same backend type
+    fn clone_backend(&self) -> Box<dyn StorageBackend>;
     /// Load all data for a namespace
     ///
     /// # Arguments
@@ -217,10 +222,15 @@ mod tests {
     use super::*;
 
     // Mock implementation for testing
+    #[derive(Clone)]
     struct MockStorageBackend {}
 
     #[async_trait]
     impl StorageBackend for MockStorageBackend {
+        fn clone_backend(&self) -> Box<dyn StorageBackend> {
+            Box::new(self.clone())
+        }
+
         async fn load(
             &self,
             _namespace: &str,
