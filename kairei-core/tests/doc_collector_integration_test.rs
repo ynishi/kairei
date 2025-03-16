@@ -9,6 +9,7 @@ use std::any::Any;
 // A simple test parser provider that implements DocumentationProvider
 struct TestParserProvider {}
 
+#[allow(clippy::missing_transmute_annotations)]
 impl TestParserProvider {
     fn new() -> Self {
         Self {}
@@ -153,6 +154,7 @@ fn test_documentation_collector_integration() {
 // Additional test for a more complex provider setup
 struct ExpressionParserProvider {}
 
+#[allow(clippy::missing_transmute_annotations)]
 impl ExpressionParserProvider {
     fn new() -> Self {
         Self {}
@@ -216,6 +218,7 @@ impl DocumentationProvider for ExpressionParserProvider {
 
 struct StatementParserProvider {}
 
+#[allow(clippy::missing_transmute_annotations)]
 impl StatementParserProvider {
     fn new() -> Self {
         Self {}

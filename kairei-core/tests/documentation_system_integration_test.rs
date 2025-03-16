@@ -199,6 +199,7 @@ fn test_documentation_system_integration() {
 
 /// Test with related parsers to verify cross-references
 #[test]
+#[allow(clippy::missing_transmute_annotations)]
 fn test_documentation_system_with_related_parsers() {
     // Create a provider that generates related parsers
     struct RelatedParsersProvider {}
@@ -327,6 +328,7 @@ fn test_documentation_system_with_related_parsers() {
 
 /// Test validation of documentation
 #[test]
+#[allow(clippy::missing_transmute_annotations)]
 fn test_documentation_validation() {
     // Create a provider that generates invalid documentation
     struct InvalidDocumentationProvider {}
