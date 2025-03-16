@@ -37,6 +37,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tracing::error;
 
 use crate::event::event_registry::EventType;
 use crate::event_bus::{Event, EventBus};
@@ -166,14 +167,22 @@ impl PersistentSharedMemoryPlugin {
         // Set up the storage backend based on configuration
         self.backend = match self.config.persistence.backend_type {
             crate::provider::config::plugins::BackendType::GCPStorage => {
-                if let crate::provider::config::plugins::BackendSpecificConfig::GCP(ref _config) =
+                if let crate::provider::config::plugins::BackendSpecificConfig::GCP(ref config) =
                     self.config.persistence.backend_config
                 {
                     // Create GCP storage backend
-                    // This will be implemented in a later task
-                    Box::new(DummyStorageBackend {})
+                    use crate::provider::plugins::storage::gcp::GCPStorageBackend;
+                    match GCPStorageBackend::new(config.clone()) {
+                        Ok(backend) => Box::new(backend),
+                        Err(e) => {
+                            // Log error and fall back to dummy backend
+                            error!("Failed to create GCP Storage backend: {}", e);
+                            Box::new(DummyStorageBackend {})
+                        }
+                    }
                 } else {
                     // Configuration mismatch, use dummy backend
+                    error!("Backend type is GCPStorage but config is not GCP");
                     Box::new(DummyStorageBackend {})
                 }
             }
