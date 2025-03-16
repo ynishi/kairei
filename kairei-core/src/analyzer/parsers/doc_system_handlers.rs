@@ -19,20 +19,20 @@ use crate::analyzer::core::*;
 use crate::analyzer::doc_parser::{DocBuilder, DocParserExt, ParserCategory, document};
 use crate::analyzer::documentation_collector::DocumentationProvider;
 use crate::analyzer::parsers::handlers::parse_handler_def;
+use crate::analyzer::parsers::parse_identifier;
 use crate::analyzer::parsers::world::{parse_events, parse_handlers};
 use crate::analyzer::prelude::*;
-use crate::analyzer::parsers::parse_identifier;
 use crate::ast;
 use crate::tokenizer::token::Token;
 use std::any::Any;
 
 /// Returns a documented version of the parse_handlers function.
-/// 
+///
 /// Parses the handlers block of a World definition, which defines how the World
 /// responds to events at the system level.
 pub fn documented_parse_handlers() -> impl DocParserExt<Token, ast::HandlersDef> {
     let parser = parse_handlers();
-    
+
     let doc = DocBuilder::new("parse_handlers", ParserCategory::Handler)
         .description("System handlers define how the World responds to events at the system level, affecting all agents in the system. Unlike agent-level handlers (observe, react, answer), system handlers operate globally and can coordinate between multiple agents, manage global state, and implement system-wide policies. They are essential for centralized event processing and global state management.")
         .example(r#"handlers {
@@ -52,16 +52,16 @@ pub fn documented_parse_handlers() -> impl DocParserExt<Token, ast::HandlersDef>
         .related_parser("parse_handler_def")
         .related_parser("parse_events")
         .build();
-    
+
     document(parser, doc)
 }
 
 /// Returns a documented version of the parse_handler_def function.
-/// 
+///
 /// Parses individual handler definitions within a handlers block.
 pub fn documented_parse_handler_def() -> impl DocParserExt<Token, ast::HandlerDef> {
     let parser = parse_handler_def();
-    
+
     let doc = DocBuilder::new("parse_handler_def", ParserCategory::Handler)
         .description("Handler definitions specify how to respond to specific events at the World level. Each handler is triggered by an event and contains a block of statements to execute when the event occurs. World-level handlers can emit events that affect the entire system and all agents within it.")
         .example(r#"on Tick(delta_time: Float) {
@@ -74,17 +74,17 @@ pub fn documented_parse_handler_def() -> impl DocParserExt<Token, ast::HandlerDe
         .related_parser("parse_handlers")
         .related_parser("parse_event")
         .build();
-    
+
     document(parser, doc)
 }
 
 /// Returns a documented version of the parse_events function.
-/// 
+///
 /// Parses the events block of a World definition, which defines custom events
 /// that can be emitted and handled within the World.
 pub fn documented_parse_events() -> impl DocParserExt<Token, ast::EventsDef> {
     let parser = parse_events();
-    
+
     let doc = DocBuilder::new("parse_events", ParserCategory::Handler)
         .description("The events block in a World definition declares custom events that can be emitted and handled within the system. These events form the communication backbone of the multi-agent system, allowing agents to interact with each other and with the World. Events can have typed parameters to carry data between components of the system.")
         .example(r#"events {
@@ -99,27 +99,24 @@ pub fn documented_parse_events() -> impl DocParserExt<Token, ast::EventsDef> {
         .related_parser("parse_event")
         .related_parser("parse_handlers")
         .build();
-    
+
     document(parser, doc)
 }
 
 /// Returns a documented version of the parse_event function.
-/// 
+///
 /// Parses individual event definitions within an events block.
 pub fn documented_parse_event() -> impl DocParserExt<Token, ast::CustomEventDef> {
     // Create a simplified version of parse_event since it's private in world.rs
     // We'll use a simpler approach that doesn't require reimplementing the full parser
-    
+
     // Create a dummy parser that just returns an empty CustomEventDef
     // This is just for documentation purposes
-    let parser = map(
-        parse_identifier(),
-        |name| ast::CustomEventDef { 
-            name, 
-            parameters: Vec::new() 
-        }
-    );
-    
+    let parser = map(parse_identifier(), |name| ast::CustomEventDef {
+        name,
+        parameters: Vec::new(),
+    });
+
     let doc = DocBuilder::new("parse_event", ParserCategory::Handler)
         .description("Event definitions specify custom events that can be emitted and handled within the World. Each event can have typed parameters that carry data. Events are the primary mechanism for communication between agents and the World, enabling a decoupled, event-driven architecture.")
         .example("UserJoined(user_id: String)")
@@ -128,7 +125,7 @@ pub fn documented_parse_event() -> impl DocParserExt<Token, ast::CustomEventDef>
         .related_parser("parse_events")
         .related_parser("parse_handler_def")
         .build();
-    
+
     document(parser, doc)
 }
 
