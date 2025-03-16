@@ -21,6 +21,8 @@ pub use common::*;
 pub mod agent;
 /// Documentation for expression parsers
 pub mod doc_expression;
+/// Documentation for lifecycle handler parsers
+pub mod doc_lifecycle_handlers;
 /// Documentation for statement parsers
 pub mod doc_statement;
 /// Parsers for expressions in the KAIREI DSL
