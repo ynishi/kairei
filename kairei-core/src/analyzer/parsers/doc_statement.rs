@@ -271,13 +271,13 @@ impl DocumentationProvider for StatementDocProvider {
 ///
 /// This function is a critical part of the documentation system that enables type erasure
 /// for different parser output types. It allows us to store parsers with different output types
-/// in the same collection by converting them to a common type (Box<dyn Any>).
+/// in the same collection by converting them to a common type (`Box<dyn Any>`).
 ///
 /// The type conversion mechanism works as follows:
 /// 1. We create a wrapper struct (AnyWrapper) that holds the original parser
 /// 2. We implement Parser for this wrapper to handle the type conversion during parsing
 /// 3. We implement DocParserExt for the wrapper to preserve documentation
-/// 4. The wrapper converts the specific output type O to Box<dyn Any> at runtime
+/// 4. The wrapper converts the specific output type O to `Box<dyn Any>` at runtime
 ///
 /// This approach maintains both the parsing functionality and the documentation
 /// while allowing heterogeneous parser types to be stored in the same collection.
