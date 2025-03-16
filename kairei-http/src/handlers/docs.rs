@@ -1,6 +1,5 @@
 //! Handlers for DSL documentation endpoints.
 
-use crate::auth::AuthUser;
 use crate::models::docs::{
     CategoryDocumentation, DocumentationErrorResponse, DocumentationQueryParams,
     DocumentationResponse, ParserDocumentationResponse,
@@ -32,7 +31,6 @@ use tracing::{debug, warn};
 )]
 pub async fn get_all_documentation(
     State(state): State<AppState>,
-    _auth: AuthUser,
     headers: HeaderMap,
     Query(params): Query<DocumentationQueryParams>,
 ) -> Result<Response, StatusCode> {
@@ -92,12 +90,11 @@ pub async fn get_all_documentation(
 )]
 pub async fn get_category_documentation(
     State(state): State<AppState>,
-    _auth: AuthUser,
     Path(category): Path<String>,
     headers: HeaderMap,
     Query(params): Query<DocumentationQueryParams>,
 ) -> Result<Response, StatusCode> {
-    debug!("Getting documentation for category: {}", category);
+    println!("Getting documentation for category: {}", category);
 
     // Parse category
     let parsed_category = match parse_category(&category) {
@@ -182,7 +179,6 @@ pub async fn get_category_documentation(
 )]
 pub async fn get_parser_documentation(
     State(state): State<AppState>,
-    _auth: AuthUser,
     Path((category, name)): Path<(String, String)>,
     headers: HeaderMap,
     Query(params): Query<DocumentationQueryParams>,

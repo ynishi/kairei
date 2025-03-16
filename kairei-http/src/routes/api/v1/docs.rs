@@ -15,6 +15,6 @@ pub fn routes() -> Router<AppState> {
 fn docs_routes() -> Router<AppState> {
     Router::new()
         .route("/dsl", get(get_all_documentation))
-        .route("/dsl/:category", get(get_category_documentation))
-        .route("/dsl/:category/:name", get(get_parser_documentation))
+        .route("/dsl/{category}", get(get_category_documentation))
+        .route("/dsl/{category}/{name}", get(get_parser_documentation))
 }

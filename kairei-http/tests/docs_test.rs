@@ -1,20 +1,18 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-    Router,
-};
-use kairei_http::{
-    routes::api::v1::docs::routes as docs_routes,
-    server::AppState,
-};
-use tower::{Service, ServiceExt};
 use std::convert::Infallible;
 
+use axum::{
+    Router,
+    body::Body,
+    http::{Request, StatusCode},
+};
+use kairei_http::{routes::api::v1::docs::routes as docs_routes, server::AppState};
+use tower::{Service, ServiceExt};
+
 // Create a test app with only the documentation routes for testing
-fn create_test_app() -> impl Service<Request<Body>, Response = axum::response::Response, Error = Infallible> {
+fn create_test_app()
+-> impl Service<Request<Body>, Response = axum::response::Response, Error = Infallible> {
     // Create a minimal app state
     let app_state = AppState::default();
-    
     // Create a router with only docs routes, nested under /api/v1 to match our test paths
     Router::new()
         .nest("/api/v1", docs_routes())
@@ -66,9 +64,8 @@ async fn test_get_category_documentation() {
     // Create a new app for this request and send it
     let response = create_test_app().oneshot(request).await.unwrap();
 
-    // Even non-existent categories may return OK since we use Other variant
-    // The correct check would be to verify the response body has empty parsers
-    assert_eq!(response.status(), StatusCode::OK);
+    // Even non-existent categories may return Not Found
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
