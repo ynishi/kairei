@@ -101,7 +101,7 @@ pub fn parse_event_handler() -> impl Parser<Token, ast::EventHandler> {
 /// StateUpdated.agentName.stateName
 /// CustomEvent
 /// ```
-fn parse_event_type() -> impl Parser<Token, ast::EventType> {
+pub fn parse_event_type() -> impl Parser<Token, ast::EventType> {
     with_context(
         choice(vec![
             Box::new(map(parse_tick_identify(), |_| ast::EventType::Tick)),
