@@ -38,7 +38,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
-use crate::event::{Event, EventBus, EventType};
+use crate::event_bus::{Event, EventBus};
+use crate::event::event_registry::EventType;
 use crate::provider::capabilities::shared_memory::{
     Metadata, SharedMemoryCapability, SharedMemoryError,
 };

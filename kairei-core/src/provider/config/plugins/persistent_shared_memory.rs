@@ -7,7 +7,10 @@
 //! # Example
 //!
 //! ```no_run
-//! use kairei_core::provider::config::plugins::{PersistentSharedMemoryConfig, SharedMemoryConfig};
+//! use kairei_core::provider::config::plugins::{
+//!     PersistentSharedMemoryConfig, SharedMemoryConfig, PersistenceConfig, 
+//!     BackendType, BackendSpecificConfig, LocalFileSystemConfig
+//! };
 //! use kairei_core::provider::config::BasePluginConfig;
 //! use std::time::Duration;
 //!

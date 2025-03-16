@@ -59,6 +59,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::provider::plugin::ProviderPlugin;
+use crate::provider::capabilities::storage::StorageError;
 
 /// Shared Memory capability for Provider Plugins
 ///
@@ -296,6 +297,20 @@ pub enum SharedMemoryError {
 
     #[error("Pattern parsing error: {0}")]
     PatternError(String),
+}
+
+impl From<StorageError> for SharedMemoryError {
+    fn from(err: StorageError) -> Self {
+        match err {
+            StorageError::FileNotFound(path) => SharedMemoryError::KeyNotFound(path),
+            StorageError::AccessDenied(msg) => SharedMemoryError::AccessDenied(msg),
+            StorageError::InvalidPath(path) => SharedMemoryError::InvalidKey(path),
+            StorageError::SerializationError(msg) | StorageError::DeserializationError(msg) => {
+                SharedMemoryError::InvalidValue(msg)
+            }
+            _ => SharedMemoryError::StorageError(err.to_string()),
+        }
+    }
 }
 
 #[cfg(test)]
