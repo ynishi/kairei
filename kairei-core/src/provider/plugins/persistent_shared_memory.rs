@@ -90,6 +90,9 @@ pub struct PersistentSharedMemoryPlugin {
     /// Background sync task handle
     sync_task: Option<JoinHandle<()>>,
 
+    /// Cancellation channel for sync task
+    sync_cancel: Option<tokio::sync::oneshot::Sender<()>>,
+
     /// Last sync time
     last_sync: Arc<RwLock<Option<Instant>>>,
 
@@ -128,6 +131,22 @@ pub enum PersistentMemoryEventType {
     SaveFailed,
 }
 
+impl std::fmt::Display for PersistentMemoryEventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SyncStarted => write!(f, "persistent_memory.sync.started"),
+            Self::SyncCompleted => write!(f, "persistent_memory.sync.completed"),
+            Self::SyncFailed => write!(f, "persistent_memory.sync.failed"),
+            Self::LoadStarted => write!(f, "persistent_memory.load.started"),
+            Self::LoadCompleted => write!(f, "persistent_memory.load.completed"),
+            Self::LoadFailed => write!(f, "persistent_memory.load.failed"),
+            Self::SaveStarted => write!(f, "persistent_memory.save.started"),
+            Self::SaveCompleted => write!(f, "persistent_memory.save.completed"),
+            Self::SaveFailed => write!(f, "persistent_memory.save.failed"),
+        }
+    }
+}
+
 impl PersistentSharedMemoryPlugin {
     /// Create a new instance with the given configuration
     ///
@@ -149,6 +168,7 @@ impl PersistentSharedMemoryPlugin {
             backend: Box::new(DummyStorageBackend {}), // Will be replaced during initialization
             config,
             sync_task: None,
+            sync_cancel: None,
             last_sync: Arc::new(RwLock::new(None)),
             event_bus: None,
         };
@@ -224,48 +244,94 @@ impl PersistentSharedMemoryPlugin {
         let last_sync = self.last_sync.clone();
         let event_bus = self.event_bus.clone();
 
+        // Create a cancellation channel
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        self.sync_cancel = Some(tx);
+
         self.sync_task = Some(tokio::spawn(async move {
+            // Start the first tick immediately
             let mut interval_timer = tokio::time::interval(interval);
+            interval_timer.tick().await; // Consume the first tick immediately
+
             loop {
-                interval_timer.tick().await;
+                tokio::select! {
+                    _ = interval_timer.tick() => {
+                        // Emit sync started event
+                        if let Some(ref event_bus) = event_bus {
+                            let _ = event_bus
+                                .publish(Event {
+                                    event_type: EventType::Custom(PersistentMemoryEventType::SyncStarted.to_string()),
+                                    parameters: HashMap::new(),
+                                })
+                                .await;
+                        }
 
-                // Emit sync started event
-                if let Some(ref event_bus) = event_bus {
-                    let _ = event_bus
-                        .publish(Event {
-                            event_type: EventType::Custom(
-                                "PersistentMemorySyncStarted".to_string(),
-                            ),
-                            parameters: HashMap::new(),
-                        })
-                        .await;
-                }
+                        // Perform sync operation
+                        let data: HashMap<String, ValueWithMetadata> = cache
+                            .iter()
+                            .map(|entry| (entry.key().clone(), entry.value().clone()))
+                            .collect();
 
-                // Perform sync operation
-                let data: HashMap<String, ValueWithMetadata> = cache
-                    .iter()
-                    .map(|entry| (entry.key().clone(), entry.value().clone()))
-                    .collect();
+                        let result = backend.save(&namespace, &data).await;
 
-                let _ = backend.save(&namespace, &data).await;
+                        // Update last sync time if successful
+                        if result.is_ok() {
+                            let now = Instant::now();
+                            let mut last_sync_guard = last_sync.write().await;
+                            *last_sync_guard = Some(now);
 
-                // Update last sync time
-                let now = Instant::now();
-                let mut last_sync_guard = last_sync.write().await;
-                *last_sync_guard = Some(now);
+                            // Emit sync completed event
+                            if let Some(ref event_bus) = event_bus {
+                                let _ = event_bus
+                                    .publish(Event {
+                                        event_type: EventType::Custom(PersistentMemoryEventType::SyncCompleted.to_string()),
+                                        parameters: HashMap::new(),
+                                    })
+                                    .await;
+                            }
+                        } else if let Err(ref err) = result {
+                            // Emit sync failed event with error information
+                            if let Some(ref event_bus) = event_bus {
+                                let mut params = HashMap::new();
+                                params.insert("error".to_string(), crate::event::event_bus::Value::String(format!("{}", err)));
 
-                // Emit sync completed/failed event
-                if let Some(ref event_bus) = event_bus {
-                    let event_type = EventType::Custom("PersistentMemorySyncCompleted".to_string());
-                    let _ = event_bus
-                        .publish(Event {
-                            event_type,
-                            parameters: HashMap::new(),
-                        })
-                        .await;
+                                let _ = event_bus
+                                    .publish(Event {
+                                        event_type: EventType::Custom(PersistentMemoryEventType::SyncFailed.to_string()),
+                                        parameters: params,
+                                    })
+                                    .await;
+                            }
+                        }
+                    }
+                    _ = &mut rx => {
+                        // Cancellation received, exit the loop
+                        break;
+                    }
                 }
             }
         }));
+    }
+
+    /// Stops the background synchronization task
+    ///
+    /// This method stops the background sync task by sending a cancellation signal
+    /// and waiting for the task to complete. It is used internally for cleanup
+    /// during shutdown or when reconfiguring the plugin.
+    ///
+    /// # Note
+    /// This method is primarily for internal use during plugin lifecycle management.
+    #[allow(dead_code)]
+    async fn stop_sync_task(&mut self) {
+        // Send cancellation signal if the task is running
+        if let Some(cancel) = self.sync_cancel.take() {
+            let _ = cancel.send(());
+        }
+
+        // Wait for the task to complete
+        if let Some(task) = self.sync_task.take() {
+            let _ = task.await;
+        }
     }
 
     /// Set the event bus for notifications
@@ -276,21 +342,30 @@ impl PersistentSharedMemoryPlugin {
         self.event_bus = Some(event_bus);
     }
 
-    /// Explicitly sync with storage backend
+    /// Synchronize in-memory cache with storage backend
     ///
-    /// This method syncs the in-memory cache with the storage backend.
-    /// It saves all data in the cache to the storage backend.
+    /// This method manually triggers synchronization of all data in the in-memory cache
+    /// with the storage backend. It emits events for the start, completion, and failure
+    /// of the synchronization process.
     ///
     /// # Returns
-    /// * `Ok(())` - If sync succeeds
-    /// * `Err(SharedMemoryError)` - If sync fails
+    /// * `Ok(())` - If synchronization succeeds
+    /// * `Err(SharedMemoryError)` - If synchronization fails
     pub async fn sync(&self) -> Result<(), SharedMemoryError> {
         // Emit sync started event
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
             let _ = event_bus
                 .publish(Event {
-                    event_type: EventType::Custom("PersistentMemorySyncStarted".to_string()),
-                    parameters: HashMap::new(),
+                    event_type: EventType::Custom(
+                        PersistentMemoryEventType::SyncStarted.to_string(),
+                    ),
+                    parameters: params,
                 })
                 .await;
         }
@@ -306,20 +381,40 @@ impl PersistentSharedMemoryPlugin {
 
             // Emit sync completed event
             if let Some(ref event_bus) = self.event_bus {
+                let mut params = HashMap::new();
+                params.insert(
+                    "namespace".to_string(),
+                    crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+                );
+
                 let _ = event_bus
                     .publish(Event {
-                        event_type: EventType::Custom("PersistentMemorySyncCompleted".to_string()),
-                        parameters: HashMap::new(),
+                        event_type: EventType::Custom(
+                            PersistentMemoryEventType::SyncCompleted.to_string(),
+                        ),
+                        parameters: params,
                     })
                     .await;
             }
-        } else {
-            // Emit sync failed event
+        } else if let Err(ref err) = result {
+            // Emit sync failed event with error information
             if let Some(ref event_bus) = self.event_bus {
+                let mut params = HashMap::new();
+                params.insert(
+                    "namespace".to_string(),
+                    crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+                );
+                params.insert(
+                    "error".to_string(),
+                    crate::event::event_bus::Value::String(format!("{}", err)),
+                );
+
                 let _ = event_bus
                     .publish(Event {
-                        event_type: EventType::Custom("PersistentMemorySyncFailed".to_string()),
-                        parameters: HashMap::new(),
+                        event_type: EventType::Custom(
+                            PersistentMemoryEventType::SyncFailed.to_string(),
+                        ),
+                        parameters: params,
                     })
                     .await;
             }
@@ -339,10 +434,18 @@ impl PersistentSharedMemoryPlugin {
     pub async fn load(&self) -> Result<(), SharedMemoryError> {
         // Emit load started event
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
             let _ = event_bus
                 .publish(Event {
-                    event_type: EventType::Custom("PersistentMemoryLoadStarted".to_string()),
-                    parameters: HashMap::new(),
+                    event_type: EventType::Custom(
+                        PersistentMemoryEventType::LoadStarted.to_string(),
+                    ),
+                    parameters: params,
                 })
                 .await;
         }
@@ -366,16 +469,30 @@ impl PersistentSharedMemoryPlugin {
 
         // Emit appropriate event based on result
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
+            // Add error information if the operation failed
+            if let Err(ref err) = result {
+                params.insert(
+                    "error".to_string(),
+                    crate::event::event_bus::Value::String(format!("{}", err)),
+                );
+            }
+
             let event_type = if result.is_ok() {
-                EventType::Custom("PersistentMemoryLoadCompleted".to_string())
+                EventType::Custom(PersistentMemoryEventType::LoadCompleted.to_string())
             } else {
-                EventType::Custom("PersistentMemoryLoadFailed".to_string())
+                EventType::Custom(PersistentMemoryEventType::LoadFailed.to_string())
             };
 
             let _ = event_bus
                 .publish(Event {
                     event_type,
-                    parameters: HashMap::new(),
+                    parameters: params,
                 })
                 .await;
         }
@@ -393,10 +510,18 @@ impl PersistentSharedMemoryPlugin {
     pub async fn save(&self) -> Result<(), SharedMemoryError> {
         // Emit save started event
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
             let _ = event_bus
                 .publish(Event {
-                    event_type: EventType::Custom("PersistentMemorySaveStarted".to_string()),
-                    parameters: HashMap::new(),
+                    event_type: EventType::Custom(
+                        PersistentMemoryEventType::SaveStarted.to_string(),
+                    ),
+                    parameters: params,
                 })
                 .await;
         }
@@ -417,16 +542,30 @@ impl PersistentSharedMemoryPlugin {
 
         // Emit appropriate event based on result
         if let Some(ref event_bus) = self.event_bus {
+            let mut params = HashMap::new();
+            params.insert(
+                "namespace".to_string(),
+                crate::event::event_bus::Value::String(self.config.base.namespace.clone()),
+            );
+
+            // Add error information if the operation failed
+            if let Err(ref err) = result {
+                params.insert(
+                    "error".to_string(),
+                    crate::event::event_bus::Value::String(format!("{}", err)),
+                );
+            }
+
             let event_type = if result.is_ok() {
-                EventType::Custom("PersistentMemorySaveCompleted".to_string())
+                EventType::Custom(PersistentMemoryEventType::SaveCompleted.to_string())
             } else {
-                EventType::Custom("PersistentMemorySaveFailed".to_string())
+                EventType::Custom(PersistentMemoryEventType::SaveFailed.to_string())
             };
 
             let _ = event_bus
                 .publish(Event {
                     event_type,
-                    parameters: HashMap::new(),
+                    parameters: params,
                 })
                 .await;
         }
@@ -574,12 +713,83 @@ impl SharedMemoryCapability for PersistentSharedMemoryPlugin {
         };
 
         // Store value in cache
-        self.cache.insert(key.to_string(), value_with_metadata);
+        self.cache
+            .insert(key.to_string(), value_with_metadata.clone());
 
         // Auto-save if configured
         if self.config.persistence.auto_save {
-            // This will be implemented in Phase 3
-            // For now, just return Ok
+            let backend = self.backend.clone_backend();
+            let namespace = self.config.base.namespace.clone();
+            let event_bus = self.event_bus.clone();
+
+            // Emit save started event
+            if let Some(ref event_bus) = event_bus {
+                let mut params = HashMap::new();
+                params.insert(
+                    "key".to_string(),
+                    crate::event::event_bus::Value::String(key.to_string()),
+                );
+
+                let _ = event_bus
+                    .publish(Event {
+                        event_type: EventType::Custom(
+                            PersistentMemoryEventType::SaveStarted.to_string(),
+                        ),
+                        parameters: params,
+                    })
+                    .await;
+            }
+
+            // Save the specific key
+            match backend
+                .save_key(&namespace, key, &value_with_metadata)
+                .await
+            {
+                Ok(_) => {
+                    // Emit save completed event
+                    if let Some(ref event_bus) = event_bus {
+                        let mut params = HashMap::new();
+                        params.insert(
+                            "key".to_string(),
+                            crate::event::event_bus::Value::String(key.to_string()),
+                        );
+
+                        let _ = event_bus
+                            .publish(Event {
+                                event_type: EventType::Custom(
+                                    PersistentMemoryEventType::SaveCompleted.to_string(),
+                                ),
+                                parameters: params,
+                            })
+                            .await;
+                    }
+                }
+                Err(e) => {
+                    // Emit save failed event
+                    if let Some(ref event_bus) = event_bus {
+                        let mut params = HashMap::new();
+                        params.insert(
+                            "key".to_string(),
+                            crate::event::event_bus::Value::String(key.to_string()),
+                        );
+                        params.insert(
+                            "error".to_string(),
+                            crate::event::event_bus::Value::String(format!("{}", e)),
+                        );
+
+                        let _ = event_bus
+                            .publish(Event {
+                                event_type: EventType::Custom(
+                                    PersistentMemoryEventType::SaveFailed.to_string(),
+                                ),
+                                parameters: params,
+                            })
+                            .await;
+                    }
+
+                    return Err(SharedMemoryError::from(e));
+                }
+            }
         }
 
         Ok(())
@@ -589,8 +799,75 @@ impl SharedMemoryCapability for PersistentSharedMemoryPlugin {
         if self.cache.remove(key).is_some() {
             // If auto-save is enabled, delete from storage
             if self.config.persistence.auto_save {
-                // This will be implemented in Phase 3
-                // For now, just return Ok
+                let backend = self.backend.clone_backend();
+                let namespace = self.config.base.namespace.clone();
+                let event_bus = self.event_bus.clone();
+
+                // Emit save started event
+                if let Some(ref event_bus) = event_bus {
+                    let mut params = HashMap::new();
+                    params.insert(
+                        "key".to_string(),
+                        crate::event::event_bus::Value::String(key.to_string()),
+                    );
+
+                    let _ = event_bus
+                        .publish(Event {
+                            event_type: EventType::Custom(
+                                PersistentMemoryEventType::SaveStarted.to_string(),
+                            ),
+                            parameters: params,
+                        })
+                        .await;
+                }
+
+                // Delete the key from storage
+                match backend.delete_key(&namespace, key).await {
+                    Ok(_) => {
+                        // Emit save completed event
+                        if let Some(ref event_bus) = event_bus {
+                            let mut params = HashMap::new();
+                            params.insert(
+                                "key".to_string(),
+                                crate::event::event_bus::Value::String(key.to_string()),
+                            );
+
+                            let _ = event_bus
+                                .publish(Event {
+                                    event_type: EventType::Custom(
+                                        PersistentMemoryEventType::SaveCompleted.to_string(),
+                                    ),
+                                    parameters: params,
+                                })
+                                .await;
+                        }
+                    }
+                    Err(e) => {
+                        // Emit save failed event
+                        if let Some(ref event_bus) = event_bus {
+                            let mut params = HashMap::new();
+                            params.insert(
+                                "key".to_string(),
+                                crate::event::event_bus::Value::String(key.to_string()),
+                            );
+                            params.insert(
+                                "error".to_string(),
+                                crate::event::event_bus::Value::String(format!("{}", e)),
+                            );
+
+                            let _ = event_bus
+                                .publish(Event {
+                                    event_type: EventType::Custom(
+                                        PersistentMemoryEventType::SaveFailed.to_string(),
+                                    ),
+                                    parameters: params,
+                                })
+                                .await;
+                        }
+
+                        return Err(SharedMemoryError::from(e));
+                    }
+                }
             }
 
             Ok(())
@@ -703,6 +980,14 @@ impl SharedMemoryCapability for PersistentSharedMemoryPlugin {
 }
 
 /// Dummy storage backend for testing
+impl Drop for PersistentSharedMemoryPlugin {
+    fn drop(&mut self) {
+        // Send cancellation signal if the task is running
+        if let Some(cancel) = self.sync_cancel.take() {
+            let _ = cancel.send(());
+        }
+    }
+}
 ///
 /// This backend doesn't actually store anything and is used as a placeholder
 /// until the real backends are implemented.
@@ -749,10 +1034,301 @@ impl StorageBackend for DummyStorageBackend {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::time::Duration;
+    use tokio::sync::RwLock;
 
     use super::*;
     use serde_json::json;
+
+    // Mock storage backend for testing
+    #[derive(Clone)]
+    struct MockStorageBackend {
+        saved_data: Arc<RwLock<HashMap<String, HashMap<String, ValueWithMetadata>>>>,
+        save_called: Arc<RwLock<usize>>,
+        save_key_called: Arc<RwLock<usize>>,
+        delete_key_called: Arc<RwLock<usize>>,
+        should_fail: bool,
+    }
+
+    impl MockStorageBackend {
+        fn new() -> Self {
+            Self {
+                saved_data: Arc::new(RwLock::new(HashMap::new())),
+                save_called: Arc::new(RwLock::new(0)),
+                save_key_called: Arc::new(RwLock::new(0)),
+                delete_key_called: Arc::new(RwLock::new(0)),
+                should_fail: false,
+            }
+        }
+
+        // Removed unused method
+
+        async fn save_called_count(&self) -> usize {
+            *self.save_called.read().await
+        }
+
+        async fn save_key_called_count(&self) -> usize {
+            *self.save_key_called.read().await
+        }
+
+        async fn delete_key_called_count(&self) -> usize {
+            *self.delete_key_called.read().await
+        }
+    }
+
+    #[async_trait]
+    impl StorageBackend for MockStorageBackend {
+        fn clone_backend(&self) -> Box<dyn StorageBackend> {
+            Box::new(self.clone())
+        }
+
+        async fn load(
+            &self,
+            namespace: &str,
+        ) -> Result<HashMap<String, ValueWithMetadata>, StorageError> {
+            if self.should_fail {
+                return Err(StorageError::StorageError("Simulated failure".into()));
+            }
+
+            let saved = self.saved_data.read().await;
+            if let Some(data) = saved.get(namespace) {
+                Ok(data.clone())
+            } else {
+                Ok(HashMap::new())
+            }
+        }
+
+        async fn save(
+            &self,
+            namespace: &str,
+            data: &HashMap<String, ValueWithMetadata>,
+        ) -> Result<(), StorageError> {
+            if self.should_fail {
+                return Err(StorageError::StorageError("Simulated failure".into()));
+            }
+
+            let mut save_called = self.save_called.write().await;
+            *save_called += 1;
+
+            let mut saved = self.saved_data.write().await;
+            saved.insert(namespace.to_string(), data.clone());
+            Ok(())
+        }
+
+        async fn save_key(
+            &self,
+            namespace: &str,
+            key: &str,
+            value: &ValueWithMetadata,
+        ) -> Result<(), StorageError> {
+            if self.should_fail {
+                return Err(StorageError::StorageError("Simulated failure".into()));
+            }
+
+            let mut save_key_called = self.save_key_called.write().await;
+            *save_key_called += 1;
+
+            let mut saved = self.saved_data.write().await;
+            let namespace_data = saved
+                .entry(namespace.to_string())
+                .or_insert_with(HashMap::new);
+            namespace_data.insert(key.to_string(), value.clone());
+            Ok(())
+        }
+
+        async fn delete_key(&self, namespace: &str, key: &str) -> Result<(), StorageError> {
+            if self.should_fail {
+                return Err(StorageError::StorageError("Simulated failure".into()));
+            }
+
+            let mut delete_key_called = self.delete_key_called.write().await;
+            *delete_key_called += 1;
+
+            let mut saved = self.saved_data.write().await;
+            if let Some(namespace_data) = saved.get_mut(namespace) {
+                namespace_data.remove(key);
+            }
+            Ok(())
+        }
+
+        async fn is_available(&self) -> bool {
+            !self.should_fail
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sync_method() {
+        // Create a mock backend
+        let mock_backend = Arc::new(MockStorageBackend::new());
+
+        // Create a plugin with the mock backend
+        let mut config = PersistentSharedMemoryConfig::default();
+        config.persistence.sync_interval = Duration::from_secs(3600); // Long interval to avoid auto-sync
+
+        let mut plugin = PersistentSharedMemoryPlugin::new(config).await;
+        plugin.backend = mock_backend.clone_backend();
+
+        // Add some data
+        plugin.set("test_key", json!("test_value")).await.unwrap();
+
+        // Call sync
+        plugin.sync().await.unwrap();
+
+        // Verify that save was called
+        assert_eq!(mock_backend.save_called_count().await, 1);
+
+        // Verify that the data was saved
+        let saved = mock_backend.saved_data.read().await;
+        assert!(saved.contains_key(&plugin.config.base.namespace));
+        let namespace_data = &saved[&plugin.config.base.namespace];
+        assert!(namespace_data.contains_key("test_key"));
+        assert_eq!(namespace_data["test_key"].value, json!("test_value"));
+    }
+
+    #[tokio::test]
+    async fn test_sync_failure() {
+        // Create a mock backend that fails only for save operations but not for set
+        let mock_backend = Arc::new(MockStorageBackend::new());
+
+        // Create a plugin with the mock backend
+        let mut config = PersistentSharedMemoryConfig::default();
+        config.persistence.sync_interval = Duration::from_secs(3600); // Long interval to avoid auto-sync
+        config.persistence.auto_save = false; // Disable auto-save to avoid immediate failure
+
+        let mut plugin = PersistentSharedMemoryPlugin::new(config).await;
+        plugin.backend = mock_backend.clone_backend();
+
+        // Add some data
+        plugin.set("test_key", json!("test_value")).await.unwrap();
+
+        // Now make the backend fail for the sync operation
+        let mut backend = MockStorageBackend::new();
+        backend.should_fail = true;
+        plugin.backend = Box::new(backend);
+
+        // Call sync and expect failure
+        let result = plugin.sync().await;
+        assert!(
+            result.is_err(),
+            "Expected sync to fail with mock backend that should fail"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_auto_save_on_set() {
+        // Create a mock backend
+        let mock_backend = Arc::new(MockStorageBackend::new());
+
+        // Create a plugin with the mock backend and auto-save enabled
+        let mut config = PersistentSharedMemoryConfig::default();
+        config.persistence.auto_save = true;
+        config.persistence.sync_interval = Duration::from_secs(3600); // Long interval to avoid auto-sync
+
+        let mut plugin = PersistentSharedMemoryPlugin::new(config).await;
+        plugin.backend = mock_backend.clone_backend();
+
+        // Set a key
+        plugin
+            .set("auto_save_key", json!("auto_save_value"))
+            .await
+            .unwrap();
+
+        // Verify that save_key was called
+        assert_eq!(mock_backend.save_key_called_count().await, 1);
+
+        // Verify that the data was saved
+        let saved = mock_backend.saved_data.read().await;
+        assert!(saved.contains_key(&plugin.config.base.namespace));
+        let namespace_data = &saved[&plugin.config.base.namespace];
+        assert!(namespace_data.contains_key("auto_save_key"));
+        assert_eq!(
+            namespace_data["auto_save_key"].value,
+            json!("auto_save_value")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_auto_save_on_delete() {
+        // Create a mock backend
+        let mock_backend = Arc::new(MockStorageBackend::new());
+
+        // Create a plugin with the mock backend and auto-save enabled
+        let mut config = PersistentSharedMemoryConfig::default();
+        config.persistence.auto_save = true;
+        config.persistence.sync_interval = Duration::from_secs(3600); // Long interval to avoid auto-sync
+
+        let mut plugin = PersistentSharedMemoryPlugin::new(config).await;
+        plugin.backend = mock_backend.clone_backend();
+
+        // Add a key
+        plugin
+            .set("delete_key", json!("delete_value"))
+            .await
+            .unwrap();
+
+        // Reset the counter
+        let mut save_key_called = mock_backend.save_key_called.write().await;
+        *save_key_called = 0;
+        drop(save_key_called);
+
+        // Delete the key
+        plugin.delete("delete_key").await.unwrap();
+
+        // Verify that delete_key was called
+        assert_eq!(mock_backend.delete_key_called_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_background_sync_task() {
+        // Create a mock backend
+        let mock_backend = Arc::new(MockStorageBackend::new());
+
+        // Create a plugin with the mock backend and a short sync interval
+        let mut config = PersistentSharedMemoryConfig::default();
+        config.persistence.sync_interval = Duration::from_millis(50); // Very short interval for testing
+        config.persistence.auto_save = false; // Disable auto-save to avoid interference
+
+        let mut plugin = PersistentSharedMemoryPlugin::new(config).await;
+
+        // Manually trigger the background sync task to start
+        plugin.stop_sync_task().await; // Ensure no existing task
+        plugin.backend = mock_backend.clone_backend();
+        plugin.start_sync_task();
+
+        // Add some data
+        plugin
+            .set("background_key", json!("background_value"))
+            .await
+            .unwrap();
+
+        // Wait for the background sync to happen - use a longer wait time to ensure sync occurs
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
+        // Verify that save was called at least once
+        let save_count = mock_backend.save_called_count().await;
+        assert!(
+            save_count >= 1,
+            "Expected at least one save call, got {}",
+            save_count
+        );
+
+        // Stop the sync task
+        plugin.stop_sync_task().await;
+
+        // Reset the counter
+        let mut save_called = mock_backend.save_called.write().await;
+        *save_called = 0;
+        drop(save_called);
+
+        // Wait to ensure no more syncs happen
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        // Verify that save was not called again
+        assert_eq!(mock_backend.save_called_count().await, 0);
+    }
+
+    // Original test functions
 
     async fn create_test_plugin() -> PersistentSharedMemoryPlugin {
         PersistentSharedMemoryPlugin::new(PersistentSharedMemoryConfig::default()).await
