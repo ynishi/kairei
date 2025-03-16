@@ -23,6 +23,8 @@ pub mod agent;
 pub mod doc_expression;
 /// Documentation for statement parsers
 pub mod doc_statement;
+/// Documentation for type parsers
+pub mod doc_types;
 /// Parsers for expressions in the KAIREI DSL
 pub mod expression;
 /// Parsers for event handlers
