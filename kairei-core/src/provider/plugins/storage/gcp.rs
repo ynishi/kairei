@@ -457,6 +457,7 @@ mod tests {
     use chrono::Utc;
 
     // Helper function to create a test value with metadata
+    #[allow(dead_code)]
     fn create_test_value(value: serde_json::Value) -> ValueWithMetadata {
         let now = Utc::now();
         ValueWithMetadata {
