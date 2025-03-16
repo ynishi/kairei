@@ -50,7 +50,7 @@ fmt-cli:
 	cd kairei-cli && cargo clippy -- -D warnings
 	cd kairei-cli && cargo fmt
 
-doc: doc-core doc-http doc-cli
+doc: doc-core doc-http doc-cli doc_check
 
 doc-core:
 	cd kairei-core && cargo doc --no-deps
