@@ -111,3 +111,73 @@ fn test_doc_parser_collection() {
 
     assert_eq!(expression_docs.len(), 2);
 }
+
+#[test]
+fn test_expression_doc_provider() {
+    use kairei_core::analyzer::documentation_collector::DocumentationProvider;
+    use kairei_core::analyzer::parsers::doc_expression::ExpressionDocProvider;
+
+    // Create the provider
+    let provider = ExpressionDocProvider;
+
+    // Get the documented parsers
+    let parsers = DocumentationProvider::provide_documented_parsers(&provider);
+
+    // Check that we have the expected number of parsers
+    assert!(!parsers.is_empty());
+    assert!(parsers.len() >= 9); // We should have at least 9 documented expression parsers
+
+    // Check that all parsers have documentation
+    for parser in &parsers {
+        let doc = parser.documentation();
+        assert!(!doc.name.is_empty());
+        assert_eq!(doc.category, ParserCategory::Expression);
+        assert!(!doc.description.is_empty());
+        assert!(!doc.examples.is_empty());
+    }
+}
+
+#[test]
+fn test_collecting_expression_docs() {
+    use kairei_core::analyzer::documentation_collector::DocumentationCollector;
+    use kairei_core::analyzer::parsers::doc_expression::ExpressionDocProvider;
+
+    // Create a documentation collector
+    let mut collector = DocumentationCollector::new();
+
+    // Register the expression documentation provider
+    collector.register_provider(Box::new(ExpressionDocProvider));
+
+    // Collect the documentation
+    collector.collect();
+
+    // Get the collection
+    let collection = collector.get_collection();
+
+    // Verify that we collected documentation for expression parsers
+    let expression_docs = collection.get_by_category(&ParserCategory::Expression);
+    assert!(!expression_docs.is_empty());
+    assert!(expression_docs.len() >= 9); // We should have at least 9 documented expression parsers
+
+    // Check specific parsers
+    let expression_parser = collection.get_by_name("parse_expression");
+    assert!(expression_parser.is_some());
+
+    let think_parser = collection.get_by_name("parse_think");
+    assert!(think_parser.is_some());
+
+    // Validate the collection
+    let validation_issues = collector.validate();
+
+    // Print any validation issues
+    if !validation_issues.is_empty() {
+        println!("Validation issues:");
+        for issue in &validation_issues {
+            println!("  - {}", issue);
+        }
+    }
+    assert!(validation_issues.is_empty());
+
+    // Generate markdown (but don't assert on specifics since other tests might add docs)
+    let _markdown = collector.export_markdown();
+}
