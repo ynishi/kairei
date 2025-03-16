@@ -30,7 +30,7 @@ bench: bench-core
 bench-core:
 	cd kairei-core && cargo bench
 
-fmt: fmt-core fmt-http fmt-cli
+fmt: fmt-core fmt-http fmt-cli doc
 
 fmt-core:
 	cd kairei-core && cargo fmt
