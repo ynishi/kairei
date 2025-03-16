@@ -95,7 +95,7 @@ pub fn parse_lifecycle() -> impl Parser<Token, ast::LifecycleDef> {
     )
 }
 
-fn parse_init_handler() -> impl Parser<Token, ast::HandlerBlock> {
+pub fn parse_init_handler() -> impl Parser<Token, ast::HandlerBlock> {
     with_context(
         map(
             preceded(as_unit(parse_init_keyword()), parse_statements()),
@@ -105,7 +105,7 @@ fn parse_init_handler() -> impl Parser<Token, ast::HandlerBlock> {
     )
 }
 
-fn parse_destroy_handler() -> impl Parser<Token, ast::HandlerBlock> {
+pub fn parse_destroy_handler() -> impl Parser<Token, ast::HandlerBlock> {
     with_context(
         map(
             preceded(as_unit(parse_destroy_keyword()), parse_statements()),

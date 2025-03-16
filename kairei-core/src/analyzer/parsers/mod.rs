@@ -23,6 +23,8 @@ pub mod agent;
 pub mod doc_event_handlers;
 /// Documentation for expression parsers
 pub mod doc_expression;
+/// Documentation for lifecycle handler parsers
+pub mod doc_lifecycle_handlers;
 /// Documentation for statement parsers
 pub mod doc_statement;
 /// Documentation for type parsers
