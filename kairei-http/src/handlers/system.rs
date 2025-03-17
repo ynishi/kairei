@@ -225,6 +225,7 @@ pub async fn start_system(
             Root {
                 world_def: None,
                 micro_agent_defs: vec![],
+                sistence_agent_defs: vec![],
             }
         };
 
