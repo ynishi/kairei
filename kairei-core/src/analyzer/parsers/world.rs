@@ -164,7 +164,7 @@ pub fn parse_root() -> impl Parser<Token, ast::Root> {
     with_context(
         map(
             tuple2(optional(parse_world()), many(parse_agent_def())),
-            |(world_def, micro_agent_defs)| ast::Root::new(world_def, micro_agent_defs),
+            |(world_def, micro_agent_defs)| ast::Root::new(world_def, micro_agent_defs, vec![]),
         ),
         "root",
     )

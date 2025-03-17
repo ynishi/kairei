@@ -1,6 +1,6 @@
 use super::{
     super::{super::{core::*, prelude::*}},
-    parse_arguments,
+    parse_arguments, parse_identifier,
 };
 use crate::ast;
 use crate::tokenizer::{keyword::Keyword, token::Token};
@@ -59,15 +59,15 @@ mod tests {
         let input = &[
             Token::Keyword(Keyword::Will),
             Token::Identifier("notify".to_string()),
-            Token::Symbol(Symbol::OpenParen),
-            Token::StringLiteral(StringLiteral {
-                parts: vec![StringPart::Text("Important update".to_string())],
-            }),
-            Token::Symbol(Symbol::CloseParen),
+            Token::Delimiter(Delimiter::OpenParen),
+            Token::Literal(Literal::String(StringLiteral::Single(vec![
+                StringPart::Literal("Important update".to_string()),
+            ]))),
+            Token::Delimiter(Delimiter::CloseParen),
         ];
 
-        let (rest, expr) = parse_will_action().parse(input).unwrap();
-        assert!(rest.is_empty());
+        let (rest, expr) = parse_will_action().parse(input, 0).unwrap();
+        assert_eq!(rest, input.len());
 
         if let ast::Expression::WillAction { action, parameters, target } = expr {
             assert_eq!(action, "notify");
@@ -90,8 +90,8 @@ mod tests {
             Token::Identifier("user".to_string()),
         ];
 
-        let (rest, expr) = parse_will_action().parse(input).unwrap();
-        assert!(rest.is_empty());
+        let (rest, expr) = parse_will_action().parse(input, 0).unwrap();
+        assert_eq!(rest, input.len());
 
         if let ast::Expression::WillAction { action, parameters, target } = expr {
             assert_eq!(action, "suggest");

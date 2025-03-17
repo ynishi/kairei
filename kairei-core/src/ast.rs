@@ -616,7 +616,8 @@ use thiserror::Error;
 use crate::tokenizer::token::{TokenSpan, TokenizerError};
 use crate::type_checker::TypeCheckError;
 
-mod sistence;
+pub mod sistence;
+pub use sistence::{SistenceAgentDef, SistenceConfig};
 
 // リクエストオプション
 #[derive(Debug, Clone, PartialEq)]
@@ -700,6 +701,11 @@ pub enum Expression {
     },
     Ok(Box<Expression>),
     Err(Box<Expression>),
+    WillAction {
+        action: String,
+        parameters: Vec<Expression>,
+        target: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

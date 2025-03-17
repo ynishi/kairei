@@ -1045,6 +1045,7 @@ mod tests {
                 answer: None,
                 react: None,
             }],
+            vec![],
         );
 
         let output = visitor.format_root(&root).unwrap();

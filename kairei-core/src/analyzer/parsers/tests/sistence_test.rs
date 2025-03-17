@@ -2,8 +2,8 @@ use crate::analyzer::parsers::agent::parse_sistence_agent_def;
 use crate::analyzer::parsers::expression::parse_will_action;
 use crate::ast;
 use crate::tokenizer::keyword::Keyword;
-use crate::tokenizer::literal::Literal;
-use crate::tokenizer::symbol::Symbol;
+use crate::tokenizer::literal::{Literal, StringLiteral, StringPart};
+use crate::tokenizer::symbol::Delimiter;
 use crate::tokenizer::token::Token;
 
 #[test]
@@ -11,14 +11,12 @@ fn test_parse_sistence_agent() {
     let input = &[
         Token::Keyword(Keyword::Sistence),
         Token::Identifier("TestAgent".to_string()),
-        Token::Symbol(Symbol::OpenBrace),
+        Token::Delimiter(Delimiter::OpenBrace),
         Token::Keyword(Keyword::Policy),
-        Token::StringLiteral(crate::tokenizer::literal::StringLiteral {
-            parts: vec![crate::tokenizer::literal::StringPart::Text(
-                "Proactively assist users".to_string(),
-            )],
-        }),
-        Token::Symbol(Symbol::CloseBrace),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("Proactively assist users".to_string()),
+        ]))),
+        Token::Delimiter(Delimiter::CloseBrace),
     ];
 
     let (rest, agent) = parse_sistence_agent_def().parse(input).unwrap();
@@ -33,13 +31,11 @@ fn test_parse_will_action() {
     let input = &[
         Token::Keyword(Keyword::Will),
         Token::Identifier("notify".to_string()),
-        Token::Symbol(Symbol::OpenParen),
-        Token::StringLiteral(crate::tokenizer::literal::StringLiteral {
-            parts: vec![crate::tokenizer::literal::StringPart::Text(
-                "Important update".to_string(),
-            )],
-        }),
-        Token::Symbol(Symbol::CloseParen),
+        Token::Delimiter(Delimiter::OpenParen),
+        Token::Literal(Literal::String(StringLiteral::Single(vec![
+            StringPart::Literal("Important update".to_string()),
+        ]))),
+        Token::Delimiter(Delimiter::CloseParen),
     ];
 
     let (rest, expr) = parse_will_action().parse(input).unwrap();
