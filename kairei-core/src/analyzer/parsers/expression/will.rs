@@ -1,9 +1,10 @@
 use super::{
-    super::{super::{core::*, prelude::*}},
+    super::{super::prelude::*},
     parse_arguments, parse_identifier,
 };
-use crate::ast::{self, Expression};
+use crate::ast;
 use crate::tokenizer::{keyword::Keyword, token::Token, symbol::Delimiter};
+use crate::analyzer::core::Parser;
 
 /// Parse a will action expression
 pub fn parse_will_action() -> impl Parser<Token, ast::Expression> {
@@ -52,10 +53,12 @@ fn parse_to_keyword() -> impl Parser<Token, Token> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tokenizer::token::Token;
-    use crate::tokenizer::literal::Literal;
-    use crate::tokenizer::symbol::Symbol;
-    use crate::tokenizer::literal::{StringLiteral, StringPart};
+    use crate::tokenizer::{
+        token::Token,
+        literal::{Literal, StringLiteral, StringPart},
+        symbol::Delimiter,
+    };
+    use crate::analyzer::core::Parser;
 
     #[test]
     fn test_parse_will_action_simple() {

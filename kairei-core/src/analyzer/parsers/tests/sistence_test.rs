@@ -1,5 +1,10 @@
-use crate::analyzer::parsers::agent::parse_sistence_agent_def;
-use crate::analyzer::parsers::expression::parse_will_action;
+use crate::analyzer::{
+    core::Parser,
+    parsers::{
+        agent::parse_sistence_agent_def,
+        expression::parse_will_action,
+    },
+};
 use crate::ast;
 use crate::tokenizer::keyword::Keyword;
 use crate::tokenizer::literal::{Literal, StringLiteral, StringPart};
@@ -19,8 +24,8 @@ fn test_parse_sistence_agent() {
         Token::Delimiter(Delimiter::CloseBrace),
     ];
 
-    let (rest, agent) = parse_sistence_agent_def().parse(input).unwrap();
-    assert!(rest.is_empty());
+    let (rest, agent) = parse_sistence_agent_def().parse(input, 0).unwrap();
+    assert_eq!(rest, input.len());
     assert_eq!(agent.name, "TestAgent");
     assert_eq!(agent.policies.len(), 1);
     assert_eq!(agent.policies[0].text, "Proactively assist users");
@@ -38,8 +43,8 @@ fn test_parse_will_action() {
         Token::Delimiter(Delimiter::CloseParen),
     ];
 
-    let (rest, expr) = parse_will_action().parse(input).unwrap();
-    assert!(rest.is_empty());
+    let (rest, expr) = parse_will_action().parse(input, 0).unwrap();
+    assert_eq!(rest, input.len());
 
     if let ast::Expression::WillAction {
         action,
