@@ -536,7 +536,7 @@ impl TypeVisitor for DefaultVisitor {
             }
 
             // Validate additional parameters
-            for (_key, value) in &config.parameters {
+            for value in config.parameters.values() {
                 // Ensure parameter values have valid types
                 self.expression_checker.infer_literal_type(value, ctx)?;
             }
