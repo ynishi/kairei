@@ -403,11 +403,26 @@ impl DefaultVisitor {
                     self.infer_type(param, ctx)?;
                 }
                 // WillAction returns a map with action details
-                Ok(TypeInfo::Map(vec![
-                    ("action".to_string(), TypeInfo::Simple("String".to_string())),
-                    ("parameters".to_string(), TypeInfo::List(Box::new(TypeInfo::Simple("Any".to_string())))),
-                    ("target".to_string(), TypeInfo::Optional(Box::new(TypeInfo::Simple("String".to_string())))),
-                ]))
+                // WillAction returns a structured type with action details
+                Ok(TypeInfo::Custom {
+                    name: "WillAction".to_string(),
+                    fields: {
+                        let mut fields = HashMap::new();
+                        fields.insert("action".to_string(), FieldInfo {
+                            type_info: Some(TypeInfo::Simple("String".to_string())),
+                            default_value: None,
+                        });
+                        fields.insert("parameters".to_string(), FieldInfo {
+                            type_info: Some(TypeInfo::Array(Box::new(TypeInfo::Simple("Any".to_string())))),
+                            default_value: None,
+                        });
+                        fields.insert("target".to_string(), FieldInfo {
+                            type_info: Some(TypeInfo::Option(Box::new(TypeInfo::Simple("String".to_string())))),
+                            default_value: None,
+                        });
+                        fields
+                    },
+                })
             }
         }
     }

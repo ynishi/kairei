@@ -3,7 +3,7 @@ use super::{
     parse_arguments, parse_identifier,
 };
 use crate::ast;
-use crate::tokenizer::{keyword::Keyword, token::Token, symbol::Delimiter};
+use crate::tokenizer::{keyword::Keyword, token::Token};
 use crate::analyzer::core::Parser;
 
 /// Parse a will action expression
