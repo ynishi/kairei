@@ -1,6 +1,7 @@
 use crate::{
     ast::{
-        Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, SistenceAgentDef, StateDef, Statement, TypeInfo,
+        Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, SistenceAgentDef, StateDef,
+        Statement, TypeInfo,
     },
     type_checker::{
         TypeCheckError, TypeCheckResult, TypeContext,

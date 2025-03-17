@@ -1,8 +1,8 @@
 use crate::ast::{
-    Expression, HandlerBlock, Literal, Parameter, RequestHandler, RequestType, Root, SistenceAgentDef, SistenceConfig,
-    Statement, TypeInfo,
+    Expression, HandlerBlock, Literal, Parameter, RequestHandler, RequestType, Root,
+    SistenceAgentDef, SistenceConfig, Statement, TypeInfo,
 };
-use crate::type_checker::{run_type_checker, TypeCheckError};
+use crate::type_checker::{TypeCheckError, run_type_checker};
 use std::collections::HashMap;
 
 #[test]
@@ -92,7 +92,9 @@ fn test_sistence_agent_invalid_initiative_threshold() {
     if let Err(err) = result {
         match err {
             TypeCheckError::TypeInferenceError { message, .. } => {
-                assert!(message.contains("Sistence initiative threshold must be between 0.0 and 1.0"));
+                assert!(
+                    message.contains("Sistence initiative threshold must be between 0.0 and 1.0")
+                );
             }
             _ => panic!("Expected TypeInferenceError"),
         }
@@ -122,7 +124,9 @@ fn test_will_action_expression() {
                     block: HandlerBlock {
                         statements: vec![Statement::Expression(Expression::WillAction {
                             action: "test_action".to_string(),
-                            parameters: vec![Expression::Literal(Literal::String("param1".to_string()))],
+                            parameters: vec![Expression::Literal(Literal::String(
+                                "param1".to_string(),
+                            ))],
                             target: Some("target_agent".to_string()),
                         })],
                     },
@@ -169,7 +173,9 @@ fn test_will_action_with_invalid_parameters() {
                     constraints: None,
                     block: HandlerBlock {
                         statements: vec![
-                            Statement::Expression(Expression::Variable("undefined_var".to_string())),
+                            Statement::Expression(Expression::Variable(
+                                "undefined_var".to_string(),
+                            )),
                             Statement::Expression(Expression::WillAction {
                                 action: "test_action".to_string(),
                                 parameters: vec![Expression::Variable("undefined_var".to_string())],

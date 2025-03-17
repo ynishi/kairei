@@ -172,13 +172,13 @@ impl TypeCheckError {
             Self::UndefinedFunction { name, .. } => Self::UndefinedFunction { name, meta },
             Self::InvalidWillActionError { message, .. } => {
                 Self::InvalidWillActionError { message, meta }
-            },
+            }
             Self::WillActionParameterError { message, .. } => {
                 Self::WillActionParameterError { message, meta }
-            },
+            }
             Self::InvalidSistenceContextError { message, .. } => {
                 Self::InvalidSistenceContextError { message, meta }
-            },
+            }
             _ => self,
         }
     }
@@ -338,7 +338,7 @@ impl TypeCheckError {
                 )),
         }))
     }
-    
+
     pub fn invalid_will_action(message: String, location: Location) -> Self {
         Self::InvalidWillActionError {
             message: message.clone(),
@@ -348,7 +348,7 @@ impl TypeCheckError {
                 .with_suggestion("Check that the will action follows the expected format and contains valid parameters"),
         }
     }
-    
+
     pub fn will_action_parameter_error(message: String, location: Location) -> Self {
         Self::WillActionParameterError {
             message: message.clone(),
@@ -358,7 +358,7 @@ impl TypeCheckError {
                 .with_suggestion("Check that the parameters provided to the will action are valid and of the correct types"),
         }
     }
-    
+
     pub fn invalid_sistence_context(message: String, location: Location) -> Self {
         Self::InvalidSistenceContextError {
             message: message.clone(),

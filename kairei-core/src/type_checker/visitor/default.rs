@@ -516,7 +516,10 @@ impl TypeVisitor for DefaultVisitor {
             // Validate proactivity level (0.0 to 1.0)
             if config.level < 0.0 || config.level > 1.0 {
                 return Err(TypeCheckError::type_inference_error(
-                    format!("Sistence proactivity level must be between 0.0 and 1.0, got {}", config.level),
+                    format!(
+                        "Sistence proactivity level must be between 0.0 and 1.0, got {}",
+                        config.level
+                    ),
                     Default::default(),
                 ));
             }
@@ -829,7 +832,7 @@ impl TypeVisitor for DefaultVisitor {
         for agent in &mut root.micro_agent_defs {
             self.visit_micro_agent(agent, ctx)?;
         }
-        
+
         // Visit all sistence agents
         for agent in &mut root.sistence_agent_defs {
             self.visit_sistence_agent(agent, ctx)?;

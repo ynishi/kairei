@@ -203,7 +203,10 @@
 /// - Efficient state access validation
 /// - Optimized error handling paths
 use crate::{
-    ast::{Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, SistenceAgentDef, StateDef, Statement},
+    ast::{
+        Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, SistenceAgentDef, StateDef,
+        Statement,
+    },
     type_checker::{TypeCheckResult, TypeContext},
 };
 
@@ -218,7 +221,7 @@ pub trait TypeVisitor {
         agent: &mut MicroAgentDef,
         ctx: &mut TypeContext,
     ) -> TypeCheckResult<()>;
-    
+
     /// Visit a sistence agent definition
     fn visit_sistence_agent(
         &mut self,
@@ -277,7 +280,7 @@ pub trait PluginVisitor {
     ) -> TypeCheckResult<()> {
         Ok(())
     }
-    
+
     /// Called before visiting a sistence agent
     fn before_sistence_agent(
         &mut self,
