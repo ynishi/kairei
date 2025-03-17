@@ -105,7 +105,23 @@ impl ExpressionEvaluator {
                     .await
             }
             Expression::Await(expressions) => self.eval_await(expressions, context).await,
-
+            Expression::WillAction {
+                action,
+                parameters,
+                target,
+            } => {
+                let mut map = HashMap::new();
+                map.insert("action".to_string(), Value::String(action.clone()));
+                let mut eval_params = Vec::new();
+                for param in parameters {
+                    eval_params.push(self.eval_expression(param, context.clone()).await?);
+                }
+                map.insert("parameters".to_string(), Value::List(eval_params));
+                if let Some(t) = target {
+                    map.insert("target".to_string(), Value::String(t.clone()));
+                }
+                Ok(Value::Map(map))
+            }
             Expression::Ok(expression) => Ok(Value::Ok(Box::new(
                 self.eval_expression(expression, context).await?,
             ))),

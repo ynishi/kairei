@@ -182,11 +182,33 @@ impl FormatterVisitor {
             Expression::Await(exprs) => {
                 self.write("await ")?;
                 for (i, expr) in exprs.iter().enumerate() {
-                    if i > 0 {
+                    self.format_expression(expr)?;
+                    if i < exprs.len() - 1 {
                         self.write(", ")?;
                     }
-                    self.format_expression(expr)?;
                 }
+                return Ok(());
+            }
+            Expression::WillAction {
+                action,
+                parameters,
+                target,
+            } => {
+                self.write("will ")?;
+                self.write(action)?;
+                self.write("(")?;
+                for (i, param) in parameters.iter().enumerate() {
+                    self.format_expression(param)?;
+                    if i < parameters.len() - 1 {
+                        self.write(", ")?;
+                    }
+                }
+                self.write(")")?;
+                if let Some(target) = target {
+                    self.write(" to ")?;
+                    self.write(target)?;
+                }
+                return Ok(());
             }
             Expression::BinaryOp { op, left, right } => {
                 self.format_expression(left)?;
@@ -1045,6 +1067,7 @@ mod tests {
                 answer: None,
                 react: None,
             }],
+            vec![],
         );
 
         let output = visitor.format_root(&root).unwrap();

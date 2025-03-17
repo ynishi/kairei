@@ -6,7 +6,11 @@ use super::{
 };
 use crate::ast;
 use crate::tokenizer::{keyword::Keyword, symbol::Operator, token::Token};
+
+// Import will action parser
+pub mod will;
 use std::collections::HashMap;
+pub use will::parse_will_action;
 
 pub fn parse_expression() -> impl Parser<Token, ast::Expression> {
     with_context(lazy(parse_binary_expression), "expression")
@@ -250,6 +254,7 @@ fn parse_primary() -> impl Parser<Token, ast::Expression> {
             Box::new(map(parse_state_access(), ast::Expression::StateAccess)),
             Box::new(parse_request()),
             Box::new(parse_await()),
+            Box::new(will::parse_will_action()),
         ]),
         "primary",
     )

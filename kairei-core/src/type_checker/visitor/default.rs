@@ -373,36 +373,71 @@ impl DefaultVisitor {
                 if exprs.len() == 1 {
                     let expr_type = self.infer_type(&exprs[0], ctx)?;
                     if let TypeInfo::Result { ok_type, .. } = expr_type {
-                        return Ok(*ok_type);
+                        Ok(*ok_type)
                     } else {
-                        return Err(TypeCheckError::type_inference_error(
+                        Err(TypeCheckError::type_inference_error(
                             "Can only await Result types".to_string(),
                             Default::default(),
-                        ));
+                        ))
                     }
-                }
-
-                // For multiple expressions, create an array of the ok_types
-                // Since there's no Tuple type, we use Array to represent multiple values
-                let mut element_type = TypeInfo::Simple("Any".to_string());
-
-                // Check that all expressions are Result types and extract their ok_types
-                for expr in exprs {
-                    let expr_type = self.infer_type(expr, ctx)?;
-                    if let TypeInfo::Result { .. } = expr_type {
-                        // For simplicity, we just use Any as the element type for multiple expressions
-                        // A more sophisticated implementation could track the actual types
-                        element_type = TypeInfo::Simple("Any".to_string());
-                    } else {
-                        return Err(TypeCheckError::type_inference_error(
-                            "Can only await Result types".to_string(),
-                            Default::default(),
-                        ));
+                } else {
+                    // For multiple expressions, return an array of ok_types
+                    let mut types = Vec::new();
+                    for expr in exprs {
+                        let expr_type = self.infer_type(expr, ctx)?;
+                        if let TypeInfo::Result { ok_type, .. } = expr_type {
+                            types.push(*ok_type);
+                        } else {
+                            return Err(TypeCheckError::type_inference_error(
+                                "Can only await Result types".to_string(),
+                                Default::default(),
+                            ));
+                        }
                     }
+                    Ok(TypeInfo::Array(Box::new(TypeInfo::Simple(
+                        "Any".to_string(),
+                    ))))
                 }
-
-                // Return an array type for multiple expressions
-                Ok(TypeInfo::Array(Box::new(element_type)))
+            }
+            Expression::WillAction { parameters, .. } => {
+                // Check parameter types
+                for param in parameters {
+                    self.infer_type(param, ctx)?;
+                }
+                // WillAction returns a map with action details
+                // WillAction returns a structured type with action details
+                Ok(TypeInfo::Custom {
+                    name: "WillAction".to_string(),
+                    fields: {
+                        let mut fields = HashMap::new();
+                        fields.insert(
+                            "action".to_string(),
+                            FieldInfo {
+                                type_info: Some(TypeInfo::Simple("String".to_string())),
+                                default_value: None,
+                            },
+                        );
+                        fields.insert(
+                            "parameters".to_string(),
+                            FieldInfo {
+                                type_info: Some(TypeInfo::Array(Box::new(TypeInfo::Simple(
+                                    "Any".to_string(),
+                                )))),
+                                default_value: None,
+                            },
+                        );
+                        fields.insert(
+                            "target".to_string(),
+                            FieldInfo {
+                                type_info: Some(TypeInfo::Option(Box::new(TypeInfo::Simple(
+                                    "String".to_string(),
+                                )))),
+                                default_value: None,
+                            },
+                        );
+                        fields
+                    },
+                })
             }
         }
     }

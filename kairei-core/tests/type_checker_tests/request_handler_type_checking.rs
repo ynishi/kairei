@@ -36,6 +36,7 @@ fn test_request_handler_type_checking_ok() -> TypeCheckResult<()> {
             ..Default::default()
         }],
         world_def: None,
+        sistence_agent_defs: vec![],
     };
 
     checker.check_types(&mut root)?;
@@ -76,6 +77,7 @@ fn test_request_handler_type_checking_ng() -> TypeCheckResult<()> {
             ..Default::default()
         }],
         world_def: None,
+        sistence_agent_defs: vec![],
     };
 
     let result = checker.check_types(&mut root);
