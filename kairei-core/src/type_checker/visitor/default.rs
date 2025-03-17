@@ -369,6 +369,30 @@ impl DefaultVisitor {
                 }
             }
             Expression::Await(exprs) => {
+                // For a single expression, return its type
+                if exprs.len() == 1 {
+                    let expr_type = self.infer_type(&exprs[0], ctx)?;
+                    Ok(expr_type)
+                } else {
+                    // For multiple expressions, return a tuple type
+                    let mut types = Vec::new();
+                    for expr in exprs {
+                        types.push(self.infer_type(expr, ctx)?);
+                    }
+                    Ok(TypeInfo::Tuple(types))
+                }
+            }
+            Expression::WillAction { parameters, .. } => {
+                // Check parameter types
+                for param in parameters {
+                    self.infer_type(param, ctx)?;
+                }
+                // WillAction returns a map with action details
+                Ok(TypeInfo::Map(vec![
+                    ("action".to_string(), TypeInfo::String),
+                    ("parameters".to_string(), TypeInfo::List(Box::new(TypeInfo::Any))),
+                    ("target".to_string(), TypeInfo::Optional(Box::new(TypeInfo::String))),
+                ]))
                 // For a single expression, return the ok_type of the Result
                 if exprs.len() == 1 {
                     let expr_type = self.infer_type(&exprs[0], ctx)?;
