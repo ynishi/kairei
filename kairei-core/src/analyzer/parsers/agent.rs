@@ -53,6 +53,7 @@ pub fn parse_agent_def() -> impl Parser<Token, ast::MicroAgentDef> {
 
 // Import Sistence agent parser
 pub mod sistence;
+pub use sistence::parse_sistence_agent_def;
 
 #[derive(Debug, Clone, PartialEq)]
 enum AgentDefItem {

@@ -2,8 +2,8 @@ use super::{
     super::{super::{core::*, prelude::*}},
     parse_arguments, parse_identifier,
 };
-use crate::ast;
-use crate::tokenizer::{keyword::Keyword, token::Token};
+use crate::ast::{self, Expression};
+use crate::tokenizer::{keyword::Keyword, token::Token, symbol::Delimiter};
 
 /// Parse a will action expression
 pub fn parse_will_action() -> impl Parser<Token, ast::Expression> {
@@ -28,7 +28,10 @@ pub fn parse_will_action() -> impl Parser<Token, ast::Expression> {
             ),
             |(_, action, (parameters, target))| ast::Expression::WillAction {
                 action,
-                parameters,
+                parameters: parameters.into_iter().map(|arg| match arg {
+                    ast::Argument::Named { value, .. } => value,
+                    ast::Argument::Positional(value) => value,
+                }).collect(),
                 target,
             },
         ),
@@ -83,9 +86,9 @@ mod tests {
         let input = &[
             Token::Keyword(Keyword::Will),
             Token::Identifier("suggest".to_string()),
-            Token::Symbol(Symbol::OpenParen),
+            Token::Delimiter(Delimiter::OpenParen),
             Token::Identifier("options".to_string()),
-            Token::Symbol(Symbol::CloseParen),
+            Token::Delimiter(Delimiter::CloseParen),
             Token::Keyword(Keyword::To),
             Token::Identifier("user".to_string()),
         ];
