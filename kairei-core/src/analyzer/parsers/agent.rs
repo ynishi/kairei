@@ -51,6 +51,9 @@ pub fn parse_agent_def() -> impl Parser<Token, ast::MicroAgentDef> {
     )
 }
 
+// Import Sistence agent parser
+pub mod sistence;
+
 #[derive(Debug, Clone, PartialEq)]
 enum AgentDefItem {
     Policy(ast::Policy),
