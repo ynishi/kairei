@@ -4,7 +4,7 @@ use crate::{
     Argument,
     ast::{
         Expression, FieldInfo, HandlerBlock, HandlerDef, MicroAgentDef, RequestType, Root,
-        StateDef, Statement, TypeInfo,
+        SistenceAgentDef, StateDef, Statement, TypeInfo,
     },
     type_checker::{TypeCheckError, TypeCheckResult, TypeContext, visitor::common::TypeVisitor},
 };
@@ -498,6 +498,298 @@ impl Default for DefaultVisitor {
 }
 
 impl TypeVisitor for DefaultVisitor {
+    fn visit_sistence_agent(
+        &mut self,
+        agent: &mut SistenceAgentDef,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()> {
+        // Create an isolated scope for the sistence agent
+        ctx.enter_isolated_scope();
+
+        // Visit state definition if present
+        if let Some(state) = &mut agent.state {
+            self.visit_state(state, ctx)?;
+        }
+
+        // Visit sistence-specific configuration if present
+        if let Some(config) = &agent.sistence_config {
+            // Validate proactivity level (0.0 to 1.0)
+            if config.level < 0.0 || config.level > 1.0 {
+                return Err(TypeCheckError::type_inference_error(
+                    format!("Sistence proactivity level must be between 0.0 and 1.0, got {}", config.level),
+                    Default::default(),
+                ));
+            }
+
+            // Validate initiative threshold (0.0 to 1.0)
+            if config.initiative_threshold < 0.0 || config.initiative_threshold > 1.0 {
+                return Err(TypeCheckError::type_inference_error(
+                    format!(
+                        "Sistence initiative threshold must be between 0.0 and 1.0, got {}",
+                        config.initiative_threshold
+                    ),
+                    Default::default(),
+                ));
+            }
+
+            // Validate additional parameters
+            for (_key, value) in &config.parameters {
+                // Ensure parameter values have valid types
+                self.expression_checker.infer_literal_type(value, ctx)?;
+            }
+        }
+
+        // Visit lifecycle handlers if present
+        if let Some(lifecycle) = &agent.lifecycle {
+            if let Some(init) = &lifecycle.on_init {
+                // Create an isolated scope for the init handler
+                ctx.enter_isolated_scope();
+                let result = self.visit_handler_block(init, ctx);
+                ctx.exit_isolated_scope();
+                result?;
+            }
+            if let Some(destroy) = &lifecycle.on_destroy {
+                // Create an isolated scope for the destroy handler
+                ctx.enter_isolated_scope();
+                let result = self.visit_handler_block(destroy, ctx);
+                ctx.exit_isolated_scope();
+                result?;
+            }
+        }
+
+        // Visit answer handlers if present
+        if let Some(answer) = &agent.answer {
+            for handler in &answer.handlers {
+                // Create an isolated scope for each answer handler
+                ctx.enter_isolated_scope();
+
+                // Register handler return type in scope
+                ctx.scope.insert_type(
+                    "handler_return_type".to_string(),
+                    handler.return_type.clone(),
+                );
+
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            ctx.exit_isolated_scope();
+                            return Err(TypeCheckError::type_mismatch(
+                                existing_type.clone(),
+                                param.type_info.clone(),
+                                Default::default(),
+                            ));
+                        }
+                    }
+
+                    // Add parameter to scope for use in handler block
+                    ctx.scope
+                        .insert_type(param.name.clone(), param.type_info.clone());
+                }
+
+                // Register WillAction type in the scope for Sistence context
+                ctx.scope.insert_type(
+                    "WillAction".to_string(),
+                    TypeInfo::Custom {
+                        name: "WillAction".to_string(),
+                        fields: {
+                            let mut fields = HashMap::new();
+                            fields.insert(
+                                "action".to_string(),
+                                FieldInfo {
+                                    type_info: Some(TypeInfo::Simple("String".to_string())),
+                                    default_value: None,
+                                },
+                            );
+                            fields.insert(
+                                "parameters".to_string(),
+                                FieldInfo {
+                                    type_info: Some(TypeInfo::Array(Box::new(TypeInfo::Simple(
+                                        "Any".to_string(),
+                                    )))),
+                                    default_value: None,
+                                },
+                            );
+                            fields.insert(
+                                "target".to_string(),
+                                FieldInfo {
+                                    type_info: Some(TypeInfo::Option(Box::new(TypeInfo::Simple(
+                                        "String".to_string(),
+                                    )))),
+                                    default_value: None,
+                                },
+                            );
+                            fields
+                        },
+                    },
+                );
+
+                let result = self.visit_handler_block(&handler.block, ctx);
+                ctx.exit_isolated_scope();
+                result?;
+            }
+        }
+
+        // Visit observe handlers if present
+        if let Some(observe) = &agent.observe {
+            for handler in &observe.handlers {
+                // Create an isolated scope for each observe handler
+                ctx.enter_isolated_scope();
+
+                // 既存の型定義がない場合のみデフォルト値を設定
+                if ctx.scope.get_type("return_type").is_none() {
+                    ctx.scope.insert_type(
+                        "return_type".to_string(),
+                        TypeInfo::Result {
+                            ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
+                            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                        },
+                    );
+                }
+
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            return Err(TypeCheckError::type_mismatch(
+                                existing_type.clone(),
+                                param.type_info.clone(),
+                                Default::default(),
+                            ));
+                        }
+                    }
+
+                    // Add parameter to scope for use in handler block
+                    ctx.scope
+                        .insert_type(param.name.clone(), param.type_info.clone());
+                }
+
+                // Register WillAction type in the scope for Sistence context
+                ctx.scope.insert_type(
+                    "WillAction".to_string(),
+                    TypeInfo::Custom {
+                        name: "WillAction".to_string(),
+                        fields: {
+                            let mut fields = HashMap::new();
+                            fields.insert(
+                                "action".to_string(),
+                                FieldInfo {
+                                    type_info: Some(TypeInfo::Simple("String".to_string())),
+                                    default_value: None,
+                                },
+                            );
+                            fields.insert(
+                                "parameters".to_string(),
+                                FieldInfo {
+                                    type_info: Some(TypeInfo::Array(Box::new(TypeInfo::Simple(
+                                        "Any".to_string(),
+                                    )))),
+                                    default_value: None,
+                                },
+                            );
+                            fields.insert(
+                                "target".to_string(),
+                                FieldInfo {
+                                    type_info: Some(TypeInfo::Option(Box::new(TypeInfo::Simple(
+                                        "String".to_string(),
+                                    )))),
+                                    default_value: None,
+                                },
+                            );
+                            fields
+                        },
+                    },
+                );
+
+                let result = self.visit_handler_block(&handler.block, ctx);
+                ctx.exit_isolated_scope();
+                result?;
+            }
+        }
+
+        // Visit react handlers if present
+        if let Some(react) = &agent.react {
+            for handler in &react.handlers {
+                // Create an isolated scope for each react handler
+                ctx.enter_isolated_scope();
+
+                // 既存の型定義がない場合のみデフォルト値を設定
+                if ctx.scope.get_type("return_type").is_none() {
+                    ctx.scope.insert_type(
+                        "return_type".to_string(),
+                        TypeInfo::Result {
+                            ok_type: Box::new(TypeInfo::Simple("Any".to_string())),
+                            err_type: Box::new(TypeInfo::Simple("Error".to_string())),
+                        },
+                    );
+                }
+
+                // Check parameter types
+                for param in &handler.parameters {
+                    if let Some(existing_type) = ctx.scope.get_type(&param.name) {
+                        if existing_type != param.type_info {
+                            ctx.exit_isolated_scope();
+                            return Err(TypeCheckError::type_mismatch(
+                                existing_type.clone(),
+                                param.type_info.clone(),
+                                Default::default(),
+                            ));
+                        }
+                    }
+
+                    // Add parameter to scope for use in handler block
+                    ctx.scope
+                        .insert_type(param.name.clone(), param.type_info.clone());
+                }
+
+                // Register WillAction type in the scope for Sistence context
+                ctx.scope.insert_type(
+                    "WillAction".to_string(),
+                    TypeInfo::Custom {
+                        name: "WillAction".to_string(),
+                        fields: {
+                            let mut fields = HashMap::new();
+                            fields.insert(
+                                "action".to_string(),
+                                FieldInfo {
+                                    type_info: Some(TypeInfo::Simple("String".to_string())),
+                                    default_value: None,
+                                },
+                            );
+                            fields.insert(
+                                "parameters".to_string(),
+                                FieldInfo {
+                                    type_info: Some(TypeInfo::Array(Box::new(TypeInfo::Simple(
+                                        "Any".to_string(),
+                                    )))),
+                                    default_value: None,
+                                },
+                            );
+                            fields.insert(
+                                "target".to_string(),
+                                FieldInfo {
+                                    type_info: Some(TypeInfo::Option(Box::new(TypeInfo::Simple(
+                                        "String".to_string(),
+                                    )))),
+                                    default_value: None,
+                                },
+                            );
+                            fields
+                        },
+                    },
+                );
+
+                let result = self.visit_handler_block(&handler.block, ctx);
+                ctx.exit_isolated_scope();
+                result?;
+            }
+        }
+
+        // Exit the isolated scope for the sistence agent
+        ctx.exit_isolated_scope();
+
+        Ok(())
+    }
     fn visit_root(&mut self, root: &mut Root, ctx: &mut TypeContext) -> TypeCheckResult<()> {
         // Visit world definition if present
         if let Some(world_def) = &mut root.world_def {
@@ -536,6 +828,11 @@ impl TypeVisitor for DefaultVisitor {
         // Visit all micro agents
         for agent in &mut root.micro_agent_defs {
             self.visit_micro_agent(agent, ctx)?;
+        }
+        
+        // Visit all sistence agents
+        for agent in &mut root.sistence_agent_defs {
+            self.visit_sistence_agent(agent, ctx)?;
         }
 
         Ok(())
