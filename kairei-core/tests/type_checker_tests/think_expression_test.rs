@@ -42,6 +42,7 @@ fn test_think_expression_type_checking() {
             }),
             react: None,
         }],
+        sistence_agent_defs: vec![],
     };
 
     // This should now pass with our fix
@@ -101,6 +102,7 @@ fn test_think_expression_in_assignment() {
             }),
             react: None,
         }],
+        sistence_agent_defs: vec![],
     };
 
     // This should pass with our implementation

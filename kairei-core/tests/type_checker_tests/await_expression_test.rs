@@ -43,6 +43,7 @@ fn test_await_expression_type_checking() {
             }),
             react: None,
         }],
+        sistence_agent_defs: vec![],
     };
 
     // This should pass with our implementation
@@ -105,6 +106,7 @@ fn test_multiple_await_expressions() {
             }),
             react: None,
         }],
+        sistence_agent_defs: vec![],
     };
 
     // This should pass with our implementation
@@ -158,6 +160,7 @@ fn test_nested_await_expressions() {
             }),
             react: None,
         }],
+        sistence_agent_defs: vec![],
     };
 
     // This should pass with our implementation

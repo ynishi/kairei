@@ -45,6 +45,7 @@ fn test_request_expression_type_checking() {
             }),
             react: None,
         }],
+        sistence_agent_defs: vec![],
     };
 
     // This should pass with our implementation
@@ -109,6 +110,7 @@ fn test_request_expression_in_assignment() {
             }),
             react: None,
         }],
+        sistence_agent_defs: vec![],
     };
 
     // This should pass with our implementation

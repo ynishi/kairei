@@ -14,6 +14,7 @@ fn test_plugin_integration() -> TypeCheckResult<()> {
             ..Default::default()
         }],
         world_def: None,
+        sistence_agent_defs: vec![],
     };
 
     let mut checker = TypeChecker::new();
