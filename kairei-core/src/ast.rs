@@ -6,13 +6,19 @@ use std::collections::HashMap;
 pub struct Root {
     pub world_def: Option<WorldDef>,
     pub micro_agent_defs: Vec<MicroAgentDef>,
+    pub sistence_agent_defs: Vec<SistenceAgentDef>,
 }
 
 impl Root {
-    pub fn new(world_def: Option<WorldDef>, micro_agent_defs: Vec<MicroAgentDef>) -> Self {
+    pub fn new(
+        world_def: Option<WorldDef>,
+        micro_agent_defs: Vec<MicroAgentDef>,
+        sistence_agent_defs: Vec<SistenceAgentDef>,
+    ) -> Self {
         Self {
             world_def,
             micro_agent_defs,
+            sistence_agent_defs,
         }
     }
 }
@@ -609,6 +615,8 @@ use thiserror::Error;
 
 use crate::tokenizer::token::{TokenSpan, TokenizerError};
 use crate::type_checker::TypeCheckError;
+
+mod sistence;
 
 // リクエストオプション
 #[derive(Debug, Clone, PartialEq)]

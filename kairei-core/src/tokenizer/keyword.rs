@@ -106,6 +106,10 @@ pub enum Keyword {
     /// Used for error propagation.
     #[strum(serialize = "reThrow")]
     ReThrow,
+    /// Used for defining sistence agents.
+    Sistence,
+    /// Used for proactive actions.
+    Will,
 }
 
 /// Parses a keyword token from the input string.
@@ -330,6 +334,20 @@ pub fn parse_keyword(input: &str) -> ParserResult<Token> {
                         Keyword::To,
                         terminated(
                             tag("to"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Sistence,
+                        terminated(
+                            tag("sistence"),
+                            not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
+                        ),
+                    ),
+                    value(
+                        Keyword::Will,
+                        terminated(
+                            tag("will"),
                             not(peek(take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
                         ),
                     ),
