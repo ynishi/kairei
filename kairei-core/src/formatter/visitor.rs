@@ -187,11 +187,15 @@ impl FormatterVisitor {
                         self.write(", ")?;
                     }
                 }
-                return Ok(())
+                return Ok(());
             }
-            Expression::WillAction { action, parameters, target } => {
+            Expression::WillAction {
+                action,
+                parameters,
+                target,
+            } => {
                 self.write("will ")?;
-                self.write(&action)?;
+                self.write(action)?;
                 self.write("(")?;
                 for (i, param) in parameters.iter().enumerate() {
                     self.format_expression(param)?;
@@ -204,7 +208,7 @@ impl FormatterVisitor {
                     self.write(" to ")?;
                     self.write(target)?;
                 }
-                return Ok(())
+                return Ok(());
             }
             Expression::BinaryOp { op, left, right } => {
                 self.format_expression(left)?;

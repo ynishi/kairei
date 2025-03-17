@@ -1,11 +1,11 @@
+use super::super::handlers::{answer::parse_answer, observe::parse_observe, react::parse_react};
 use super::{
-    super::{super::{core::*, prelude::*}},
-    parse_lifecycle, parse_state, parse_policy,
-    parse_identifier, parse_open_brace, parse_close_brace, parse_colon, parse_comma, parse_literal,
+    super::super::{core::*, prelude::*},
+    parse_close_brace, parse_colon, parse_comma, parse_identifier, parse_lifecycle, parse_literal,
+    parse_open_brace, parse_policy, parse_state,
 };
 use crate::ast;
 use crate::tokenizer::{keyword::Keyword, token::Token};
-use super::super::handlers::{answer::parse_answer, observe::parse_observe, react::parse_react};
 
 /// Parse a Sistence agent definition
 pub fn parse_sistence_agent_def() -> impl Parser<Token, ast::SistenceAgentDef> {
@@ -22,7 +22,10 @@ pub fn parse_sistence_agent_def() -> impl Parser<Token, ast::SistenceAgentDef> {
                     Box::new(map(parse_observe(), SistenceAgentDefItem::Observe)),
                     Box::new(map(parse_answer(), SistenceAgentDefItem::Answer)),
                     Box::new(map(parse_react(), SistenceAgentDefItem::React)),
-                    Box::new(map(parse_sistence_config(), SistenceAgentDefItem::SistenceConfig)),
+                    Box::new(map(
+                        parse_sistence_config(),
+                        SistenceAgentDefItem::SistenceConfig,
+                    )),
                 ])),
                 parse_close_brace(),
             ),
@@ -35,12 +38,16 @@ pub fn parse_sistence_agent_def() -> impl Parser<Token, ast::SistenceAgentDef> {
                 for item in items {
                     match item {
                         SistenceAgentDefItem::Policy(policy) => agent.policies.push(policy),
-                        SistenceAgentDefItem::Lifecycle(lifecycle) => agent.lifecycle = Some(lifecycle),
+                        SistenceAgentDefItem::Lifecycle(lifecycle) => {
+                            agent.lifecycle = Some(lifecycle)
+                        }
                         SistenceAgentDefItem::State(state) => agent.state = Some(state),
                         SistenceAgentDefItem::Observe(observe) => agent.observe = Some(observe),
                         SistenceAgentDefItem::Answer(answer) => agent.answer = Some(answer),
                         SistenceAgentDefItem::React(react) => agent.react = Some(react),
-                        SistenceAgentDefItem::SistenceConfig(config) => agent.sistence_config = Some(config),
+                        SistenceAgentDefItem::SistenceConfig(config) => {
+                            agent.sistence_config = Some(config)
+                        }
                     }
                 }
 
@@ -64,7 +71,10 @@ enum SistenceAgentDefItem {
 
 /// Parse the 'sistence' keyword
 fn parse_sistence_agent_keyword() -> impl Parser<Token, Token> {
-    with_context(equal(Token::Keyword(Keyword::Sistence)), "sistence agent keyword")
+    with_context(
+        equal(Token::Keyword(Keyword::Sistence)),
+        "sistence agent keyword",
+    )
 }
 
 /// Parse Sistence configuration block
@@ -79,11 +89,13 @@ fn parse_sistence_config() -> impl Parser<Token, ast::SistenceConfig> {
             ),
             |(_, _, items, _)| {
                 let mut config = ast::SistenceConfig::default();
-                
+
                 for (key, value) in items {
                     match (key.as_str(), value) {
                         ("level", ast::Literal::Float(f)) => config.level = f,
-                        ("initiative_threshold", ast::Literal::Float(f)) => config.initiative_threshold = f,
+                        ("initiative_threshold", ast::Literal::Float(f)) => {
+                            config.initiative_threshold = f
+                        }
                         ("domains", ast::Literal::List(domains)) => {
                             for domain in domains {
                                 if let ast::Literal::String(domain_str) = domain {
@@ -96,7 +108,7 @@ fn parse_sistence_config() -> impl Parser<Token, ast::SistenceConfig> {
                         }
                     }
                 }
-                
+
                 config
             },
         ),

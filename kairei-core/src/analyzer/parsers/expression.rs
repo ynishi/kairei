@@ -9,8 +9,8 @@ use crate::tokenizer::{keyword::Keyword, symbol::Operator, token::Token};
 
 // Import will action parser
 pub mod will;
-pub use will::parse_will_action;
 use std::collections::HashMap;
+pub use will::parse_will_action;
 
 pub fn parse_expression() -> impl Parser<Token, ast::Expression> {
     with_context(lazy(parse_binary_expression), "expression")

@@ -1,9 +1,6 @@
 use crate::analyzer::{
     core::Parser,
-    parsers::{
-        agent::parse_sistence_agent_def,
-        expression::parse_will_action,
-    },
+    parsers::{agent::parse_sistence_agent_def, expression::parse_will_action},
 };
 use crate::ast;
 use crate::tokenizer::keyword::Keyword;

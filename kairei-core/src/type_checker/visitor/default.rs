@@ -394,7 +394,9 @@ impl DefaultVisitor {
                             ));
                         }
                     }
-                    Ok(TypeInfo::Array(Box::new(TypeInfo::Simple("Any".to_string()))))
+                    Ok(TypeInfo::Array(Box::new(TypeInfo::Simple(
+                        "Any".to_string(),
+                    ))))
                 }
             }
             Expression::WillAction { parameters, .. } => {
@@ -408,18 +410,31 @@ impl DefaultVisitor {
                     name: "WillAction".to_string(),
                     fields: {
                         let mut fields = HashMap::new();
-                        fields.insert("action".to_string(), FieldInfo {
-                            type_info: Some(TypeInfo::Simple("String".to_string())),
-                            default_value: None,
-                        });
-                        fields.insert("parameters".to_string(), FieldInfo {
-                            type_info: Some(TypeInfo::Array(Box::new(TypeInfo::Simple("Any".to_string())))),
-                            default_value: None,
-                        });
-                        fields.insert("target".to_string(), FieldInfo {
-                            type_info: Some(TypeInfo::Option(Box::new(TypeInfo::Simple("String".to_string())))),
-                            default_value: None,
-                        });
+                        fields.insert(
+                            "action".to_string(),
+                            FieldInfo {
+                                type_info: Some(TypeInfo::Simple("String".to_string())),
+                                default_value: None,
+                            },
+                        );
+                        fields.insert(
+                            "parameters".to_string(),
+                            FieldInfo {
+                                type_info: Some(TypeInfo::Array(Box::new(TypeInfo::Simple(
+                                    "Any".to_string(),
+                                )))),
+                                default_value: None,
+                            },
+                        );
+                        fields.insert(
+                            "target".to_string(),
+                            FieldInfo {
+                                type_info: Some(TypeInfo::Option(Box::new(TypeInfo::Simple(
+                                    "String".to_string(),
+                                )))),
+                                default_value: None,
+                            },
+                        );
                         fields
                     },
                 })

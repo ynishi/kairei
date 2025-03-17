@@ -1,10 +1,7 @@
-use super::{
-    super::{super::prelude::*},
-    parse_arguments, parse_identifier,
-};
+use super::{super::super::prelude::*, parse_arguments, parse_identifier};
+use crate::analyzer::core::Parser;
 use crate::ast;
 use crate::tokenizer::{keyword::Keyword, token::Token};
-use crate::analyzer::core::Parser;
 
 /// Parse a will action expression
 pub fn parse_will_action() -> impl Parser<Token, ast::Expression> {
@@ -29,10 +26,13 @@ pub fn parse_will_action() -> impl Parser<Token, ast::Expression> {
             ),
             |(_, action, (parameters, target))| ast::Expression::WillAction {
                 action,
-                parameters: parameters.into_iter().map(|arg| match arg {
-                    ast::Argument::Named { value, .. } => value,
-                    ast::Argument::Positional(value) => value,
-                }).collect(),
+                parameters: parameters
+                    .into_iter()
+                    .map(|arg| match arg {
+                        ast::Argument::Named { value, .. } => value,
+                        ast::Argument::Positional(value) => value,
+                    })
+                    .collect(),
                 target,
             },
         ),
@@ -53,12 +53,12 @@ fn parse_to_keyword() -> impl Parser<Token, Token> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer::core::Parser;
     use crate::tokenizer::{
-        token::Token,
         literal::{Literal, StringLiteral, StringPart},
         symbol::Delimiter,
+        token::Token,
     };
-    use crate::analyzer::core::Parser;
 
     #[test]
     fn test_parse_will_action_simple() {
@@ -75,7 +75,12 @@ mod tests {
         let (rest, expr) = parse_will_action().parse(input, 0).unwrap();
         assert_eq!(rest, input.len());
 
-        if let ast::Expression::WillAction { action, parameters, target } = expr {
+        if let ast::Expression::WillAction {
+            action,
+            parameters,
+            target,
+        } = expr
+        {
             assert_eq!(action, "notify");
             assert_eq!(parameters.len(), 1);
             assert!(target.is_none());
@@ -99,7 +104,12 @@ mod tests {
         let (rest, expr) = parse_will_action().parse(input, 0).unwrap();
         assert_eq!(rest, input.len());
 
-        if let ast::Expression::WillAction { action, parameters, target } = expr {
+        if let ast::Expression::WillAction {
+            action,
+            parameters,
+            target,
+        } = expr
+        {
             assert_eq!(action, "suggest");
             assert_eq!(parameters.len(), 1);
             assert_eq!(target, Some("user".to_string()));
