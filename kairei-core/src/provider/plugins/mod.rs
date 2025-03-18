@@ -6,6 +6,9 @@ pub mod shared_memory;
 pub mod shared_memory_adapter;
 pub mod storage;
 pub mod web_search_serper;
+pub mod will_action;
+
+pub use will_action::DefaultWillActionResolver;
 
 #[cfg(test)]
 mod provider_tests {
