@@ -1,6 +1,7 @@
 use crate::{
     ast::{
-        Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, StateDef, Statement, TypeInfo,
+        Expression, HandlerBlock, HandlerDef, MicroAgentDef, Root, SistenceAgentDef, StateDef,
+        Statement, TypeInfo,
     },
     type_checker::{
         TypeCheckError, TypeCheckResult, TypeContext,
@@ -210,6 +211,27 @@ impl TypeVisitor for TypeChecker {
         // Run plugins after expression
         for plugin in &mut self.plugins {
             plugin.after_expression(expr, ctx)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_sistence_agent(
+        &mut self,
+        agent: &mut SistenceAgentDef,
+        ctx: &mut TypeContext,
+    ) -> TypeCheckResult<()> {
+        // Run plugins before sistence agent
+        for plugin in &mut self.plugins {
+            plugin.before_sistence_agent(agent, ctx)?;
+        }
+
+        // Run default visitor
+        self.default_visitor.visit_sistence_agent(agent, ctx)?;
+
+        // Run plugins after sistence agent
+        for plugin in &mut self.plugins {
+            plugin.after_sistence_agent(agent, ctx)?;
         }
 
         Ok(())

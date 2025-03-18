@@ -5,3 +5,4 @@ mod handler_param_test;
 mod handler_tests;
 mod scope_isolation_tests;
 mod scope_tests;
+mod sistence_agent_tests;
