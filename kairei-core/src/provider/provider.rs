@@ -313,6 +313,7 @@ pub enum ProviderType {
     OpenAIAssistant,
     SimpleExpert,
     OpenAIChat,
+    Sistence,
     Unknown,
 }
 

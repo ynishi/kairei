@@ -418,6 +418,7 @@ impl ProviderRegistry {
             ProviderType::OpenAIAssistant => self.create_assistant(config, secret).await,
             ProviderType::SimpleExpert => self.create_simple_expert().await,
             ProviderType::OpenAIChat => self.create_chat(config, secret).await,
+            ProviderType::Sistence => self.create_sistence(config, secret).await,
             _ => Err(ProviderError::UnknownProvider(provider_type.to_string())),
         }
     }
@@ -502,6 +503,85 @@ impl ProviderRegistry {
             provider.register_plugin(Arc::new(web_search_serper_plugin))?;
         }
         provider.initialize(config, secret).await?;
+        Ok(Arc::new(provider))
+    }
+
+    /// Create a Sistence provider with LLM integration
+    ///
+    /// This method creates a SistenceProvider that delegates to an underlying
+    /// base LLM provider for non-will action requests and uses that same provider
+    /// with enhanced prompting for will actions.
+    ///
+    /// # Parameters
+    ///
+    /// * `config` - The provider configuration
+    /// * `secret` - The provider secrets (API keys, etc.)
+    ///
+    /// # Returns
+    ///
+    /// A `ProviderResult` containing the created provider or an error
+    #[instrument(level = "debug", skip(self, config, secret))]
+    pub async fn create_sistence(
+        &self,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
+    ) -> ProviderResult<Arc<dyn Provider>> {
+        // Import will action resolver if needed
+        use crate::provider::plugins::will_action::DefaultWillActionResolver;
+        use crate::provider::providers::sistence::SistenceProvider;
+
+        // Determine base provider type from config, default to OpenAIChat
+        let base_provider_type = config
+            .provider_specific
+            .get("base_provider_type")
+            .and_then(|v| v.as_str())
+            .map(|s| match s {
+                "OpenAIAssistant" => ProviderType::OpenAIAssistant,
+                "OpenAIChat" => ProviderType::OpenAIChat,
+                _ => ProviderType::OpenAIChat, // Default to OpenAIChat for unknown values
+            })
+            .unwrap_or(ProviderType::OpenAIChat);
+
+        // Create the base LLM provider
+        let base_provider = match base_provider_type {
+            ProviderType::OpenAIAssistant => self.create_assistant(config, secret).await?,
+            ProviderType::OpenAIChat => self.create_chat(config, secret).await?,
+            _ => self.create_chat(config, secret).await?, // Fallback to OpenAIChat
+        };
+
+        // Get shared memory capability
+        let shared_memory = if let Some(PluginConfig::SharedMemory(shared_memory_config)) =
+            config.plugin_configs.get("shared_memory")
+        {
+            self.get_or_create_shared_memory_plugin(shared_memory_config)
+        } else {
+            // Create a default shared memory plugin if not configured
+            let default_config = crate::provider::config::plugins::SharedMemoryConfig {
+                base: Default::default(),
+                max_keys: 1000,
+                ttl: std::time::Duration::from_secs(3600 * 24), // 24 hours
+                namespace: "sistence_default".to_string(),
+            };
+            self.get_or_create_shared_memory_plugin(&default_config)
+        };
+
+        // Create will action resolver
+        let will_action_config = crate::provider::config::plugins::WillActionConfig::default();
+        let will_action_resolver = Arc::new(DefaultWillActionResolver::new(will_action_config));
+
+        // Create the Sistence provider
+        let provider_name = config.name.clone();
+        let sistence_provider = SistenceProvider::new(
+            base_provider,
+            shared_memory,
+            will_action_resolver,
+            provider_name,
+        );
+
+        // Initialize the provider
+        let mut provider = sistence_provider;
+        provider.initialize(config, secret).await?;
+
         Ok(Arc::new(provider))
     }
 }
