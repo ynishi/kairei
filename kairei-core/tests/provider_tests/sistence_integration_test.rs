@@ -423,7 +423,19 @@ async fn test_sistence_provider_regular_request() {
     let request = create_test_request("Hello world", HashMap::new());
 
     // Execute request
-    let response = provider.execute(&context, &request).await.unwrap();
+    // For SimpleExpertProviderLLM, we need to set up a response in the config
+    let mut config = create_provider_config();
+    config.provider_specific.insert(
+        "Hello world".to_string(),
+        json!("This is a test response"),
+    );
+    
+    let context_with_config = ProviderContext {
+        config,
+        secret: ProviderSecret::default(),
+    };
+    
+    let response = provider.execute(&context_with_config, &request).await.unwrap();
 
     // For regular requests, the provider should delegate to the underlying LLM
     assert!(!response.output.is_empty());
@@ -537,9 +549,15 @@ async fn test_sistence_provider_agent_context_persistence() {
         "test_sistence".to_string(),
     );
 
-    // Create context and request
+    // Create context and request with proper config for SimpleExpertProviderLLM
+    let mut config = create_provider_config();
+    config.provider_specific.insert(
+        "notify".to_string(),
+        json!("{\"success\":true,\"data\":{\"message\":\"Notification sent\"}}"),
+    );
+    
     let context = ProviderContext {
-        config: create_provider_config(),
+        config,
         secret: ProviderSecret::default(),
     };
 
@@ -595,7 +613,19 @@ async fn test_sistence_provider_error_handling() {
     let request = create_will_action_request("notify");
 
     // Execute request - should fall back to LLM
-    let response = provider.execute(&context, &request).await.unwrap();
+    // For SimpleExpertProviderLLM, we need to set up a response in the config
+    let mut config = create_provider_config();
+    config.provider_specific.insert(
+        "notify".to_string(),
+        json!("{\"success\":true,\"data\":{\"message\":\"Handled by LLM fallback\"}}"),
+    );
+    
+    let context_with_config = ProviderContext {
+        config,
+        secret: ProviderSecret::default(),
+    };
+    
+    let response = provider.execute(&context_with_config, &request).await.unwrap();
 
     // Verify response
     let result: Value = serde_json::from_str(&response.output).unwrap();
