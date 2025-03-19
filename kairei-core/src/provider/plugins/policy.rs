@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use crate::{
     PolicyScope,
     provider::{
-        capability::CapabilityType,
+        capabilities::common::CapabilityType,
         llm::LLMResponse,
         plugin::{PluginContext, ProviderPlugin},
         provider::Section,

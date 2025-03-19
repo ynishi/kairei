@@ -15,8 +15,11 @@ use crate::{
             simple_expert::SimpleExpertProviderLLM,
         },
         plugins::{
-            memory::MemoryPlugin, shared_memory::InMemorySharedMemoryPlugin,
-            shared_memory_adapter::SharedMemoryPluginAdapter, web_search_serper::WebSearchPlugin,
+            memory::{
+                shared_memory::InMemorySharedMemoryPlugin,
+                shared_memory_adapter::SharedMemoryPluginAdapter, single_memory::MemoryPlugin,
+            },
+            web_search_serper::WebSearchPlugin,
         },
         provider::{Provider, ProviderSecret, ProviderType},
         provider_secret::SecretRegistry,
@@ -599,7 +602,7 @@ mod tests {
     use crate::{
         config::{CommonConfig, EndpointConfig, ProviderConfig, ProviderSecretConfig},
         provider::{
-            capability::Capabilities,
+            capabilities::common::Capabilities,
             request::{ProviderContext, ProviderRequest, ProviderResponse},
         },
     };

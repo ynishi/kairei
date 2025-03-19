@@ -8,7 +8,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use kairei_core::provider::plugins::persistent_shared_memory::PersistentSharedMemoryPlugin;
+//! use kairei_core::provider::plugins::memory::persistent_shared_memory::PersistentSharedMemoryPlugin;
 //! use kairei_core::provider::config::plugins::{PersistentSharedMemoryConfig, SharedMemoryConfig};
 //! use kairei_core::provider::capabilities::shared_memory::SharedMemoryCapability;
 //! use kairei_core::provider::capabilities::storage::{StorageBackend, ValueWithMetadata};
@@ -41,11 +41,11 @@ use tracing::error;
 
 use crate::event::event_registry::EventType;
 use crate::event_bus::{Event, EventBus};
+use crate::provider::capabilities::common::CapabilityType;
 use crate::provider::capabilities::shared_memory::{
     Metadata, SharedMemoryCapability, SharedMemoryError,
 };
 use crate::provider::capabilities::storage::{StorageBackend, StorageError, ValueWithMetadata};
-use crate::provider::capability::CapabilityType;
 use crate::provider::config::plugins::PersistentSharedMemoryConfig;
 use crate::provider::llm::LLMResponse;
 use crate::provider::plugin::{PluginContext, ProviderPlugin};
@@ -156,7 +156,7 @@ impl PersistentSharedMemoryPlugin {
     /// # Example
     ///
     /// ```no_run
-    /// # use kairei_core::provider::plugins::persistent_shared_memory::PersistentSharedMemoryPlugin;
+    /// # use kairei_core::provider::plugins::memory::persistent_shared_memory::PersistentSharedMemoryPlugin;
     /// # use kairei_core::provider::config::plugins::PersistentSharedMemoryConfig;
     /// let config = PersistentSharedMemoryConfig::default();
     /// let plugin = PersistentSharedMemoryPlugin::new(config);

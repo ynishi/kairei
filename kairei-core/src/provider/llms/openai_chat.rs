@@ -1,5 +1,5 @@
 use crate::{
-    provider::{capability::HasCapabilities, llm::ProviderLLM, provider::ProviderSecret},
+    provider::{llm::ProviderLLM, provider::ProviderSecret},
     timestamp::Timestamp,
 };
 use async_openai::{
@@ -18,7 +18,7 @@ use tracing::debug;
 use crate::{
     config::ProviderConfig,
     provider::{
-        capability::{Capabilities, CapabilityType},
+        capabilities::common::{Capabilities, CapabilityType, HasCapabilities},
         llm::{LLMResponse, ResponseMetadata},
         types::{ProviderError, ProviderResult},
     },

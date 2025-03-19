@@ -7,7 +7,7 @@ use crate::{
 };
 
 use super::{
-    capability::Capabilities,
+    capabilities::common::Capabilities,
     config::{ErrorCollector, ProviderConfigError},
     request::{ProviderContext, ProviderRequest, ProviderResponse},
     types::ProviderResult,
@@ -45,7 +45,7 @@ use utoipa::ToSchema;
 /// # use kairei_core::provider::provider::Provider;
 /// # use kairei_core::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
 /// # use kairei_core::provider::types::ProviderResult;
-/// # use kairei_core::provider::capability::Capabilities;
+/// # use kairei_core::provider::capabilities::common::Capabilities;
 /// # use kairei_core::config::ProviderConfig;
 /// # use kairei_core::provider::provider::ProviderSecret;
 /// # use async_trait::async_trait;

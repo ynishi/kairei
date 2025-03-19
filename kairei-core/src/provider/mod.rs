@@ -27,7 +27,7 @@
 //! # use kairei_core::config::ProviderConfig;
 //! # use kairei_core::provider::provider::ProviderSecret;
 //! # use kairei_core::provider::types::ProviderResult;
-//! # use kairei_core::provider::capability::Capabilities;
+//! # use kairei_core::provider::capabilities::common::Capabilities;
 //! # use async_trait::async_trait;
 //! #
 //! # struct MyProvider;
@@ -76,7 +76,6 @@ pub mod provider_registry;
 pub mod provider_secret;
 
 pub mod capabilities;
-pub mod capability;
 pub mod config;
 pub mod generator;
 pub mod llm;

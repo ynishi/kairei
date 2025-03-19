@@ -15,7 +15,7 @@ use tracing::debug;
 use crate::{
     config::{PluginConfig, SearchConfig},
     provider::{
-        capability::CapabilityType,
+        capabilities::common::CapabilityType,
         llm::LLMResponse,
         plugin::{PluginContext, ProviderPlugin},
         provider::{ProviderSecret, Section},

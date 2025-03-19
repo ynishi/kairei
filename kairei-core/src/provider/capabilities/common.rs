@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::warn;
 
-use super::types::{ProviderError, ProviderResult};
+use crate::provider::types::{ProviderError, ProviderResult};
 
 /// Provider Capabilityの種類を定義
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -196,7 +196,6 @@ mod tests {
 
     use super::*;
 
-    // write all test for capalibity and relatied models
     #[test]
     fn test_capabilities() {
         let mut capabilities = Capabilities::default();
