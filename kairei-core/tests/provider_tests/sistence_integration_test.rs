@@ -557,10 +557,7 @@ async fn test_sistence_provider_agent_context_persistence() {
         json!("{\"success\":true,\"data\":{\"message\":\"Notification sent\"}}"),
     );
     
-    // Add agent_name to ensure proper context tracking
-    let mut request_state = ProviderRequestState::default();
-    request_state.agent_name = "test_agent".to_string();
-    request_state.agent_info.agent_name = Some("test_agent".to_string());
+    // No need to create a separate request_state, we'll modify the requests directly
     
     let context = ProviderContext {
         config,
@@ -570,13 +567,14 @@ async fn test_sistence_provider_agent_context_persistence() {
     // Create requests with agent information
     let mut request1 = create_will_action_request("notify");
     request1.state.agent_name = "test_agent".to_string();
-    request1.state.agent_info.agent_name = Some("test_agent".to_string());
+    // agent_info.agent_name is already a String, not an Option<String>
+    request1.state.agent_info.agent_name = "test_agent".to_string();
     let _ = provider.execute(&context, &request1).await.unwrap();
 
     // Execute second request with same agent info to ensure history is tracked
     let mut request2 = create_will_action_request("notify");
     request2.state.agent_name = "test_agent".to_string();
-    request2.state.agent_info.agent_name = Some("test_agent".to_string());
+    request2.state.agent_info.agent_name = "test_agent".to_string();
     let _ = provider.execute(&context, &request2).await.unwrap();
 
     // Get the agent context
