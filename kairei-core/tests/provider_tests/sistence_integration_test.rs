@@ -16,7 +16,7 @@ use kairei_core::provider::capabilities::will_action::{
 };
 use kairei_core::provider::capability::{Capabilities, CapabilityType};
 use kairei_core::provider::llm::{LLMResponse, ProviderLLM};
-use kairei_core::provider::llms::simple_expert::{SimpleExpertProviderLLM};
+use kairei_core::provider::llms::simple_expert::SimpleExpertProviderLLM;
 use kairei_core::provider::plugin::{PluginContext, ProviderPlugin};
 use kairei_core::provider::provider::{Provider, ProviderSecret, ProviderType, Section};
 use kairei_core::provider::providers::sistence::{SistenceAgentContext, SistenceProvider};
@@ -220,8 +220,7 @@ impl ProviderPlugin for MockWillActionResolver {
 impl WillActionResolver for MockWillActionResolver {
     fn resolve(&self, action_name: &str) -> Option<Box<dyn WillAction>> {
         self.actions.get(action_name).map(|_action| {
-            let action_clone: Box<dyn WillAction> =
-                Box::new(MockWillAction::new(action_name));
+            let action_clone: Box<dyn WillAction> = Box::new(MockWillAction::new(action_name));
             action_clone
         })
     }
@@ -232,7 +231,7 @@ impl WillActionResolver for MockWillActionResolver {
         _action: Box<dyn WillAction>,
     ) -> Result<(), WillActionError> {
         // Convert to Box<dyn WillAction + Send + Sync> for internal storage
-        let action_sync: Box<dyn WillAction + Send + Sync> = 
+        let action_sync: Box<dyn WillAction + Send + Sync> =
             Box::new(MockWillAction::new(action_name));
         self.actions.insert(action_name.to_string(), action_sync);
         Ok(())
@@ -280,11 +279,15 @@ impl SimpleExpertProviderWrapper {
 
 #[async_trait]
 impl Provider for SimpleExpertProviderWrapper {
-    async fn execute(&self, context: &ProviderContext, request: &ProviderRequest) -> ProviderResult<ProviderResponse> {
+    async fn execute(
+        &self,
+        context: &ProviderContext,
+        request: &ProviderRequest,
+    ) -> ProviderResult<ProviderResponse> {
         // Convert request to prompt and use the LLM
         let prompt = request.input.query.to_string();
         let llm_response = self.llm.send_message(&prompt, &context.config).await?;
-        
+
         Ok(ProviderResponse {
             output: llm_response.content,
             metadata: kairei_core::provider::request::ResponseMetadata {
@@ -301,7 +304,11 @@ impl Provider for SimpleExpertProviderWrapper {
         &self.llm.name()
     }
 
-    async fn initialize(&mut self, config: &ProviderConfig, secret: &ProviderSecret) -> ProviderResult<()> {
+    async fn initialize(
+        &mut self,
+        config: &ProviderConfig,
+        secret: &ProviderSecret,
+    ) -> ProviderResult<()> {
         self.llm.initialize(config, secret).await
     }
 
