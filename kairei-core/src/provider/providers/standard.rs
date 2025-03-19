@@ -62,55 +62,6 @@ impl Provider for StandardProvider {
         Ok(())
     }
 
-    fn validate_config_collecting(&self, config: &ProviderConfig) -> ErrorCollector {
-        let mut collector = ErrorCollector::new();
-
-        // Convert ProviderConfig to HashMap<String, Value>
-        let config_map = config_to_map(config);
-
-        // Use TypeCheckerValidator for basic validation
-        let validator = TypeCheckerValidator;
-
-        // Validate schema
-        if let Err(error) = validator.validate_schema(&config_map) {
-            collector.add_error(error);
-        }
-
-        // Validate provider-specific
-        if let Err(error) = validator.validate_provider_specific(&config_map) {
-            collector.add_error(error);
-        }
-
-        // Validate capabilities
-        if let Err(error) = validator.validate_capabilities(&config_map) {
-            collector.add_error(error);
-        }
-
-        // Validate dependencies
-        if let Err(error) = validator.validate_dependencies(&config_map) {
-            collector.add_error(error);
-        }
-
-        // Collect warnings
-        for warning in validator.validate_schema_warnings(&config_map) {
-            collector.add_warning(warning);
-        }
-
-        for warning in validator.validate_provider_specific_warnings(&config_map) {
-            collector.add_warning(warning);
-        }
-
-        for warning in validator.validate_capabilities_warnings(&config_map) {
-            collector.add_warning(warning);
-        }
-
-        for warning in validator.validate_dependencies_warnings(&config_map) {
-            collector.add_warning(warning);
-        }
-
-        collector
-    }
-
     #[tracing::instrument(skip(self, context, request))]
     async fn execute(
         &self,
@@ -238,6 +189,55 @@ impl StandardProvider {
         }
 
         Ok(())
+    }
+
+    pub fn validate_config_collecting(config: &ProviderConfig) -> ErrorCollector {
+        let mut collector = ErrorCollector::new();
+
+        // Convert ProviderConfig to HashMap<String, Value>
+        let config_map = config_to_map(config);
+
+        // Use TypeCheckerValidator for basic validation
+        let validator = TypeCheckerValidator;
+
+        // Validate schema
+        if let Err(error) = validator.validate_schema(&config_map) {
+            collector.add_error(error);
+        }
+
+        // Validate provider-specific
+        if let Err(error) = validator.validate_provider_specific(&config_map) {
+            collector.add_error(error);
+        }
+
+        // Validate capabilities
+        if let Err(error) = validator.validate_capabilities(&config_map) {
+            collector.add_error(error);
+        }
+
+        // Validate dependencies
+        if let Err(error) = validator.validate_dependencies(&config_map) {
+            collector.add_error(error);
+        }
+
+        // Collect warnings
+        for warning in validator.validate_schema_warnings(&config_map) {
+            collector.add_warning(warning);
+        }
+
+        for warning in validator.validate_provider_specific_warnings(&config_map) {
+            collector.add_warning(warning);
+        }
+
+        for warning in validator.validate_capabilities_warnings(&config_map) {
+            collector.add_warning(warning);
+        }
+
+        for warning in validator.validate_dependencies_warnings(&config_map) {
+            collector.add_warning(warning);
+        }
+
+        collector
     }
 }
 

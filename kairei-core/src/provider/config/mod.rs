@@ -53,7 +53,7 @@ mod errors;
 mod events;
 mod formatters;
 pub mod plugins;
-mod providers;
+pub mod providers;
 mod suggestions;
 mod utils;
 mod validation;

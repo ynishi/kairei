@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     capability::Capabilities,
-    config::{ErrorCollector, ProviderConfigError},
+    config::ProviderConfigError,
     request::{ProviderContext, ProviderRequest, ProviderResponse},
     types::ProviderResult,
 };
@@ -163,27 +163,8 @@ pub trait Provider: Send + Sync {
     ///
     /// A `Result` indicating success or failure
     #[allow(clippy::result_large_err)]
-    fn validate_config(&self, config: &ProviderConfig) -> Result<(), ProviderConfigError> {
-        // Default implementation that delegates to validate_config_collecting
-        let collector = self.validate_config_collecting(config);
-        collector.result()
-    }
-
-    /// Validates the provider configuration and collects errors.
-    ///
-    /// This method checks that the configuration is valid for the provider,
-    /// collecting all errors rather than stopping at the first error.
-    ///
-    /// # Parameters
-    ///
-    /// * `config` - The provider configuration to validate
-    ///
-    /// # Returns
-    ///
-    /// An `ErrorCollector` containing any errors or warnings
-    fn validate_config_collecting(&self, _config: &ProviderConfig) -> ErrorCollector {
-        // Default implementation that returns an empty collector
-        ErrorCollector::new()
+    fn validate_config(&self, _config: &ProviderConfig) -> Result<(), ProviderConfigError> {
+        Ok(())
     }
 
     /// Shuts down the provider and releases resources.

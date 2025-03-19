@@ -170,8 +170,11 @@ pub trait ProviderConfigValidator {
     #[allow(clippy::result_large_err)]
     fn validate_provider_specific(
         &self,
-        config: &HashMap<String, serde_json::Value>,
-    ) -> Result<(), ProviderConfigError>;
+        _config: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), ProviderConfigError> {
+        // Default implementation does nothing
+        Ok(())
+    }
 
     /// Validates that the configuration is compatible with the required capabilities.
     ///
@@ -482,6 +485,16 @@ impl std::fmt::Debug for ErrorCollector {
             .field("event_bus", &"<EventBus>".to_string())
             .field("provider_id", &self.provider_id)
             .finish()
+    }
+}
+
+impl std::fmt::Display for ErrorCollector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.errors.is_empty() {
+            write!(f, "No errors found")
+        } else {
+            write!(f, "Errors found: {}", self.errors.len())
+        }
     }
 }
 
