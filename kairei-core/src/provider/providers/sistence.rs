@@ -63,9 +63,14 @@ mod test_sistence_agent_context {
         assert_eq!(deserialized.created_at, context.created_at);
         assert_eq!(deserialized.last_active, context.last_active);
         assert_eq!(deserialized.memory, context.memory);
-        assert_eq!(format!("{:?}", deserialized.interaction_history), format!("{:?}", context.interaction_history));
+        assert_eq!(
+            format!("{:?}", deserialized.interaction_history),
+            format!("{:?}", context.interaction_history)
+        );
 
-        context.memory.insert("test_key".to_string(), json!("test_value"));
+        context
+            .memory
+            .insert("test_key".to_string(), json!("test_value"));
         context.interaction_history.push(InteractionRecord {
             timestamp: Timestamp::now(),
             action: "test_action".to_string(),
@@ -80,12 +85,10 @@ mod test_sistence_agent_context {
         let deserialized: SistenceAgentContext = serde_json::from_str(&serialized).unwrap();
         assert!(format!("{:?}", deserialized).contains("[InteractionRecord {"));
 
-
         // to_value and from_value
         let value = serde_json::to_value(&context).unwrap();
         let deserialized: SistenceAgentContext = serde_json::from_value(value).unwrap();
         assert!(format!("{:?}", deserialized).contains("[InteractionRecord {"));
-
     }
 }
 
@@ -200,7 +203,11 @@ impl SistenceProvider {
 
     /// Save agent context to shared memory
     #[tracing::instrument(skip(self), level = "debug")]
-    async fn save_agent_context(&self, agent_id: &str, context: &SistenceAgentContext) -> ProviderResult<()> {
+    async fn save_agent_context(
+        &self,
+        agent_id: &str,
+        context: &SistenceAgentContext,
+    ) -> ProviderResult<()> {
         let key = agent_id.to_string();
         let value = serde_json::to_value(context).map_err(|e| {
             ProviderError::InternalError(format!("Context serialization error: {}", e))
@@ -234,16 +241,16 @@ impl SistenceProvider {
             crate::eval::expression::Value::String(s) => s.clone(),
             _ => "unknown".to_string(),
         };
-     
+
         // Generate agent ID
         let agent_id = self.get_agent_id(&agent_name, &user_id);
-       
+
         // Get agent context
         let mut agent_context = self.get_agent_context(&agent_id).await?;
-       
+
         // Update last active timestamp
         agent_context.last_active = Timestamp::now();
-       
+
         // Prepare will action parameters
         let mut will_params = WillActionParams::new();
 
@@ -270,7 +277,7 @@ impl SistenceProvider {
                 will_params.named.insert(k.clone(), json_value);
             }
         }
-        
+
         // Prepare context for will action
         let will_context = WillActionContext {
             agent_id: agent_id.clone(),
@@ -281,7 +288,7 @@ impl SistenceProvider {
             ],
             data: HashMap::new(), // Could be populated from agent_context
         };
-        
+
         // Try to execute the action directly
         match self
             .will_action_resolver
@@ -305,8 +312,15 @@ impl SistenceProvider {
             Err(_) => {
                 warn!("Failed to execute action directly, delegating to LLM");
                 // If direct execution fails, delegate to LLM
-                self.execute_via_llm(&agent_id, context, request, &action_name, &will_params, &agent_context)
-                    .await
+                self.execute_via_llm(
+                    &agent_id,
+                    context,
+                    request,
+                    &action_name,
+                    &will_params,
+                    &agent_context,
+                )
+                .await
             }
         }
     }
@@ -356,7 +370,7 @@ impl SistenceProvider {
             .await?;
 
         // Save the updated context
-        self.save_agent_context(&agent_id, &updated_context).await?;
+        self.save_agent_context(agent_id, &updated_context).await?;
 
         // Process and return the result
         Ok(ProviderResponse {
@@ -415,7 +429,11 @@ impl SistenceProvider {
 
 #[async_trait]
 impl Provider for SistenceProvider {
-    #[tracing::instrument(name="sistence_provider_execute", skip(self, context), level = "debug")]
+    #[tracing::instrument(
+        name = "sistence_provider_execute",
+        skip(self, context),
+        level = "debug"
+    )]
     async fn execute(
         &self,
         context: &ProviderContext,
