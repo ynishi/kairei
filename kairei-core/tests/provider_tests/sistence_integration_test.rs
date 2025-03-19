@@ -551,22 +551,32 @@ async fn test_sistence_provider_agent_context_persistence() {
 
     // Create context and request with proper config for SimpleExpertProviderLLM
     let mut config = create_provider_config();
+    // Add specific configuration for the SimpleExpertProviderLLM to handle the notify action
     config.provider_specific.insert(
         "notify".to_string(),
         json!("{\"success\":true,\"data\":{\"message\":\"Notification sent\"}}"),
     );
+    
+    // Add agent_name to ensure proper context tracking
+    let mut request_state = ProviderRequestState::default();
+    request_state.agent_name = "test_agent".to_string();
+    request_state.agent_info.agent_name = Some("test_agent".to_string());
     
     let context = ProviderContext {
         config,
         secret: ProviderSecret::default(),
     };
 
-    // Execute first request
-    let request1 = create_will_action_request("notify");
+    // Create requests with agent information
+    let mut request1 = create_will_action_request("notify");
+    request1.state.agent_name = "test_agent".to_string();
+    request1.state.agent_info.agent_name = Some("test_agent".to_string());
     let _ = provider.execute(&context, &request1).await.unwrap();
 
-    // Execute second request
-    let request2 = create_will_action_request("notify");
+    // Execute second request with same agent info to ensure history is tracked
+    let mut request2 = create_will_action_request("notify");
+    request2.state.agent_name = "test_agent".to_string();
+    request2.state.agent_info.agent_name = Some("test_agent".to_string());
     let _ = provider.execute(&context, &request2).await.unwrap();
 
     // Get the agent context
@@ -630,4 +640,5 @@ async fn test_sistence_provider_error_handling() {
     // Verify response
     let result: Value = serde_json::from_str(&response.output).unwrap();
     assert_eq!(result["success"], json!(true));
+    assert!(result["data"]["message"].as_str().unwrap().contains("Handled by LLM fallback"));
 }
