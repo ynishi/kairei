@@ -164,11 +164,7 @@ impl SistenceProvider {
     ) -> ProviderResult<ProviderResponse> {
         // Extract agent name from context
         let agent_name = request.state.agent_name.clone();
-        let user_id = if let Some(name) = &request.state.agent_info.agent_name {
-            name.clone()
-        } else {
-            String::new()
-        };
+        let user_id = request.state.agent_info.agent_name.clone();
 
         // Extract action name from request
         let action_name = match &request.input.query {
@@ -224,7 +220,8 @@ impl SistenceProvider {
         };
 
         // Try to execute the action directly
-        let result = match self
+
+        match self
             .will_action_resolver
             .execute(&action_name, will_params.clone(), &will_context)
             .await
@@ -248,9 +245,7 @@ impl SistenceProvider {
                 self.execute_via_llm(context, request, &action_name, &will_params, &agent_context)
                     .await
             }
-        };
-
-        result
+        }
     }
 
     /// Execute a will action using LLM integration
@@ -411,7 +406,9 @@ impl Provider for SistenceProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::capabilities::will_action::{WillAction, WillActionError};
+    use crate::provider::capabilities::will_action::{
+        WillAction, WillActionError, WillActionSignature,
+    };
     use crate::provider::capability::Capabilities;
     use std::sync::Mutex;
 
@@ -429,6 +426,7 @@ mod tests {
             }
         }
 
+        #[allow(dead_code)]
         fn set_response(&self, response: ProviderResponse) {
             let mut lock = self.response.lock().unwrap();
             *lock = Some(response);
@@ -691,11 +689,8 @@ mod tests {
         }
 
         fn get_action_signature(&self, action_name: &str) -> Option<WillActionSignature> {
-            if let Some(action) = self.resolve(action_name) {
-                Some(action.get_signature())
-            } else {
-                None
-            }
+            self.resolve(action_name)
+                .map(|action| action.get_signature())
         }
     }
 
