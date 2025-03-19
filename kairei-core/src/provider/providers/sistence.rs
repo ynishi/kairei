@@ -164,11 +164,7 @@ impl SistenceProvider {
     ) -> ProviderResult<ProviderResponse> {
         // Extract agent name from context
         let agent_name = request.state.agent_name.clone();
-        let user_id = if let Some(name) = &request.state.agent_info.agent_name {
-            name.clone()
-        } else {
-            String::new()
-        };
+        let user_id = request.state.agent_info.agent_name.clone();
 
         // Extract action name from request
         let action_name = match &request.input.query {

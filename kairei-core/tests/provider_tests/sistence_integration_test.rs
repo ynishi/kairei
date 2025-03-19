@@ -7,23 +7,29 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use kairei_core::config::{PluginConfig, ProviderConfig, SecretConfig};
-use kairei_core::provider::capabilities::shared_memory::{SharedMemoryCapability, SharedMemoryError};
+use kairei_core::provider::capabilities::shared_memory::{
+    SharedMemoryCapability, SharedMemoryError,
+};
 use kairei_core::provider::capabilities::will_action::{
     WillAction, WillActionContext, WillActionError, WillActionParams, WillActionResolver,
     WillActionResult, WillActionSignature,
 };
 use kairei_core::provider::capability::{Capabilities, CapabilityType};
 use kairei_core::provider::config::plugins::SharedMemoryConfig;
-use kairei_core::provider::llms::simple_expert::{KnowledgeBase, SimpleExpertProviderLLM};
-use kairei_core::provider::provider::{Provider, ProviderSecret, ProviderType};
+use kairei_core::provider::llm::{LLMResponse, ProviderLLM};
+use kairei_core::provider::llms::simple_expert::{SimpleExpertProviderLLM};
+use kairei_core::provider::plugin::{PluginContext, ProviderPlugin};
+use kairei_core::provider::provider::{Provider, ProviderSecret, ProviderType, Section};
 use kairei_core::provider::providers::sistence::{SistenceAgentContext, SistenceProvider};
-use kairei_core::provider::request::{ProviderContext, ProviderRequest, ProviderResponse, RequestInput};
+use kairei_core::provider::request::{
+    ProviderContext, ProviderRequest, ProviderResponse, RequestInput,
+};
 use kairei_core::provider::types::{ProviderError, ProviderResult};
 use kairei_core::timestamp::Timestamp;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Mock Shared Memory implementation for testing
 struct MockSharedMemory {
@@ -35,6 +41,29 @@ impl MockSharedMemory {
         Self {
             storage: DashMap::new(),
         }
+    }
+}
+
+#[async_trait]
+impl ProviderPlugin for MockSharedMemory {
+    fn priority(&self) -> i32 {
+        10
+    }
+
+    fn capability(&self) -> CapabilityType {
+        CapabilityType::SharedMemory
+    }
+
+    async fn generate_section<'a>(&self, _context: &PluginContext<'a>) -> ProviderResult<Section> {
+        Ok(Section::new(""))
+    }
+
+    async fn process_response<'a>(
+        &self,
+        _context: &PluginContext<'a>,
+        _response: &LLMResponse,
+    ) -> ProviderResult<()> {
+        Ok(())
     }
 }
 
@@ -67,7 +96,8 @@ impl SharedMemoryCapability for MockSharedMemory {
     async fn get_metadata(
         &self,
         key: &str,
-    ) -> Result<kairei_core::provider::capabilities::shared_memory::Metadata, SharedMemoryError> {
+    ) -> Result<kairei_core::provider::capabilities::shared_memory::Metadata, SharedMemoryError>
+    {
         if self.storage.contains_key(key) {
             Ok(kairei_core::provider::capabilities::shared_memory::Metadata::default())
         } else {
@@ -76,7 +106,11 @@ impl SharedMemoryCapability for MockSharedMemory {
     }
 
     async fn list_keys(&self, _pattern: &str) -> Result<Vec<String>, SharedMemoryError> {
-        Ok(self.storage.iter().map(|entry| entry.key().clone()).collect())
+        Ok(self
+            .storage
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect())
     }
 }
 
@@ -109,7 +143,11 @@ impl MockWillAction {
 
 #[async_trait]
 impl WillAction for MockWillAction {
-    async fn execute(&self, params: WillActionParams, context: &WillActionContext) -> WillActionResult {
+    async fn execute(
+        &self,
+        params: WillActionParams,
+        context: &WillActionContext,
+    ) -> WillActionResult {
         if let Some(error) = &self.execute_error {
             return WillActionResult::error(error.clone());
         }
@@ -150,17 +188,41 @@ impl MockWillActionResolver {
         }
     }
 
-    fn with_action(mut self, name: &str, action: Box<dyn WillAction + Send + Sync>) -> Self {
+    fn with_action(self, name: &str, action: Box<dyn WillAction + Send + Sync>) -> Self {
         self.actions.insert(name.to_string(), action);
         self
     }
 }
 
 #[async_trait]
+impl ProviderPlugin for MockWillActionResolver {
+    fn priority(&self) -> i32 {
+        10
+    }
+
+    fn capability(&self) -> CapabilityType {
+        CapabilityType::Custom("will_action".to_string())
+    }
+
+    async fn generate_section<'a>(&self, _context: &PluginContext<'a>) -> ProviderResult<Section> {
+        Ok(Section::new(""))
+    }
+
+    async fn process_response<'a>(
+        &self,
+        _context: &PluginContext<'a>,
+        _response: &LLMResponse,
+    ) -> ProviderResult<()> {
+        Ok(())
+    }
+}
+
+#[async_trait]
 impl WillActionResolver for MockWillActionResolver {
-    fn resolve(&self, action_name: &str) -> Option<Box<dyn WillAction + Send + Sync>> {
-        self.actions.get(action_name).map(|action| {
-            let action_clone: Box<dyn WillAction + Send + Sync> = Box::new(MockWillAction::new(action_name));
+    fn resolve(&self, action_name: &str) -> Option<Box<dyn WillAction>> {
+        self.actions.get(action_name).map(|_action| {
+            let action_clone: Box<dyn WillAction> =
+                Box::new(MockWillAction::new(action_name));
             action_clone
         })
     }
@@ -168,9 +230,12 @@ impl WillActionResolver for MockWillActionResolver {
     fn register(
         &mut self,
         action_name: &str,
-        action: Box<dyn WillAction + Send + Sync>,
+        _action: Box<dyn WillAction>,
     ) -> Result<(), WillActionError> {
-        self.actions.insert(action_name.to_string(), action);
+        // Convert to Box<dyn WillAction + Send + Sync> for internal storage
+        let action_sync: Box<dyn WillAction + Send + Sync> = 
+            Box::new(MockWillAction::new(action_name));
+        self.actions.insert(action_name.to_string(), action_sync);
         Ok(())
     }
 
@@ -188,7 +253,10 @@ impl WillActionResolver for MockWillActionResolver {
     }
 
     fn list_actions(&self) -> Vec<String> {
-        self.actions.iter().map(|entry| entry.key().clone()).collect()
+        self.actions
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 
     fn get_action_signature(&self, action_name: &str) -> Option<WillActionSignature> {
@@ -198,9 +266,54 @@ impl WillActionResolver for MockWillActionResolver {
     }
 }
 
+/// Wrapper for SimpleExpertProviderLLM that implements Provider
+struct SimpleExpertProviderWrapper {
+    llm: SimpleExpertProviderLLM,
+}
+
+impl SimpleExpertProviderWrapper {
+    fn new(name: &str) -> Self {
+        Self {
+            llm: SimpleExpertProviderLLM::new(name),
+        }
+    }
+}
+
+#[async_trait]
+impl Provider for SimpleExpertProviderWrapper {
+    async fn execute(&self, context: &ProviderContext, request: &ProviderRequest) -> ProviderResult<ProviderResponse> {
+        // Convert request to prompt and use the LLM
+        let prompt = request.input.query.to_string();
+        let llm_response = self.llm.send_message(&prompt, &context.config).await?;
+        
+        Ok(ProviderResponse {
+            output: llm_response.content,
+            metadata: kairei_core::provider::request::ResponseMetadata {
+                timestamp: kairei_core::timestamp::Timestamp::now(),
+            },
+        })
+    }
+
+    async fn capabilities(&self) -> Capabilities {
+        Capabilities::from(vec![CapabilityType::Generate])
+    }
+
+    fn name(&self) -> &str {
+        &self.llm.name()
+    }
+
+    async fn initialize(&mut self, config: &ProviderConfig, secret: &ProviderSecret) -> ProviderResult<()> {
+        self.llm.initialize(config, secret).await
+    }
+
+    async fn shutdown(&self) -> ProviderResult<()> {
+        Ok(())
+    }
+}
+
 /// Helper function to create a SimpleExpertProviderLLM with predefined responses
-fn create_simple_expert_llm() -> Arc<SimpleExpertProviderLLM> {
-    Arc::new(SimpleExpertProviderLLM::new("test_simple_expert"))
+fn create_simple_expert_llm() -> Arc<SimpleExpertProviderWrapper> {
+    Arc::new(SimpleExpertProviderWrapper::new("test_simple_expert"))
 }
 
 /// Helper function to create a test provider config
@@ -210,10 +323,7 @@ fn create_provider_config() -> ProviderConfig {
         "notify".to_string(),
         json!("Notification sent successfully"),
     );
-    provider_specific.insert(
-        "suggest".to_string(),
-        json!("Here's a suggestion for you"),
-    );
+    provider_specific.insert("suggest".to_string(), json!("Here's a suggestion for you"));
     provider_specific.insert(
         "will_action".to_string(),
         json!("Will action executed successfully"),
@@ -229,7 +339,10 @@ fn create_provider_config() -> ProviderConfig {
 }
 
 /// Helper function to create a test request
-fn create_test_request(query: &str, parameters: HashMap<String, kairei_core::eval::expression::Value>) -> ProviderRequest {
+fn create_test_request(
+    query: &str,
+    parameters: HashMap<String, kairei_core::eval::expression::Value>,
+) -> ProviderRequest {
     ProviderRequest {
         input: RequestInput {
             query: kairei_core::eval::expression::Value::String(query.to_string()),
@@ -315,17 +428,15 @@ async fn test_sistence_provider_will_action_request() {
     // Create components
     let llm_provider = create_simple_expert_llm();
     let shared_memory = Arc::new(MockSharedMemory::new());
-    let will_action_resolver = Arc::new(
-        MockWillActionResolver::new().with_action(
-            "notify",
-            Box::new(MockWillAction::new("notify").with_result(
-                WillActionResult::success(json!({
-                    "message": "Notification sent",
-                    "status": "success"
-                })),
-            )),
+    let will_action_resolver = Arc::new(MockWillActionResolver::new().with_action(
+        "notify",
+        Box::new(
+            MockWillAction::new("notify").with_result(WillActionResult::success(json!({
+                "message": "Notification sent",
+                "status": "success"
+            }))),
         ),
-    );
+    ));
 
     // Create SistenceProvider
     let provider = SistenceProvider::new(
@@ -358,7 +469,7 @@ async fn test_sistence_provider_will_action_request() {
     // Get the agent context
     let agent_key = keys.first().unwrap();
     let agent_context_json = shared_memory.get(agent_key).await.unwrap();
-    
+
     // Verify it's a valid SistenceAgentContext
     let agent_context: SistenceAgentContext = serde_json::from_value(agent_context_json).unwrap();
     assert!(!agent_context.agent_id.is_empty());
@@ -370,7 +481,7 @@ async fn test_sistence_provider_will_action_llm_fallback() {
     // Create components
     let llm_provider = create_simple_expert_llm();
     let shared_memory = Arc::new(MockSharedMemory::new());
-    
+
     // Create resolver that will fail to resolve the action
     let will_action_resolver = Arc::new(MockWillActionResolver::new());
 
@@ -396,7 +507,7 @@ async fn test_sistence_provider_will_action_llm_fallback() {
     // Verify response
     let result: Value = serde_json::from_str(&response.output).unwrap();
     assert_eq!(result["success"], json!(true));
-    
+
     // Verify agent context was stored in shared memory
     let keys = shared_memory.list_keys("*").await.unwrap();
     assert!(!keys.is_empty());
@@ -408,10 +519,8 @@ async fn test_sistence_provider_agent_context_persistence() {
     let llm_provider = create_simple_expert_llm();
     let shared_memory = Arc::new(MockSharedMemory::new());
     let will_action_resolver = Arc::new(
-        MockWillActionResolver::new().with_action(
-            "notify",
-            Box::new(MockWillAction::new("notify")),
-        ),
+        MockWillActionResolver::new()
+            .with_action("notify", Box::new(MockWillAction::new("notify"))),
     );
 
     // Create SistenceProvider
@@ -440,7 +549,7 @@ async fn test_sistence_provider_agent_context_persistence() {
     let keys = shared_memory.list_keys("*").await.unwrap();
     let agent_key = keys.first().unwrap();
     let agent_context_json = shared_memory.get(agent_key).await.unwrap();
-    
+
     // Verify it's a valid SistenceAgentContext with multiple interactions
     let agent_context: SistenceAgentContext = serde_json::from_value(agent_context_json).unwrap();
     assert!(agent_context.interaction_history.len() >= 2);
@@ -451,14 +560,15 @@ async fn test_sistence_provider_error_handling() {
     // Create components
     let llm_provider = create_simple_expert_llm();
     let shared_memory = Arc::new(MockSharedMemory::new());
-    
+
     // Create resolver that will return an error
     let will_action_resolver = Arc::new(
         MockWillActionResolver::new().with_action(
             "notify",
-            Box::new(MockWillAction::new("notify").with_error(
-                WillActionError::ExecutionError("Test error".to_string()),
-            )),
+            Box::new(
+                MockWillAction::new("notify")
+                    .with_error(WillActionError::ExecutionError("Test error".to_string())),
+            ),
         ),
     );
 
