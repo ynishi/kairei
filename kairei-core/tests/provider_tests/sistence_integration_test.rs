@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use kairei_core::config::{PluginConfig, ProviderConfig, SecretConfig};
+use kairei_core::config::ProviderConfig;
 use kairei_core::provider::capabilities::shared_memory::{
     SharedMemoryCapability, SharedMemoryError,
 };
@@ -15,7 +15,6 @@ use kairei_core::provider::capabilities::will_action::{
     WillActionResult, WillActionSignature,
 };
 use kairei_core::provider::capability::{Capabilities, CapabilityType};
-use kairei_core::provider::config::plugins::SharedMemoryConfig;
 use kairei_core::provider::llm::{LLMResponse, ProviderLLM};
 use kairei_core::provider::llms::simple_expert::{SimpleExpertProviderLLM};
 use kairei_core::provider::plugin::{PluginContext, ProviderPlugin};
@@ -24,7 +23,7 @@ use kairei_core::provider::providers::sistence::{SistenceAgentContext, SistenceP
 use kairei_core::provider::request::{
     ProviderContext, ProviderRequest, ProviderResponse, RequestInput,
 };
-use kairei_core::provider::types::{ProviderError, ProviderResult};
+use kairei_core::provider::types::ProviderResult;
 use kairei_core::timestamp::Timestamp;
 
 use async_trait::async_trait;
