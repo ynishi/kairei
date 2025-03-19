@@ -9,6 +9,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use strum::{EnumString, Display, AsRefStr, EnumIter, IntoEnumIterator};
 use tracing::warn;
 
 use crate::provider::capabilities::shared_memory::SharedMemoryCapability;
@@ -16,17 +17,68 @@ use crate::provider::capabilities::will_action::{
     WillActionContext, WillActionParams, WillActionResolver, WillActionResult,
 };
 use crate::provider::capability::{Capabilities, CapabilityType};
+use crate::provider::llm::LLMResponse;
 use crate::provider::provider::{Provider, ProviderSecret};
 use crate::provider::request::RequestInput;
 use crate::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
 use crate::provider::types::{ProviderError, ProviderResult};
 use crate::timestamp::Timestamp;
 
+/// Sistence agent capabilities
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, EnumString, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "lowercase")]
+pub enum SistenceCapability {
+    /// Ability to send notifications
+    Notify,
+    
+    /// Ability to make suggestions
+    Suggest,
+    
+    /// Ability to research information
+    Research,
+    
+    /// Ability to make decisions
+    Decide,
+    
+    /// Ability to schedule tasks
+    Schedule,
+    
+    /// Ability to learn and adapt
+    Learn,
+    
+    /// Custom capability
+    #[strum(disabled)]
+    Custom(String),
+}
+
+impl SistenceCapability {
+    /// Get all standard capabilities
+    pub fn standard_capabilities() -> Vec<Self> {
+        Self::iter().collect()
+    }
+    
+    /// Create a custom capability
+    pub fn custom(name: &str) -> Self {
+        Self::Custom(name.to_string())
+    }
+    
+    /// Convert capability to string
+    pub fn as_string(&self) -> String {
+        match self {
+            Self::Custom(name) => name.clone(),
+            _ => self.as_ref().to_string(),
+        }
+    }
+}
+
 /// Context structure for Sistence agents
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SistenceAgentContext {
     /// Unique agent identifier
     pub agent_id: String,
+    
+    /// Agent name
+    pub agent_name: String,
 
     /// Creation timestamp
     pub created_at: Timestamp,
@@ -39,6 +91,9 @@ pub struct SistenceAgentContext {
 
     /// Interaction history
     pub interaction_history: Vec<InteractionRecord>,
+    
+    /// Agent capabilities
+    pub capabilities: Vec<String>,
 }
 
 // test serialization for SistenceAgentContext
@@ -47,22 +102,44 @@ mod test_sistence_agent_context {
     use super::*;
 
     #[test]
+    fn test_sistence_capability_serialize() {
+        let cap = SistenceCapability::Notify;
+        let serialized = serde_json::to_string(&cap).unwrap();
+        assert_eq!(serialized, "\"notify\"");
+        
+        let custom = SistenceCapability::Custom("custom_ability".to_string());
+        let serialized = serde_json::to_string(&custom).unwrap();
+        assert_eq!(serialized, "{\"Custom\":\"custom_ability\"}");
+        
+        // Test parsing from string
+        let parsed: SistenceCapability = "suggest".parse().unwrap();
+        assert_eq!(parsed, SistenceCapability::Suggest);
+    }
+
+    #[test]
     fn test_sistence_agent_context_serialization() {
         let mut context = SistenceAgentContext {
             agent_id: "test_agent".to_string(),
+            agent_name: "TestAgent".to_string(),
             created_at: Timestamp::now(),
             last_active: Timestamp::now(),
             memory: HashMap::new(),
             interaction_history: Vec::new(),
+            capabilities: vec![
+                SistenceCapability::Notify.as_string(),
+                SistenceCapability::Suggest.as_string(),
+            ],
         };
 
         let serialized = serde_json::to_string(&context).unwrap();
         let deserialized: SistenceAgentContext = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.agent_id, context.agent_id);
+        assert_eq!(deserialized.agent_name, context.agent_name);
         assert_eq!(deserialized.created_at, context.created_at);
         assert_eq!(deserialized.last_active, context.last_active);
         assert_eq!(deserialized.memory, context.memory);
+        assert_eq!(deserialized.capabilities, context.capabilities);
         assert_eq!(
             format!("{:?}", deserialized.interaction_history),
             format!("{:?}", context.interaction_history)
@@ -93,16 +170,48 @@ mod test_sistence_agent_context {
 }
 
 impl SistenceAgentContext {
-    /// Create a new agent context
+    /// Create a new agent context with default capabilities
     pub fn new(agent_name: &str, user_id: &str) -> Self {
         let now = Timestamp::now();
         let agent_id = format!("agent:{}:{}", agent_name, user_id);
         Self {
             agent_id,
+            agent_name: agent_name.to_string(),
             created_at: now.clone(),
             last_active: now,
             memory: HashMap::new(),
             interaction_history: Vec::new(),
+            capabilities: vec![
+                SistenceCapability::Notify.as_string(),
+                SistenceCapability::Suggest.as_string()
+            ],
+        }
+    }
+    
+    /// Create a new agent context with specific capabilities
+    pub fn new_with_capabilities(
+        agent_name: &str, 
+        user_id: &str, 
+        capabilities: &[SistenceCapability]
+    ) -> Self {
+        let mut context = Self::new(agent_name, user_id);
+        context.capabilities = capabilities.iter().map(|c| c.as_string()).collect();
+        context
+    }
+    
+    /// Check if agent has a specific capability
+    pub fn has_capability(&self, capability: &SistenceCapability) -> bool {
+        self.capabilities.contains(&capability.as_string())
+    }
+    
+    /// Add a capability to the agent
+    pub fn add_capability(&mut self, capability: &SistenceCapability) -> bool {
+        let cap_string = capability.as_string();
+        if !self.capabilities.contains(&cap_string) {
+            self.capabilities.push(cap_string);
+            true
+        } else {
+            false
         }
     }
 
@@ -114,20 +223,32 @@ impl SistenceAgentContext {
             parameters: json!({"content": content}),
             result: json!({}),
         };
-        self.interaction_history.push(interaction);
-
-        // Limit history size
-        if self.interaction_history.len() > 100 {
-            self.interaction_history.drain(0..50);
-        }
+        self.add(interaction);
     }
 
+    /// Add an interaction record to the history with automatic pruning
     pub fn add(&mut self, interaction: InteractionRecord) {
         self.interaction_history.push(interaction);
-
-        // Limit history size
-        if self.interaction_history.len() > 100 {
-            self.interaction_history.drain(0..50);
+        self.prune_history();
+    }
+    
+    /// Set a memory value
+    pub fn set_memory(&mut self, key: &str, value: Value) {
+        self.memory.insert(key.to_string(), value);
+    }
+    
+    /// Get a memory value
+    pub fn get_memory(&self, key: &str) -> Option<&Value> {
+        self.memory.get(key)
+    }
+    
+    /// Prune history if it exceeds the maximum size
+    fn prune_history(&mut self) {
+        const MAX_HISTORY_SIZE: usize = 100;
+        const PRUNE_AMOUNT: usize = 50;
+        
+        if self.interaction_history.len() > MAX_HISTORY_SIZE {
+            self.interaction_history.drain(0..PRUNE_AMOUNT);
         }
     }
 }
@@ -148,6 +269,77 @@ pub struct InteractionRecord {
     pub result: Value,
 }
 
+/// Configuration for SistenceProvider
+#[derive(Debug, Clone)]
+pub struct SistenceProviderConfig {
+    /// Maximum history size per agent
+    pub max_history_size: usize,
+    
+    /// Default LLM temperature for will action execution
+    pub default_temperature: f64,
+    
+    /// Default token limit for LLM responses
+    pub default_max_tokens: usize,
+    
+    /// Default capabilities for new agents
+    pub default_capabilities: Vec<SistenceCapability>,
+}
+
+impl Default for SistenceProviderConfig {
+    fn default() -> Self {
+        Self {
+            max_history_size: 100,
+            default_temperature: 0.7,
+            default_max_tokens: 500,
+            default_capabilities: vec![
+                SistenceCapability::Notify,
+                SistenceCapability::Suggest,
+            ],
+        }
+    }
+}
+
+impl From<&crate::config::ProviderConfig> for SistenceProviderConfig {
+    fn from(config: &crate::config::ProviderConfig) -> Self {
+        let mut result = Self::default();
+        
+        if let Some(max_history) = config.provider_specific.get("max_history_size") {
+            if let Some(size) = max_history.as_u64() {
+                result.max_history_size = size as usize;
+            }
+        }
+        
+        if let Some(temp) = config.provider_specific.get("temperature") {
+            if let Some(t) = temp.as_f64() {
+                result.default_temperature = t;
+            }
+        }
+        
+        if let Some(tokens) = config.provider_specific.get("max_tokens") {
+            if let Some(t) = tokens.as_u64() {
+                result.default_max_tokens = t as usize;
+            }
+        }
+        
+        if let Some(capabilities) = config.provider_specific.get("capabilities") {
+            if let Some(caps) = capabilities.as_array() {
+                result.default_capabilities = caps
+                    .iter()
+                    .filter_map(|v| v.as_str().map(|s| {
+                        // Try to parse into enum, fallback to custom capability
+                        match s.parse::<SistenceCapability>() {
+                            Ok(cap) => cap,
+                            Err(_) => SistenceCapability::Custom(s.to_string()),
+                        }
+                    }))
+                    .collect();
+            }
+        }
+        
+        result
+    }
+}
+
 /// Provider implementation specialized for Sistence agents
 pub struct SistenceProvider {
     /// Base LLM provider used for standard requests
@@ -161,10 +353,13 @@ pub struct SistenceProvider {
 
     /// Provider name
     name: String,
+    
+    /// Provider configuration
+    config: SistenceProviderConfig,
 }
 
 impl SistenceProvider {
-    /// Create a new SistenceProvider
+    /// Create a new SistenceProvider with default configuration
     pub fn new(
         llm_provider: Arc<dyn Provider>,
         shared_memory: Arc<dyn SharedMemoryCapability>,
@@ -176,7 +371,37 @@ impl SistenceProvider {
             shared_memory,
             will_action_resolver,
             name,
+            config: SistenceProviderConfig::default(),
         }
+    }
+    
+    /// Create a new SistenceProvider with custom configuration
+    pub fn new_with_config(
+        llm_provider: Arc<dyn Provider>,
+        shared_memory: Arc<dyn SharedMemoryCapability>,
+        will_action_resolver: Arc<dyn WillActionResolver>,
+        name: String,
+        config: SistenceProviderConfig,
+    ) -> Self {
+        Self {
+            llm_provider,
+            shared_memory,
+            will_action_resolver,
+            name,
+            config,
+        }
+    }
+    
+    /// Create a new SistenceProvider from a provider config
+    pub fn from_config(
+        llm_provider: Arc<dyn Provider>,
+        shared_memory: Arc<dyn SharedMemoryCapability>,
+        will_action_resolver: Arc<dyn WillActionResolver>,
+        name: String,
+        provider_config: &crate::config::ProviderConfig,
+    ) -> Self {
+        let config = SistenceProviderConfig::from(provider_config);
+        Self::new_with_config(llm_provider, shared_memory, will_action_resolver, name, config)
     }
 
     /// Get agent context from shared memory
@@ -281,11 +506,7 @@ impl SistenceProvider {
         // Prepare context for will action
         let will_context = WillActionContext {
             agent_id: agent_id.clone(),
-            permissions: vec![
-                "notify".to_string(),
-                "suggest".to_string(),
-                "research".to_string(),
-            ],
+            permissions: agent_context.capabilities.clone(),
             data: HashMap::new(), // Could be populated from agent_context
         };
 
@@ -345,11 +566,11 @@ impl SistenceProvider {
                     let mut p = HashMap::new();
                     p.insert(
                         "temperature".to_string(),
-                        crate::eval::expression::Value::Float(0.7),
+                        crate::eval::expression::Value::Float(self.config.default_temperature),
                     );
                     p.insert(
                         "max_tokens".to_string(),
-                        crate::eval::expression::Value::Float(500.0),
+                        crate::eval::expression::Value::Float(self.config.default_max_tokens as f64),
                     );
                     p
                 },
@@ -388,14 +609,29 @@ impl SistenceProvider {
     ) -> String {
         // Create prompt with context and action details
         format!(
-            "You are a proactive AI assistant executing a will action.\n\n\
+            "You are a proactive AI assistant named \"{}\" executing a will action.\n\n\
              ACTION: {}\n\
-             PARAMETERS: {:?}\n\n\
-             AGENT CONTEXT:\n{:?}\n\n\
+             PARAMETERS: {:?}\n\
+             CAPABILITIES: {:?}\n\n\
+             AGENT CONTEXT:\n\
+             - Agent ID: {}\n\
+             - Created: {}\n\
+             - Last active: {}\n\
+             - Memory entries: {}\n\
+             - Interaction history count: {}\n\n\
              Based on this information, determine the appropriate response for this action.\n\
              Your response should be helpful, accurate, and aligned with the agent's purpose.\n\
+             Ensure your actions are within the agent's capabilities.\n\
              RESPONSE:",
-            action_name, params, agent_context
+            agent_context.agent_name,
+            action_name, 
+            params,
+            agent_context.capabilities,
+            agent_context.agent_id,
+            agent_context.created_at,
+            agent_context.last_active,
+            agent_context.memory.len(),
+            agent_context.interaction_history.len()
         )
     }
 
