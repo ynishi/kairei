@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 use crate::provider::capabilities::shared_memory::SharedMemoryCapability;
 use crate::provider::capabilities::will_action::{
-    WillActionContext, WillActionParams, WillActionResolver, WillActionResult,
+    WillActionContext, WillActionParams, WillActionResolver, WillActionResult, WillActionSignature,
 };
 use crate::provider::capability::{Capabilities, CapabilityType};
 use crate::provider::provider::{Provider, ProviderSecret};
