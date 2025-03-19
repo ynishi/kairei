@@ -3,6 +3,7 @@ use kairei_core::config::{self, SecretConfig, SystemConfig};
 pub mod openai_test;
 pub mod provider_test;
 pub mod serper_test;
+pub mod sistence_integration_test;
 pub mod validation_e2e_test;
 pub mod validation_integration_test;
 

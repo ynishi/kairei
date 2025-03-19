@@ -9,6 +9,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tracing::warn;
 
 use crate::provider::capabilities::shared_memory::SharedMemoryCapability;
 use crate::provider::capabilities::will_action::{
@@ -40,6 +41,57 @@ pub struct SistenceAgentContext {
     pub interaction_history: Vec<InteractionRecord>,
 }
 
+// test serialization for SistenceAgentContext
+#[cfg(test)]
+mod test_sistence_agent_context {
+    use super::*;
+
+    #[test]
+    fn test_sistence_agent_context_serialization() {
+        let mut context = SistenceAgentContext {
+            agent_id: "test_agent".to_string(),
+            created_at: Timestamp::now(),
+            last_active: Timestamp::now(),
+            memory: HashMap::new(),
+            interaction_history: Vec::new(),
+        };
+
+        let serialized = serde_json::to_string(&context).unwrap();
+        let deserialized: SistenceAgentContext = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.agent_id, context.agent_id);
+        assert_eq!(deserialized.created_at, context.created_at);
+        assert_eq!(deserialized.last_active, context.last_active);
+        assert_eq!(deserialized.memory, context.memory);
+        assert_eq!(
+            format!("{:?}", deserialized.interaction_history),
+            format!("{:?}", context.interaction_history)
+        );
+
+        context
+            .memory
+            .insert("test_key".to_string(), json!("test_value"));
+        context.interaction_history.push(InteractionRecord {
+            timestamp: Timestamp::now(),
+            action: "test_action".to_string(),
+            parameters: json!({"test_param": "test_value"}),
+            result: json!({"test_result": "test_value"}),
+        });
+        assert_eq!(context.memory.len(), 1);
+        assert_eq!(context.interaction_history.len(), 1);
+        assert!(format!("{:?}", context).contains("[InteractionRecord {"));
+
+        let serialized = serde_json::to_string(&context).unwrap();
+        let deserialized: SistenceAgentContext = serde_json::from_str(&serialized).unwrap();
+        assert!(format!("{:?}", deserialized).contains("[InteractionRecord {"));
+
+        // to_value and from_value
+        let value = serde_json::to_value(&context).unwrap();
+        let deserialized: SistenceAgentContext = serde_json::from_value(value).unwrap();
+        assert!(format!("{:?}", deserialized).contains("[InteractionRecord {"));
+    }
+}
+
 impl SistenceAgentContext {
     /// Create a new agent context
     pub fn new(agent_name: &str, user_id: &str) -> Self {
@@ -62,6 +114,15 @@ impl SistenceAgentContext {
             parameters: json!({"content": content}),
             result: json!({}),
         };
+        self.interaction_history.push(interaction);
+
+        // Limit history size
+        if self.interaction_history.len() > 100 {
+            self.interaction_history.drain(0..50);
+        }
+    }
+
+    pub fn add(&mut self, interaction: InteractionRecord) {
         self.interaction_history.push(interaction);
 
         // Limit history size
@@ -141,12 +202,16 @@ impl SistenceProvider {
     }
 
     /// Save agent context to shared memory
-    async fn save_agent_context(&self, context: &SistenceAgentContext) -> ProviderResult<()> {
-        let key = context.agent_id.to_string();
+    #[tracing::instrument(skip(self), level = "debug")]
+    async fn save_agent_context(
+        &self,
+        agent_id: &str,
+        context: &SistenceAgentContext,
+    ) -> ProviderResult<()> {
+        let key = agent_id.to_string();
         let value = serde_json::to_value(context).map_err(|e| {
             ProviderError::InternalError(format!("Context serialization error: {}", e))
         })?;
-
         match self.shared_memory.set(&key, value).await {
             Ok(_) => Ok(()),
             Err(e) => Err(ProviderError::InternalError(format!(
@@ -156,7 +221,12 @@ impl SistenceProvider {
         }
     }
 
+    fn get_agent_id(&self, agent_name: &str, user_id: &str) -> String {
+        format!("agent:{}:{}", agent_name, user_id)
+    }
+
     /// Process a will action request
+    #[tracing::instrument(skip(self, context), level = "debug")]
     async fn process_will_action(
         &self,
         context: &ProviderContext,
@@ -173,7 +243,7 @@ impl SistenceProvider {
         };
 
         // Generate agent ID
-        let agent_id = format!("agent:{}:{}", agent_name, user_id);
+        let agent_id = self.get_agent_id(&agent_name, &user_id);
 
         // Get agent context
         let mut agent_context = self.get_agent_context(&agent_id).await?;
@@ -220,7 +290,6 @@ impl SistenceProvider {
         };
 
         // Try to execute the action directly
-
         match self
             .will_action_resolver
             .execute(&action_name, will_params.clone(), &will_context)
@@ -232,7 +301,7 @@ impl SistenceProvider {
                     .await?;
 
                 // Save the updated context
-                self.save_agent_context(&agent_context).await?;
+                self.save_agent_context(&agent_id, &agent_context).await?;
 
                 // Return the result
                 Ok(ProviderResponse {
@@ -241,16 +310,26 @@ impl SistenceProvider {
                 })
             }
             Err(_) => {
+                warn!("Failed to execute action directly, delegating to LLM");
                 // If direct execution fails, delegate to LLM
-                self.execute_via_llm(context, request, &action_name, &will_params, &agent_context)
-                    .await
+                self.execute_via_llm(
+                    &agent_id,
+                    context,
+                    request,
+                    &action_name,
+                    &will_params,
+                    &agent_context,
+                )
+                .await
             }
         }
     }
 
     /// Execute a will action using LLM integration
+    #[tracing::instrument(skip(self, context), level = "debug")]
     async fn execute_via_llm(
         &self,
+        agent_id: &str,
         context: &ProviderContext,
         request: &ProviderRequest,
         action_name: &str,
@@ -291,7 +370,7 @@ impl SistenceProvider {
             .await?;
 
         // Save the updated context
-        self.save_agent_context(&updated_context).await?;
+        self.save_agent_context(agent_id, &updated_context).await?;
 
         // Process and return the result
         Ok(ProviderResponse {
@@ -337,7 +416,7 @@ impl SistenceProvider {
         };
 
         // Add to history
-        agent_context.interaction_history.push(interaction);
+        agent_context.add(interaction);
 
         // Limit history size
         if agent_context.interaction_history.len() > 100 {
@@ -350,6 +429,11 @@ impl SistenceProvider {
 
 #[async_trait]
 impl Provider for SistenceProvider {
+    #[tracing::instrument(
+        name = "sistence_provider_execute",
+        skip(self, context),
+        level = "debug"
+    )]
     async fn execute(
         &self,
         context: &ProviderContext,
