@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 use crate::provider::capabilities::shared_memory::SharedMemoryCapability;
 use crate::provider::capabilities::will_action::{
-    WillActionContext, WillActionParams, WillActionResolver, WillActionResult, WillActionSignature,
+    WillActionContext, WillActionParams, WillActionResolver, WillActionResult,
 };
 use crate::provider::capability::{Capabilities, CapabilityType};
 use crate::provider::provider::{Provider, ProviderSecret};
@@ -220,7 +220,9 @@ impl SistenceProvider {
         };
 
         // Try to execute the action directly
-        let result = match self
+        
+
+        match self
             .will_action_resolver
             .execute(&action_name, will_params.clone(), &will_context)
             .await
@@ -244,9 +246,7 @@ impl SistenceProvider {
                 self.execute_via_llm(context, request, &action_name, &will_params, &agent_context)
                     .await
             }
-        };
-
-        result
+        }
     }
 
     /// Execute a will action using LLM integration
@@ -407,7 +407,7 @@ impl Provider for SistenceProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::capabilities::will_action::{WillAction, WillActionError};
+    use crate::provider::capabilities::will_action::{WillAction, WillActionError, WillActionSignature};
     use crate::provider::capability::Capabilities;
     use std::sync::Mutex;
 
