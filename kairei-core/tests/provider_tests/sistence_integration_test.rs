@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use kairei_core::config::ProviderConfig;
+use kairei_core::provider::capabilities::common::{Capabilities, CapabilityType};
 use kairei_core::provider::capabilities::shared_memory::{
     SharedMemoryCapability, SharedMemoryError,
 };
@@ -14,7 +15,6 @@ use kairei_core::provider::capabilities::will_action::{
     WillAction, WillActionContext, WillActionError, WillActionParams, WillActionResolver,
     WillActionResult, WillActionSignature,
 };
-use kairei_core::provider::capability::{Capabilities, CapabilityType};
 use kairei_core::provider::llm::{LLMResponse, ProviderLLM};
 use kairei_core::provider::llms::simple_expert::SimpleExpertProviderLLM;
 use kairei_core::provider::plugin::{PluginContext, ProviderPlugin};

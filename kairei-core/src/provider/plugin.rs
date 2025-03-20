@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::config::PluginConfig;
 
 use super::{
-    capability::CapabilityType,
+    capabilities::common::CapabilityType,
     llm::LLMResponse,
     provider::Section,
     request::{ProviderContext, ProviderRequest},
@@ -40,7 +40,7 @@ use serde::Serialize;
 /// # use kairei_core::provider::plugin::ProviderPlugin;
 /// # use kairei_core::provider::plugin::PluginContext;
 /// # use kairei_core::provider::provider::Section;
-/// # use kairei_core::provider::capability::CapabilityType;
+/// # use kairei_core::provider::capabilities::common::CapabilityType;
 /// # use kairei_core::provider::types::ProviderResult;
 /// # use kairei_core::provider::llm::LLMResponse;
 /// # use async_trait::async_trait;

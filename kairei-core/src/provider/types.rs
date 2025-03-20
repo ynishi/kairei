@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::{config::ProviderConfig, timestamp::Timestamp};
 
 use super::{
-    capabilities::shared_memory::SharedMemoryError, capability::CapabilityType,
+    capabilities::common::CapabilityType, capabilities::shared_memory::SharedMemoryError,
     provider::ProviderSecret,
 };
 

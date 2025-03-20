@@ -84,6 +84,9 @@ pub enum BackendType {
 
     /// Local file system
     LocalFileSystem,
+
+    /// In-memory storage
+    InMemory,
     // Future expansion
 }
 
@@ -95,6 +98,9 @@ pub enum BackendSpecificConfig {
 
     /// Local file system configuration
     Local(LocalFileSystemConfig),
+
+    /// In-memory configuration
+    InMemory(InMemoryConfig),
     // Future expansion
 }
 
@@ -122,6 +128,16 @@ pub struct LocalFileSystemConfig {
 
     /// File extension for stored data
     pub file_extension: String,
+}
+
+/// In-memory storage configuration
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, Default)]
+pub struct InMemoryConfig {
+    /// Maximum number of namespaces (0 means unlimited)
+    pub max_namespaces: usize,
+
+    /// Maximum number of keys per namespace (0 means unlimited)
+    pub max_keys_per_namespace: usize,
 }
 
 /// GCP authentication methods
@@ -208,6 +224,17 @@ impl ProviderSpecificConfig for PersistentSharedMemoryConfig {
                     return Err(ConfigError::InvalidValue {
                         field: "backend_config".to_string(),
                         message: "LocalFileSystem backend type requires Local configuration"
+                            .to_string(),
+                    });
+                }
+            }
+            BackendType::InMemory => {
+                if let BackendSpecificConfig::InMemory(_) = self.persistence.backend_config {
+                    // No specific validation needed for InMemory configuration
+                } else {
+                    return Err(ConfigError::InvalidValue {
+                        field: "backend_config".to_string(),
+                        message: "InMemory backend type requires InMemory configuration"
                             .to_string(),
                     });
                 }

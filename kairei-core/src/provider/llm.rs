@@ -1,6 +1,6 @@
 use crate::{config::ProviderConfig, timestamp::Timestamp};
 
-use super::{capability::Capabilities, provider::ProviderSecret, types::*};
+use super::{capabilities::common::Capabilities, provider::ProviderSecret, types::*};
 use async_trait::async_trait;
 
 #[async_trait]

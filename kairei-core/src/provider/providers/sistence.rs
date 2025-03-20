@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tracing::warn;
 
+use crate::provider::capabilities::common::{Capabilities, CapabilityType};
 use crate::provider::capabilities::shared_memory::SharedMemoryCapability;
 use crate::provider::capabilities::will_action::{
     WillActionContext, WillActionParams, WillActionResolver, WillActionResult,
 };
-use crate::provider::capability::{Capabilities, CapabilityType};
 use crate::provider::provider::{Provider, ProviderSecret};
 use crate::provider::request::RequestInput;
 use crate::provider::request::{ProviderContext, ProviderRequest, ProviderResponse};
@@ -490,10 +490,10 @@ impl Provider for SistenceProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::capabilities::common::Capabilities;
     use crate::provider::capabilities::will_action::{
         WillAction, WillActionError, WillActionSignature,
     };
-    use crate::provider::capability::Capabilities;
     use std::sync::Mutex;
 
     // Mock LLM Provider for testing
@@ -673,8 +673,10 @@ mod tests {
             0
         }
 
-        fn capability(&self) -> crate::provider::capability::CapabilityType {
-            crate::provider::capability::CapabilityType::Custom("shared_memory".to_string())
+        fn capability(&self) -> crate::provider::capabilities::common::CapabilityType {
+            crate::provider::capabilities::common::CapabilityType::Custom(
+                "shared_memory".to_string(),
+            )
         }
 
         async fn generate_section<'a>(
@@ -712,8 +714,8 @@ mod tests {
             0
         }
 
-        fn capability(&self) -> crate::provider::capability::CapabilityType {
-            crate::provider::capability::CapabilityType::Custom("will_action".to_string())
+        fn capability(&self) -> crate::provider::capabilities::common::CapabilityType {
+            crate::provider::capabilities::common::CapabilityType::Custom("will_action".to_string())
         }
 
         async fn generate_section<'a>(

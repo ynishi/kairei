@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::warn;
 
-use super::types::{ProviderError, ProviderResult};
+use crate::provider::types::{ProviderError, ProviderResult};
 
 /// Provider Capabilityの種類を定義
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -25,6 +25,10 @@ pub enum CapabilityType {
     Memory,
     /// 共有メモリ機能
     SharedMemory,
+    /// Sistence中メモリ
+    SistenceMemory,
+    /// 関連メモリ機能
+    RelevantMemory,
     /// ストリーミング処理機能
     // Streaming,
     // Knowledge Capabilities
@@ -196,7 +200,6 @@ mod tests {
 
     use super::*;
 
-    // write all test for capalibity and relatied models
     #[test]
     fn test_capabilities() {
         let mut capabilities = Capabilities::default();

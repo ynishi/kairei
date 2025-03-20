@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::provider::{
+    capabilities::common::CapabilityType,
     capabilities::shared_memory::{Metadata, SharedMemoryCapability, SharedMemoryError},
-    capability::CapabilityType,
     llm::LLMResponse,
     plugin::{PluginContext, ProviderPlugin},
     provider::Section,
@@ -88,7 +88,7 @@ impl SharedMemoryCapability for SharedMemoryPluginAdapter {
 mod tests {
     use super::*;
     use crate::provider::config::plugins::SharedMemoryConfig;
-    use crate::provider::plugins::shared_memory::InMemorySharedMemoryPlugin;
+    use crate::provider::plugins::memory::shared_memory::InMemorySharedMemoryPlugin;
 
     #[tokio::test]
     async fn test_adapter_forwards_calls() {

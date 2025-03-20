@@ -17,7 +17,7 @@ use kairei_core::provider::config::plugins::{
     BackendSpecificConfig, BackendType, GCPAuthMethod, GCPStorageConfig, PersistenceConfig,
     PersistentSharedMemoryConfig, SharedMemoryConfig,
 };
-use kairei_core::provider::plugins::persistent_shared_memory::PersistentSharedMemoryPlugin;
+use kairei_core::provider::plugins::memory::persistent_shared_memory::PersistentSharedMemoryPlugin;
 use kairei_core::provider::plugins::storage::gcp::GCPStorageBackend;
 
 // Helper function to check if GCP tests should be run

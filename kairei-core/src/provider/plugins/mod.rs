@@ -1,13 +1,11 @@
 pub mod general_prompt;
 pub mod memory;
-pub mod persistent_shared_memory;
 pub mod policy;
-pub mod shared_memory;
-pub mod shared_memory_adapter;
 pub mod storage;
 pub mod web_search_serper;
 pub mod will_action;
 
+pub use memory::sistence_memory_adapter::SistenceMemoryAdapter;
 pub use will_action::DefaultWillActionResolver;
 
 #[cfg(test)]

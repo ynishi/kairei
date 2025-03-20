@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use kairei_core::provider::capabilities::shared_memory::SharedMemoryCapability;
 use kairei_core::provider::config::plugins::SharedMemoryConfig;
-use kairei_core::provider::plugins::shared_memory::InMemorySharedMemoryPlugin;
+use kairei_core::provider::plugins::memory::shared_memory::InMemorySharedMemoryPlugin;
 
 /// Helper function to create a test plugin
 fn create_test_plugin() -> InMemorySharedMemoryPlugin {

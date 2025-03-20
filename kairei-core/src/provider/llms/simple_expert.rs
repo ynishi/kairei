@@ -5,7 +5,7 @@ use tracing::debug;
 use crate::{
     config::ProviderConfig,
     provider::{
-        capability::{Capabilities, CapabilityType},
+        capabilities::common::{Capabilities, CapabilityType},
         llm::{LLMResponse, ProviderLLM, ResponseMetadata},
         provider::ProviderSecret,
         types::{ProviderError, ProviderResult},
