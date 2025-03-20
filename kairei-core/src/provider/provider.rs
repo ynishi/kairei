@@ -8,8 +8,7 @@ use crate::{
 
 use super::{
     capabilities::common::Capabilities,
-    capability::Capabilities,
-    config::{ErrorCollector, ProviderConfigError},
+    config::ProviderConfigError,
     request::{ProviderContext, ProviderRequest, ProviderResponse},
     types::ProviderResult,
 };

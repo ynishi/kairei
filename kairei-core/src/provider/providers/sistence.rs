@@ -918,13 +918,6 @@ mod tests {
     };
     use std::sync::Mutex;
 
-    use super::*;
-    use crate::provider::{
-        capabilities::will_action::{WillAction, WillActionError, WillActionSignature},
-        provider::Provider,
-        request::ProviderResponse,
-    };
-
     // Mock LLM Provider for testing
     struct MockLLMProvider {
         name: String,
