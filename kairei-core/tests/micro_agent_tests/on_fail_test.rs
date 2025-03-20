@@ -9,7 +9,7 @@ use kairei_core::{
     event_bus::Value,
     event_registry::EventType,
     provider::{
-        capability::Capabilities,
+        capabilities::common::Capabilities,
         llm::LLMResponse,
         provider::{Provider, ProviderSecret},
         request::{ProviderContext, ProviderRequest, ProviderResponse},

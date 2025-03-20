@@ -7,7 +7,9 @@ use tracing::debug;
 use crate::{
     config::ProviderConfig,
     provider::{
-        capability::{Capabilities, CapabilityType, RequiredCapabilities, RequiresCapabilities},
+        capabilities::common::{
+            Capabilities, CapabilityType, RequiredCapabilities, RequiresCapabilities,
+        },
         config::{ErrorCollector, ProviderConfigValidator, TypeCheckerValidator, config_to_map},
         generator::generator::{Generator, PromptGenerator},
         llm::{LLMResponse, ProviderLLM},

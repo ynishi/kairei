@@ -11,7 +11,7 @@ use tokio::sync::Barrier;
 
 use kairei_core::provider::capabilities::shared_memory::SharedMemoryCapability;
 use kairei_core::provider::config::plugins::SharedMemoryConfig;
-use kairei_core::provider::plugins::shared_memory::InMemorySharedMemoryPlugin;
+use kairei_core::provider::plugins::memory::shared_memory::InMemorySharedMemoryPlugin;
 use kairei_core::provider::types::ProviderResult;
 
 /// Helper function to create a test plugin

@@ -12,7 +12,7 @@ use serde_json::json;
 
 use kairei_core::config::{PluginConfig, ProviderConfig, ProviderConfigs, SecretConfig};
 use kairei_core::event_bus::EventBus;
-use kairei_core::provider::capability::Capabilities;
+use kairei_core::provider::capabilities::common::Capabilities;
 use kairei_core::provider::config::plugins::SharedMemoryConfig;
 use kairei_core::provider::provider::{Provider, ProviderSecret};
 use kairei_core::provider::provider_registry::ProviderRegistry;

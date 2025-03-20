@@ -178,3 +178,37 @@ Issues requiring any of the following should involve human collaboration:
 - Implementations without clear precedents in the codebase
 - Changes requiring subtle performance optimization
 - Issues where planning reveals significant complexity or unknown factors
+
+## Efficient Collaboration Model
+
+### Task Division Between Claude and Human
+
+For optimal efficiency, follow this division of responsibilities:
+
+#### Claude's Focus Areas:
+- High-level architecture and design proposals
+- Interface and model definition
+- Conceptual organization and structure
+- Initial implementation scaffolding
+- Complex algorithm design
+- Documentation drafting
+- Template generation for repetitive code patterns
+
+#### Human's Focus Areas:
+- Import resolution and fine-tuning
+- Syntax error correction
+- Minor adjustments to types and interfaces
+- IDE-based refactoring
+- Final code review and integration
+- Build system configuration
+- Performance optimization
+
+### Post-Compact Recovery Protocol
+
+After a COMPACT operation:
+1. Claude will always re-read CLAUDE.md and the quick reference docs
+2. Claude will synchronize understanding with the human before proceeding with tasks
+3. Claude will confirm the current state of work and next priorities
+4. Claude will avoid reloading entire codebase files unless absolutely necessary
+
+This approach maximizes token efficiency, particularly for large codebases where file reloading consumes significant context space (typically 50% or more of available tokens).

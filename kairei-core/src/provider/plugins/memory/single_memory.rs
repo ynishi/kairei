@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::MemoryConfig;
-use crate::provider::capability::CapabilityType;
+use crate::provider::capabilities::common::CapabilityType;
 use crate::provider::llm::LLMResponse;
 use crate::provider::plugin::{PluginContext, ProviderPlugin};
 use crate::provider::provider::Section;

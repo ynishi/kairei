@@ -15,7 +15,7 @@ use kairei_core::provider::config::plugins::{
     BackendSpecificConfig, BackendType, LocalFileSystemConfig, PersistenceConfig,
     PersistentSharedMemoryConfig, SharedMemoryConfig,
 };
-use kairei_core::provider::plugins::persistent_shared_memory::PersistentSharedMemoryPlugin;
+use kairei_core::provider::plugins::memory::persistent_shared_memory::PersistentSharedMemoryPlugin;
 use kairei_core::provider::plugins::storage::local_fs::LocalFileSystemBackend;
 
 /// Helper function to create a test plugin with LocalFileSystemBackend

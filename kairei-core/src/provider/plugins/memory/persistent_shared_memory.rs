@@ -8,7 +8,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use kairei_core::provider::plugins::persistent_shared_memory::PersistentSharedMemoryPlugin;
+//! use kairei_core::provider::plugins::memory::persistent_shared_memory::PersistentSharedMemoryPlugin;
 //! use kairei_core::provider::config::plugins::{PersistentSharedMemoryConfig, SharedMemoryConfig};
 //! use kairei_core::provider::capabilities::shared_memory::SharedMemoryCapability;
 //! use kairei_core::provider::capabilities::storage::{StorageBackend, ValueWithMetadata};
@@ -41,11 +41,11 @@ use tracing::error;
 
 use crate::event::event_registry::EventType;
 use crate::event_bus::{Event, EventBus};
+use crate::provider::capabilities::common::CapabilityType;
 use crate::provider::capabilities::shared_memory::{
     Metadata, SharedMemoryCapability, SharedMemoryError,
 };
 use crate::provider::capabilities::storage::{StorageBackend, StorageError, ValueWithMetadata};
-use crate::provider::capability::CapabilityType;
 use crate::provider::config::plugins::PersistentSharedMemoryConfig;
 use crate::provider::llm::LLMResponse;
 use crate::provider::plugin::{PluginContext, ProviderPlugin};
@@ -156,7 +156,7 @@ impl PersistentSharedMemoryPlugin {
     /// # Example
     ///
     /// ```no_run
-    /// # use kairei_core::provider::plugins::persistent_shared_memory::PersistentSharedMemoryPlugin;
+    /// # use kairei_core::provider::plugins::memory::persistent_shared_memory::PersistentSharedMemoryPlugin;
     /// # use kairei_core::provider::config::plugins::PersistentSharedMemoryConfig;
     /// let config = PersistentSharedMemoryConfig::default();
     /// let plugin = PersistentSharedMemoryPlugin::new(config);
@@ -215,6 +215,21 @@ impl PersistentSharedMemoryPlugin {
                     Box::new(LocalFileSystemBackend::new(config.clone()))
                 } else {
                     // Configuration mismatch, use dummy backend
+                    error!("Backend type is LocalFileSystem but config is not Local");
+                    Box::new(DummyStorageBackend {})
+                }
+            }
+            crate::provider::config::plugins::BackendType::InMemory => {
+                if let crate::provider::config::plugins::BackendSpecificConfig::InMemory(
+                    ref config,
+                ) = self.config.persistence.backend_config
+                {
+                    // Create in-memory backend
+                    use crate::provider::plugins::storage::in_memory::InMemoryBackend;
+                    Box::new(InMemoryBackend::new(config.clone()))
+                } else {
+                    // Configuration mismatch, use dummy backend
+                    error!("Backend type is InMemory but config is not InMemory");
                     Box::new(DummyStorageBackend {})
                 }
             }

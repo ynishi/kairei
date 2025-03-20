@@ -7,11 +7,11 @@ use async_trait::async_trait;
 // Import serde_json for JSON handling in action implementations
 use serde_json;
 
+use crate::provider::capabilities::common::CapabilityType;
 use crate::provider::capabilities::will_action::{
     ParameterSpec, WillAction, WillActionContext, WillActionError, WillActionParams,
     WillActionResolver, WillActionResult, WillActionSignature,
 };
-use crate::provider::capability::CapabilityType;
 use crate::provider::config::plugins::WillActionConfig;
 use crate::provider::llm::LLMResponse;
 use crate::provider::plugin::{PluginContext, ProviderPlugin};

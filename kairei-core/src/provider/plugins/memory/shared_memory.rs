@@ -8,7 +8,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use kairei_core::provider::plugins::shared_memory::InMemorySharedMemoryPlugin;
+//! use kairei_core::provider::plugins::memory::shared_memory::InMemorySharedMemoryPlugin;
 //! use kairei_core::provider::config::plugins::SharedMemoryConfig;
 //! use kairei_core::provider::capabilities::shared_memory::SharedMemoryCapability;
 //! use serde_json::json;
@@ -39,10 +39,10 @@ use serde_json::Value;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::provider::capabilities::common::CapabilityType;
 use crate::provider::capabilities::shared_memory::{
     Metadata, SharedMemoryCapability, SharedMemoryError,
 };
-use crate::provider::capability::CapabilityType;
 use crate::provider::config::plugins::SharedMemoryConfig;
 use crate::provider::llm::LLMResponse;
 use crate::provider::plugin::{PluginContext, ProviderPlugin};
@@ -110,7 +110,7 @@ impl InMemorySharedMemoryPlugin {
     /// # Example
     ///
     /// ```no_run
-    /// # use kairei_core::provider::plugins::shared_memory::InMemorySharedMemoryPlugin;
+    /// # use kairei_core::provider::plugins::memory::shared_memory::InMemorySharedMemoryPlugin;
     /// # use kairei_core::provider::config::plugins::SharedMemoryConfig;
     /// # use std::time::Duration;
     /// let plugin = InMemorySharedMemoryPlugin::new(SharedMemoryConfig {

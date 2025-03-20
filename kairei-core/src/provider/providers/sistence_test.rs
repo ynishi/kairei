@@ -14,7 +14,7 @@ use crate::provider::capabilities::will_action::{
     ParameterSpec, WillAction, WillActionContext, WillActionError, WillActionParams,
     WillActionResolver, WillActionResult, WillActionSignature,
 };
-use crate::provider::capability::{Capabilities, CapabilityType};
+use crate::provider::capabilities::common::{Capabilities, CapabilityType};
 use crate::provider::plugin::{PluginContext, ProviderPlugin};
 use crate::provider::provider::{Provider, ProviderError, ProviderResult, ProviderSecret, Section};
 use crate::provider::providers::sistence::{SistenceAgentContext, SistenceProvider};

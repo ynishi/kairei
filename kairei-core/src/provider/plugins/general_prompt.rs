@@ -4,7 +4,7 @@ use tracing::debug;
 use crate::{
     expression,
     provider::{
-        capability::CapabilityType,
+        capabilities::common::CapabilityType,
         llm::LLMResponse,
         plugin::{PluginContext, ProviderPlugin},
         provider::Section,

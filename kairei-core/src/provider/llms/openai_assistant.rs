@@ -14,7 +14,7 @@ use std::{collections::HashSet, time::Duration};
 use crate::{
     config::ProviderConfig,
     provider::{
-        capability::{Capabilities, CapabilityType, HasCapabilities},
+        capabilities::common::{Capabilities, CapabilityType, HasCapabilities},
         llm::{LLMResponse, ProviderLLM, ResponseMetadata},
         provider::ProviderSecret,
         types::{ProviderError, ProviderResult},
