@@ -26,11 +26,13 @@ use serde::{Deserialize, Serialize};
 use crate::provider::capabilities::sistence_memory::{
     AccessEvent, AccessStats, CleanupStats, ContentType, EnhancedMetadata, 
     ImportanceDistribution, ImportancePolicy, ImportanceScore, ImportanceEvaluatorType, IndexStats, 
-    ItemImportanceChange, ItemType, KnowledgeNode, MemoryId, MemoryItem, MemoryStats, 
+    ItemImportanceChange, ItemType, KnowledgeNode, MemoryId, MemoryStats, 
     RetentionPolicy, SearchContext, SearchFilters, SearchStrategy, SistenceMemoryError, Source,
     StructuredResult, TemporalContext, TopicDistribution, VerificationLevel, Reference
 };
 use crate::provider::plugin::ProviderPlugin;
+
+use super::sistence_memory::ItemLink;
 
 /// Strategy for building optimized context
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -510,13 +512,13 @@ pub trait DetailedImportanceEvaluator: Send + Sync {
     /// Calculate base importance score independent of context
     fn calculate_base_importance(
         &self, 
-        item: &MemoryItem
+        item: &DetailedMemoryItem
     ) -> f32;
     
     /// Calculate context-dependent importance
     fn calculate_contextual_importance(
         &self, 
-        item: &MemoryItem, 
+        item: &DetailedMemoryItem, 
         context: &SearchContext
     ) -> f32;
     
@@ -553,7 +555,7 @@ pub trait DetailedImportanceEvaluator: Send + Sync {
     /// Evaluate contextual relevance using lightweight LLM
     async fn evaluate_contextual_relevance(
         &self, 
-        item: &MemoryItem, 
+        item: &DetailedMemoryItem, 
         context: &SearchContext
     ) -> f32;
 }

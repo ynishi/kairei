@@ -60,4 +60,3 @@ pub mod storage;
 pub mod will_action;
 pub mod relevant_memory;
 pub mod sistence_memory;
-pub mod sistence_relevant_memory_adapter;

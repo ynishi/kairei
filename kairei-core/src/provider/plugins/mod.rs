@@ -5,6 +5,7 @@ pub mod storage;
 pub mod web_search_serper;
 pub mod will_action;
 
+pub use memory::sistence_memory_adapter::SistenceMemoryAdapter;
 pub use will_action::DefaultWillActionResolver;
 
 #[cfg(test)]
