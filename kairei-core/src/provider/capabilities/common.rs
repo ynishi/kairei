@@ -25,6 +25,10 @@ pub enum CapabilityType {
     Memory,
     /// 共有メモリ機能
     SharedMemory,
+    /// Sistence中メモリ
+    SistenceMemory,
+    /// 関連メモリ機能
+    RelevantMemory,
     /// ストリーミング処理機能
     // Streaming,
     // Knowledge Capabilities

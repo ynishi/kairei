@@ -8,6 +8,7 @@
 //!
 //! - **SharedMemory**: High-performance key-value storage for sharing data between agents
 //! - **PersistentSharedMemory**: Shared memory with persistence to storage backends
+//! - **SistenceMemory**: Metadata-enriched middle layer of the 3-layer memory architecture
 //! - **RAGMemory**: Semantic search and memory organization using lightweight LLMs
 //! - **Storage**: Storage operations for provider plugins
 //! - **WillAction**: Will action resolution for provider plugins
@@ -22,6 +23,7 @@
 //! ```text
 //! ProviderPlugin (base trait)
 //!  ├── SharedMemoryCapability
+//!  ├── SistenceMemoryCapability
 //!  ├── RAGMemoryCapability
 //!  └── StorageCapability
 //! ```
@@ -30,23 +32,24 @@
 //!
 //! ```no_run
 //! use kairei_core::provider::capabilities::shared_memory::SharedMemoryCapability;
-//! use kairei_core::provider::capabilities::common::rag_memory::RAGMemoryCapability;
+//! use kairei_core::provider::capabilities::sistence_memory::{SistenceMemoryCapability, MemoryItem, ItemType};
 //! use serde_json::json;
 //!
 //! # async fn example(
 //! #     shared_memory: &impl SharedMemoryCapability,
-//! #     rag_memory: &impl RAGMemoryCapability
+//! #     sistence_memory: &impl SistenceMemoryCapability,
 //! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! // Store data in working memory
 //! shared_memory.set("user_123", json!({"name": "Alice"})).await?;
 //!
-//! // Record information for semantic search
-//! let content = "Alice is working on the new AI project and needs access to the research database.";
-//! rag_memory.record(content, "conversation", None).await?;
+//! // Store information with rich metadata
+//! let item = MemoryItem::new(
+//!     "Alice is working on the new AI project and needs access to the research database.",
+//!     ItemType::Information,
+//!     vec!["access request", "research", "project"],
+//! );
+//! let item_id = sistence_memory.store(item).await?;
 //!
-//! // Search for relevant information
-//! let context = rag_memory::SearchContext::default();
-//! let results = rag_memory.search("research database access", &context).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -55,3 +58,6 @@ pub mod common;
 pub mod shared_memory;
 pub mod storage;
 pub mod will_action;
+pub mod relevant_memory;
+pub mod sistence_memory;
+pub mod sistence_relevant_memory_adapter;
