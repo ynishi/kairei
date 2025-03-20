@@ -215,6 +215,21 @@ impl PersistentSharedMemoryPlugin {
                     Box::new(LocalFileSystemBackend::new(config.clone()))
                 } else {
                     // Configuration mismatch, use dummy backend
+                    error!("Backend type is LocalFileSystem but config is not Local");
+                    Box::new(DummyStorageBackend {})
+                }
+            }
+            crate::provider::config::plugins::BackendType::InMemory => {
+                if let crate::provider::config::plugins::BackendSpecificConfig::InMemory(
+                    ref config,
+                ) = self.config.persistence.backend_config
+                {
+                    // Create in-memory backend
+                    use crate::provider::plugins::storage::in_memory::InMemoryBackend;
+                    Box::new(InMemoryBackend::new(config.clone()))
+                } else {
+                    // Configuration mismatch, use dummy backend
+                    error!("Backend type is InMemory but config is not InMemory");
                     Box::new(DummyStorageBackend {})
                 }
             }

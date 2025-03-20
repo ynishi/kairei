@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
@@ -9,8 +8,8 @@ use thiserror::Error;
 /// Memory item identifier type
 pub type MemoryId = String;
 
-use crate::provider::capabilities::storage::StorageError;
 use crate::provider::capabilities::shared_memory::SharedMemoryError;
+use crate::provider::capabilities::storage::StorageError;
 use crate::provider::plugin::ProviderPlugin;
 
 /// Errors that can occur in the Sistence Memory system
@@ -18,22 +17,22 @@ use crate::provider::plugin::ProviderPlugin;
 pub enum SistenceMemoryError {
     #[error("Item not found: {0}")]
     NotFound(String),
-    
+
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
-    
+
     #[error("Shared memory error: {0}")]
     SharedMemoryError(#[from] SharedMemoryError),
-    
+
     #[error("Serialization error: {0}")]
     SerializationError(String),
-    
+
     #[error("Invalid input: {0}")]
     InvalidInput(String),
-    
+
     #[error("LLM processing error: {0}")]
     LlmError(String),
-    
+
     #[error("Internal error: {0}")]
     InternalError(String),
 }
@@ -56,7 +55,7 @@ pub enum ContentType {
 /// Type of memory item
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ItemType {
-    /// General information 
+    /// General information
     Information,
     /// Decision or conclusion
     Decision,
@@ -231,21 +230,21 @@ pub struct SearchContext {
     pub current_topics: Vec<String>,
     /// Recently accessed items
     pub recent_items: Vec<MemoryId>,
-    
+
     /// Search text
     pub query_text: Option<String>,
     /// Type of query
     pub query_type: QueryType,
     /// Search strategy to use
     pub strategy: Option<SearchStrategy>,
-    
+
     /// Participants in the current context
     pub participants: Vec<String>,
     /// Current activity or task
     pub current_activity: Option<String>,
     /// Temporal aspects of the context
     pub temporal_context: TemporalContext,
-    
+
     /// Sistence agent profile
     pub sistence_profile: Option<SistenceProfile>,
     /// Current goals
@@ -265,7 +264,7 @@ pub struct StructuredResult {
     pub summary: Option<String>,
     /// Knowledge graph representation
     pub knowledge_graph: Option<KnowledgeNode>,
-    
+
     /// Confidence in result relevance (0.0-1.0)
     pub confidence: f32,
     /// Context match score (0.0-1.0)
@@ -330,6 +329,8 @@ pub struct ItemLink {
     pub created_at: SystemTime,
     /// Additional link metadata
     pub metadata: Option<HashMap<String, String>>,
+    pub is_bidirectional: bool,
+    pub context: Option<String>,
 }
 
 /// Filters for commit log operations
@@ -346,7 +347,6 @@ pub struct CommitLogFilters {
     /// Filter by source identifier
     pub source_id: Option<String>,
 }
-
 
 /// Memory system statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -450,35 +450,35 @@ pub struct MemoryItem {
     pub created_at: SystemTime,
     /// When the item was last updated
     pub updated_at: SystemTime,
-    
+
     /// The actual content of the memory item
     pub content: String,
     /// Content type (text, JSON, binary)
     pub content_type: ContentType,
     /// Structured content representation (if available)
     pub structured_content: Option<serde_json::Value>,
-    
+
     /// Type of memory item
     pub item_type: ItemType,
     /// Topics or categories
     pub topics: Vec<String>,
     /// Custom tags
     pub tags: HashMap<String, String>,
-    
+
     /// Source information
     pub source: Source,
     /// References to other items or external sources
     pub references: Vec<Reference>,
     /// Related items by ID
     pub related_items: Vec<MemoryId>,
-    
+
     /// Simplified importance score for public API
     pub importance: ImportanceScore,
     /// Last access time
     pub last_accessed: Option<SystemTime>,
     /// Access count
     pub access_count: u32,
-    
+
     /// Time-to-live for this item (None = permanent)
     pub ttl: Option<Duration>,
     /// Retention policy
@@ -552,133 +552,132 @@ pub enum ImportanceEvaluatorType {
 #[async_trait]
 pub trait SistenceMemoryCapability: ProviderPlugin + Send + Sync {
     // === Basic CRUD Operations ===
-    
+
     /// Store a new memory item with rich metadata
     async fn store(&self, item: MemoryItem) -> Result<MemoryId, SistenceMemoryError>;
 
     /// Retrieve a memory item by ID
     async fn retrieve(&self, id: &MemoryId) -> Result<MemoryItem, SistenceMemoryError>;
-    
+
     /// Update an existing memory item
     async fn update(&self, item: MemoryItem) -> Result<(), SistenceMemoryError>;
-    
+
     /// Delete a memory item
     async fn delete(&self, id: &MemoryId) -> Result<(), SistenceMemoryError>;
-    
+
     /// Check if a memory item exists
     async fn exists(&self, id: &MemoryId) -> Result<bool, SistenceMemoryError>;
-    
+
     /// Update importance score for a memory item
-    async fn update_importance(&self, id: &MemoryId, policy: Option<ImportancePolicy>) 
-        -> Result<ImportanceScore, SistenceMemoryError>;
-    
+    async fn update_importance(
+        &self,
+        id: &MemoryId,
+        policy: Option<ImportancePolicy>,
+    ) -> Result<ImportanceScore, SistenceMemoryError>;
+
     // === Search Operations ===
-    
+
     /// Search for memory items
     async fn search(
-        &self, 
-        query: &str, 
+        &self,
+        query: &str,
         filters: Option<SearchFilters>,
-        limit: Option<usize>
+        limit: Option<usize>,
     ) -> Result<Vec<MemoryItem>, SistenceMemoryError>;
-    
+
     /// Search with context awareness
     async fn search_with_context(
-        &self, 
-        query: &str, 
+        &self,
+        query: &str,
         context: SearchContext,
-        limit: Option<usize>
+        limit: Option<usize>,
     ) -> Result<Vec<MemoryItem>, SistenceMemoryError>;
-    
+
     /// Find related items
     async fn find_related(
-        &self, 
+        &self,
         item_id: &MemoryId,
-        max_results: Option<usize>
+        max_results: Option<usize>,
     ) -> Result<Vec<MemoryItem>, SistenceMemoryError>;
-    
+
     /// Get items relevant to the current context
     async fn get_relevant_for_context(
-        &self, 
+        &self,
         context: SearchContext,
-        limit: Option<usize>
+        limit: Option<usize>,
     ) -> Result<Vec<MemoryItem>, SistenceMemoryError>;
-    
+
     // === Metadata Management ===
-    
+
     /// Add topics to an item
     async fn add_topics(
-        &self, 
-        item_id: &MemoryId, 
-        topics: Vec<String>
+        &self,
+        item_id: &MemoryId,
+        topics: Vec<String>,
     ) -> Result<(), SistenceMemoryError>;
-    
+
     /// Add tags to an item
     async fn add_tags(
-        &self, 
-        item_id: &MemoryId, 
-        tags: HashMap<String, String>
+        &self,
+        item_id: &MemoryId,
+        tags: HashMap<String, String>,
     ) -> Result<(), SistenceMemoryError>;
-    
+
     /// Link items together
     async fn link_items(
-        &self, 
-        source_id: &MemoryId, 
-        target_ids: Vec<MemoryId>, 
-        relation_type: Option<String>
+        &self,
+        source_id: &MemoryId,
+        target_ids: Vec<MemoryId>,
+        relation_type: Option<String>,
     ) -> Result<(), SistenceMemoryError>;
-    
+
     // === Working Memory Integration ===
-    
+
     /// Index items from working memory
     async fn index_from_working_memory(
-        &self, 
+        &self,
         namespace: &str,
-        pattern: Option<&str>
+        pattern: Option<&str>,
     ) -> Result<IndexStats, SistenceMemoryError>;
-    
+
     /// Promote an item from working memory
     async fn promote_from_working_memory(
-        &self, 
-        key: &str, 
-        namespace: &str
+        &self,
+        key: &str,
+        namespace: &str,
     ) -> Result<String, SistenceMemoryError>;
-    
+
     /// Store item to working memory
     async fn store_to_working_memory(
         &self,
         item_id: &MemoryId,
         namespace: &str,
-        key: &str
+        key: &str,
     ) -> Result<(), SistenceMemoryError>;
-    
+
     // === LLM-Enhanced Functions ===
-    
+
     /// Enhance metadata using lightweight LLM
     async fn enhance_metadata(
-        &self, 
-        item_id: &MemoryId
+        &self,
+        item_id: &MemoryId,
     ) -> Result<EnhancedMetadata, SistenceMemoryError>;
-    
+
     /// Build optimized context for LLM from memory items
     async fn build_context(
-        &self, 
-        context: SearchContext, 
+        &self,
+        context: SearchContext,
         max_tokens: usize,
-        strategy: Option<SearchStrategy>
+        strategy: Option<SearchStrategy>,
     ) -> Result<String, SistenceMemoryError>;
-    
+
     // === Management Functions ===
-    
+
     /// Clean up expired items
-    async fn cleanup_expired(
-        &self
-    ) -> Result<CleanupStats, SistenceMemoryError>;
-    
+    async fn cleanup_expired(&self) -> Result<CleanupStats, SistenceMemoryError>;
+
     /// Get memory statistics
-    async fn get_stats(
-        &self
-    ) -> Result<MemoryStats, SistenceMemoryError>;
+    async fn get_stats(&self) -> Result<MemoryStats, SistenceMemoryError>;
 }
 
 /// Basic metadata for memory items (public API)
@@ -700,27 +699,24 @@ pub struct BasicMetadata {
 #[async_trait]
 pub trait ImportanceEvaluator: Send + Sync {
     /// Evaluate importance for an item
-    fn evaluate_importance(
-        &self, 
-        item: &MemoryItem
-    ) -> ImportanceScore;
-    
+    fn evaluate_importance(&self, item: &MemoryItem) -> ImportanceScore;
+
     /// Evaluate contextual importance
     fn evaluate_contextual_importance(
-        &self, 
-        item: &MemoryItem, 
-        context: &SearchContext
+        &self,
+        item: &MemoryItem,
+        context: &SearchContext,
     ) -> ImportanceScore;
-    
+
     /// Recalculate importance for all items
     async fn recalculate_all_importance(
-        &self
+        &self,
     ) -> Result<ImportanceDistribution, SistenceMemoryError>;
-    
+
     /// Update importance for a specific item
     async fn update_item_importance(
-        &self, 
+        &self,
         item_id: &MemoryId,
-        policy: Option<ImportancePolicy>
+        policy: Option<ImportancePolicy>,
     ) -> Result<ImportanceScore, SistenceMemoryError>;
 }

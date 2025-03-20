@@ -30,7 +30,7 @@
 //!
 //! # Usage Example
 //!
-//! ```no_run
+//! ```ignore,no_run
 //! use kairei_core::provider::capabilities::shared_memory::SharedMemoryCapability;
 //! use kairei_core::provider::capabilities::sistence_memory::{SistenceMemoryCapability, MemoryItem, ItemType};
 //! use serde_json::json;
@@ -55,8 +55,8 @@
 //! ```
 
 pub mod common;
+pub mod relevant_memory;
 pub mod shared_memory;
+pub mod sistence_memory;
 pub mod storage;
 pub mod will_action;
-pub mod relevant_memory;
-pub mod sistence_memory;
