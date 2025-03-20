@@ -1385,18 +1385,31 @@ mod tests {
     #[tokio::test]
     async fn test_ttl_expiration() {
         let mut config = PersistentSharedMemoryConfig::default();
-        config.base.ttl = Duration::from_millis(10); // Extremely short TTL for testing
+        config.base.ttl = Duration::from_millis(50); // Extremely short TTL for testing
 
         let plugin = PersistentSharedMemoryPlugin::new(config).await;
 
-        plugin.set("expiring_key", json!("test")).await.unwrap();
-        assert!(plugin.exists("expiring_key").await.unwrap());
+        plugin
+            .set("expiring_key_test_ttl_expiration_persist", json!("test"))
+            .await
+            .unwrap();
+        assert!(
+            plugin
+                .exists("expiring_key_test_ttl_expiration_persist")
+                .await
+                .unwrap()
+        );
 
         // Wait for expiration - use much longer sleep to ensure expiration
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Key should be gone - exists() will automatically handle expired keys
-        assert!(!plugin.exists("expiring_key").await.unwrap());
+        assert!(
+            !plugin
+                .exists("expiring_key_test_ttl_expiration_persist")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]

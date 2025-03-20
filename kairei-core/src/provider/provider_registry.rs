@@ -29,6 +29,8 @@ use crate::{
     timestamp::Timestamp,
 };
 
+use super::{config::ErrorCollector, providers::sistence::SistenceProvider};
+
 // For Data in Registry
 #[derive(Clone)]
 pub struct ProviderInstance {
@@ -96,32 +98,15 @@ impl ProviderRegistry {
         let config = self.configs.providers.get(name).ok_or_else(|| {
             ProviderError::ProviderNotFound(format!("Provider Config not found: {}", name))
         })?;
+
+        // Validate configuration
+        self.validate_config_collecting(config, &provider_type)?;
+
         let secret = self.secret_registry.get_secret(name)?;
+
         let provider = self
             .create_provider(name, config, &secret, &provider_type)
             .await?;
-
-        // Validate configuration
-        let collector = provider.validate_config_collecting(config);
-
-        // Handle errors
-        if collector.has_errors() {
-            return Err(ProviderError::ConfigValidationFailed(format!(
-                "Validation failed for provider {}: {}",
-                name,
-                collector.errors.first().unwrap()
-            )));
-        }
-
-        // Log warnings
-        if collector.has_warnings() {
-            for warning in &collector.warnings {
-                debug!(
-                    "Warning during validation of provider {}: {}",
-                    name, warning
-                );
-            }
-        }
 
         self.register_provider_with(name, config, &secret, provider)
             .await?;
@@ -141,6 +126,35 @@ impl ProviderRegistry {
                 },
             })
             .await;
+
+        Ok(())
+    }
+
+    fn validate_config_collecting(
+        &self,
+        config: &ProviderConfig,
+        provider_type: &ProviderType,
+    ) -> ProviderResult<()> {
+        let collector: ErrorCollector = match provider_type {
+            ProviderType::OpenAIAssistant => StandardProvider::validate_config_collecting(config),
+            ProviderType::SimpleExpert => StandardProvider::validate_config_collecting(config),
+            ProviderType::OpenAIChat => StandardProvider::validate_config_collecting(config),
+            ProviderType::Sistence => SistenceProvider::validate_config_collecting(config),
+            ProviderType::Unknown => ErrorCollector::new(),
+        };
+
+        // Handle errors
+        if collector.has_errors() {
+            return Err(ProviderError::ConfigValidationFailed(collector.to_string()));
+        }
+
+        // Log warnings
+        if collector.has_warnings() {
+            tracing::warn!(
+                "Warnings during validation of provider: {:?}",
+                collector.warnings
+            );
+        }
 
         Ok(())
     }

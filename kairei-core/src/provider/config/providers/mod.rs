@@ -1,6 +1,7 @@
 //! Provider-specific configuration types.
 
 mod openai;
+pub mod sistence;
 
 pub use openai::*;
 
