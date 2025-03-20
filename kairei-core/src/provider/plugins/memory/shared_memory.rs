@@ -421,18 +421,31 @@ mod tests {
         let plugin = InMemorySharedMemoryPlugin::new(SharedMemoryConfig {
             base: Default::default(),
             max_keys: 100,
-            ttl: Duration::from_millis(10), // Extremely short TTL for testing
+            ttl: Duration::from_millis(50), // Extremely short TTL for testing
             namespace: "test".to_string(),
         });
 
-        plugin.set("expiring_key", json!("test")).await.unwrap();
-        assert!(plugin.exists("expiring_key").await.unwrap());
+        plugin
+            .set("expiring_key_test_ttl_expiration_shared", json!("test"))
+            .await
+            .unwrap();
+        assert!(
+            plugin
+                .exists("expiring_key_test_ttl_expiration_shared")
+                .await
+                .unwrap()
+        );
 
         // Wait for expiration - use much longer sleep to ensure expiration
         sleep(Duration::from_millis(500)).await;
 
         // Key should be gone - exists() will automatically handle expired keys
-        assert!(!plugin.exists("expiring_key").await.unwrap());
+        assert!(
+            !plugin
+                .exists("expiring_key_test_ttl_expiration_shared")
+                .await
+                .unwrap()
+        );
     }
 
     // Add a more reliable test for expiration logic
