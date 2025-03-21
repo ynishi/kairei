@@ -3,10 +3,13 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::provider::capabilities::relevant_memory::DetailedMemoryItem;
 use crate::provider::capabilities::sistence_memory::*;
+use crate::provider::capabilities::sistence_storage::SistenceStorageService;
+use crate::provider::capabilities::storage::StorageError;
 
 use super::StatelessRelevantMemory;
 
@@ -17,20 +20,51 @@ impl StatelessRelevantMemory {
         &self,
         item: &DetailedMemoryItem,
     ) -> Result<(), SistenceMemoryError> {
-        /*
+        // Try to use SistenceStorageService if available
+        if let Ok(storage_service) = self.get_storage_service() {
+            debug!(
+                "Using SistenceStorageService to store memory item {}",
+                item.id
+            );
+            // Use our dedicated storage_integration module
+            return self.store_to_sistence_storage(item, None).await;
+        }
+
+        debug!(
+            "Using basic storage backend to store memory item {}",
+            item.id
+        );
+        // Fallback to legacy storage backend (simplified implementation)
         let item_key = format!("memory_items/{}", item.id);
-        let item_data = serde_json::to_vec(item)
-            .map_err(|e| SistenceMemoryError::SerializationError(format!("Failed to serialize memory item: {}", e)))?;
-        let data = ValueWithMetadata {
-            value: item_data,
-            metadata: Metadata::default(),
+
+        // Serialize the item
+        let item_json = serde_json::to_value(item).map_err(|e| {
+            SistenceMemoryError::SerializationError(format!(
+                "Failed to serialize memory item: {}",
+                e
+            ))
+        })?;
+
+        // Create metadata
+        let metadata = crate::provider::capabilities::shared_memory::Metadata::default();
+
+        // Create value with metadata
+        let data = crate::provider::capabilities::storage::ValueWithMetadata {
+            value: item_json,
+            metadata,
             expiry: None,
         };
 
-        self.storage.save_key("default", &item_key, &data).await
-            .map_err(|e| SistenceMemoryError::StorageError(e))
-             */
-        todo!()
+        // Save to storage
+        self.storage
+            .save_key("default", &item_key, &data)
+            .await
+            .map_err(|e| SistenceMemoryError::StorageError(e))?;
+
+        // Update indexes
+        self.update_indexes(item);
+
+        Ok(())
     }
 
     /// Retrieve a memory item from the storage backend
@@ -39,16 +73,53 @@ impl StatelessRelevantMemory {
         &self,
         id: &str,
     ) -> Result<DetailedMemoryItem, SistenceMemoryError> {
-        let _item_key = format!("memory_items/{}", id);
-        /*
-        let item_data = self.storage.load(&item_key).await
-            .map_err(|e| SistenceMemoryError::StorageError(e))?
+        // Try to use SistenceStorageService if available
+        if let Ok(storage_service) = self.get_storage_service() {
+            debug!(
+                "Using SistenceStorageService to retrieve memory item {}",
+                id
+            );
+            // Use our dedicated storage_integration module
+            return self.retrieve_from_sistence_storage(id, None).await;
+        }
+
+        debug!("Using basic storage backend to retrieve memory item {}", id);
+        // Fallback to legacy storage backend
+
+        // Try to get from memory index first (local cache)
+        if let Some(item) = self.memory_index.get(id) {
+            debug!("Found memory item {} in memory index", id);
+            return Ok(item.clone());
+        }
+
+        // Construct the storage key
+        let item_key = format!("memory_items/{}", id);
+
+        // Load data from storage
+        let data = self
+            .storage
+            .load("default")
+            .await
+            .map_err(|e| SistenceMemoryError::StorageError(e))?;
+
+        // Find the item
+        let item_data = data
+            .get(&item_key)
             .ok_or_else(|| SistenceMemoryError::NotFound(id.to_string()))?;
 
-        serde_json::from_slice(&item_data)
-            .map_err(|e| SistenceMemoryError::SerializationError(format!("Failed to deserialize memory item: {}", e)))
-        */
-        todo!()
+        // Deserialize the item
+        let item: DetailedMemoryItem =
+            serde_json::from_value(item_data.value.clone()).map_err(|e| {
+                SistenceMemoryError::SerializationError(format!(
+                    "Failed to deserialize memory item: {}",
+                    e
+                ))
+            })?;
+
+        // Update indexes
+        self.update_indexes(&item);
+
+        Ok(item)
     }
 
     /// Update memory indexes with the given item

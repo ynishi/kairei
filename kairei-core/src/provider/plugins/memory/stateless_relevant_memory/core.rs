@@ -15,6 +15,7 @@ use crate::provider::capabilities::relevant_memory::{
     EnhancementOptions, RelevantMemoryCapability, TimeFocus, WorkingMemoryFormat,
 };
 use crate::provider::capabilities::sistence_memory::*;
+use crate::provider::capabilities::sistence_storage::SistenceStorageService;
 use crate::provider::capabilities::storage::StorageBackend;
 use crate::provider::llm::{LLMResponse, ProviderLLM};
 use crate::provider::plugin::PluginContext;
@@ -30,6 +31,9 @@ pub struct StatelessRelevantMemory {
 
     /// Storage backend
     pub storage: Arc<dyn StorageBackend>,
+
+    /// SistenceStorageService (optional enhanced storage)
+    pub sistence_storage: Option<Arc<dyn SistenceStorageService>>,
 
     /// LLM client
     pub llm_client: Arc<dyn ProviderLLM>,
@@ -58,6 +62,27 @@ impl StatelessRelevantMemory {
         Self {
             id,
             storage,
+            sistence_storage: None, // Not using enhanced storage by default
+            llm_client,
+            memory_index: Arc::new(DashMap::new()),
+            topic_index: Arc::new(DashMap::new()),
+            tag_index: Arc::new(DashMap::new()),
+            config,
+        }
+    }
+
+    /// Create a new StatelessRelevantMemory with enhanced storage
+    pub fn new_with_sistence_storage(
+        id: String,
+        storage: Arc<dyn StorageBackend>,
+        sistence_storage: Arc<dyn SistenceStorageService>,
+        llm_client: Arc<dyn ProviderLLM>,
+        config: ProviderConfig,
+    ) -> Self {
+        Self {
+            id,
+            storage,
+            sistence_storage: Some(sistence_storage),
             llm_client,
             memory_index: Arc::new(DashMap::new()),
             topic_index: Arc::new(DashMap::new()),
@@ -109,6 +134,23 @@ impl StatelessRelevantMemory {
         };
 
         Self::new(id, storage, llm_client, provider_config)
+    }
+
+    /// Set the SistenceStorageService
+    pub fn set_sistence_storage(&mut self, storage: Arc<dyn SistenceStorageService>) {
+        self.sistence_storage = Some(storage);
+    }
+
+    /// Get the SistenceStorageService if available
+    pub fn get_storage_service(
+        &self,
+    ) -> Result<Arc<dyn SistenceStorageService>, SistenceMemoryError> {
+        match &self.sistence_storage {
+            Some(storage) => Ok(storage.clone()),
+            None => Err(SistenceMemoryError::NotImplemented(
+                "SistenceStorageService not initialized".to_string(),
+            )),
+        }
     }
 }
 

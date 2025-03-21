@@ -27,6 +27,9 @@ mod metadata_operations;
 // Memory processing operations
 mod memory_processing;
 
+// Storage integration
+mod storage_integration;
+
 // Re-export the StatelessRelevantMemory struct
 pub use core::StatelessRelevantMemory;
 

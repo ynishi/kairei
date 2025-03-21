@@ -58,5 +58,6 @@ pub mod common;
 pub mod relevant_memory;
 pub mod shared_memory;
 pub mod sistence_memory;
+pub mod sistence_storage;
 pub mod storage;
 pub mod will_action;
