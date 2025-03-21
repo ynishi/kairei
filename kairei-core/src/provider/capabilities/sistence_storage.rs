@@ -36,7 +36,7 @@
 //! storage.save_string("memory_items", "item2", "Workspace-specific data", None, None, Some("workspace1")).await?;
 //!
 //! // Merge workspace back to main
-//! storage.merge_workspace("memory_items", "workspace1", "main", None).await?;
+//! storage.merge_workspace("memory_items", "workspace1", "main", ConflictResolutionStrategy::MostRecent).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -148,6 +148,28 @@ pub enum OrderBy {
     KeyAsc,
     /// Key (descending)
     KeyDesc,
+}
+
+/// Strategy for resolving conflicts during workspace merges
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConflictResolutionStrategy {
+    /// Keep source item in case of conflict
+    SourceWins,
+    
+    /// Keep target item in case of conflict
+    TargetWins,
+    
+    /// Keep newest item based on updated_at timestamp
+    MostRecent,
+    
+    /// Keep item with highest version number
+    HighestVersion,
+    
+    /// Fail the merge operation if any conflicts found
+    FailOnConflict,
+    
+    /// Create a new version with merged content where possible
+    MergeContent,
 }
 
 /// Pagination information for query results
@@ -415,12 +437,15 @@ pub trait SistenceStorageService: Send + Sync {
     ) -> Result<(), SistenceStorageError>;
     
     /// Merge workspace
+    /// 
+    /// Merges the source workspace into the target workspace using the specified
+    /// conflict resolution strategy.
     async fn merge_workspace(
         &self,
         namespace: &str,
         source_workspace_id: &str,
         target_workspace_id: &str,
-        resolve_conflicts: bool,
+        strategy: ConflictResolutionStrategy,
     ) -> Result<BatchResult, SistenceStorageError>;
     
     /// === Event-based operations ===
@@ -711,7 +736,7 @@ mod tests {
             _namespace: &str,
             _source_workspace_id: &str,
             _target_workspace_id: &str,
-            _resolve_conflicts: bool,
+            _strategy: ConflictResolutionStrategy,
         ) -> Result<BatchResult, SistenceStorageError> {
             Ok(BatchResult {
                 success_count: 0,
