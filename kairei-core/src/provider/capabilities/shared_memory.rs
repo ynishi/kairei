@@ -242,7 +242,8 @@ pub trait SharedMemoryCapability: ProviderPlugin {
 /// Metadata associated with stored values in shared memory
 ///
 /// This structure provides information about stored values, including
-/// creation and modification times, content type, size, and custom tags.
+/// creation and modification times, content type, and custom tags.
+/// Uses a fluent builder pattern for easy construction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
     /// When the value was created
@@ -254,11 +255,44 @@ pub struct Metadata {
     /// Content type of the value (e.g., "text/plain", "application/json")
     pub content_type: String,
 
-    /// Size of the value in bytes
-    pub size: usize,
-
     /// Additional metadata as key-value pairs
     pub tags: HashMap<String, String>,
+}
+
+impl Metadata {
+    /// Create new metadata with default values
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    /// Create new metadata with custom content type
+    pub fn with_content_type(content_type: impl Into<String>) -> Self {
+        let mut metadata = Self::default();
+        metadata.content_type = content_type.into();
+        metadata.last_modified = Utc::now();
+        metadata
+    }
+    
+    /// Add a tag
+    pub fn with_tag(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.tags.insert(key.into(), value.into());
+        self.last_modified = Utc::now();
+        self
+    }
+    
+    /// Add multiple tags
+    pub fn with_tags(mut self, tags: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>) -> Self {
+        for (k, v) in tags {
+            self.tags.insert(k.into(), v.into());
+        }
+        self.last_modified = Utc::now();
+        self
+    }
+    
+    /// Update last modified timestamp
+    pub fn touch(&mut self) {
+        self.last_modified = Utc::now();
+    }
 }
 
 impl Default for Metadata {
@@ -268,8 +302,18 @@ impl Default for Metadata {
             created_at: now,
             last_modified: now,
             content_type: "application/json".to_string(),
-            size: 0,
             tags: HashMap::new(),
+        }
+    }
+}
+
+impl From<HashMap<String, String>> for Metadata {
+    fn from(tags: HashMap<String, String>) -> Self {
+        Self {
+            created_at: Utc::now(),
+            last_modified: Utc::now(),
+            content_type: "application/json".to_string(),
+            tags,
         }
     }
 }
