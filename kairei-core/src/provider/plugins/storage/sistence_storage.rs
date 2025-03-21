@@ -382,6 +382,31 @@ impl SistenceStorageService for SistenceStorage {
             "user_data".to_string(),
         ])
     }
+    
+    #[instrument(level = "debug", skip(self, value), err)]
+    async fn save<T: Serialize + Send + Sync>(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &T,
+        metadata: Option<Metadata>,
+        ttl: Option<Duration>,
+        workspace_id: Option<&str>,
+    ) -> Result<(), SistenceStorageError> {
+        // Delegate to the existing save method implementation
+        self.save(namespace, key, value, metadata, ttl, workspace_id).await
+    }
+
+    #[instrument(level = "debug", skip(self), err)]
+    async fn get<T: DeserializeOwned + Send + Sync>(
+        &self,
+        namespace: &str,
+        key: &str,
+        workspace_id: Option<&str>,
+    ) -> Result<SistenceValueWithMetadata<T>, SistenceStorageError> {
+        // Delegate to the existing get method implementation
+        self.get(namespace, key, workspace_id).await
+    }
 
     // === Key-based operations (new non-generic methods) ===
 

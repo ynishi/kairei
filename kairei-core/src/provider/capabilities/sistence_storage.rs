@@ -200,10 +200,12 @@ pub struct StorageEvent {
     pub workspace_id: Option<String>,
 }
 
-/// SistenceStorageService trait - Non-generic core interface
+/// SistenceStorageService trait - Core interface for the Storage Layer
 /// 
-/// This is the main trait for interacting with SistenceStorage, 
-/// with non-generic methods for basic functionality.
+/// Provides a workspace-aware key-value storage abstraction for the Sistence memory system.
+/// This service manages isolated workspaces that can be forked and merged, supporting
+/// parallel processing within the same Sistence agent, similar to software transactional
+/// memory concepts.
 #[async_trait]
 pub trait SistenceStorageService: Send + Sync {
     /// Clone the service
@@ -215,9 +217,46 @@ pub trait SistenceStorageService: Send + Sync {
     /// List available namespaces
     async fn list_namespaces(&self) -> Result<Vec<String>, SistenceStorageError>;
     
-    /// === Key-based basic operations (non-generic) ===
+    /// === Generic operations (primary interface) ===
     
-    /// Save string value to key
+    /// Store any serializable value
+    ///
+    /// # Arguments
+    /// * `namespace` - Logical grouping for the key
+    /// * `key` - Unique identifier within the namespace
+    /// * `value` - Any serializable value to store
+    /// * `metadata` - Optional metadata to store with the value
+    /// * `ttl` - Optional time-to-live for the value
+    /// * `workspace_id` - Optional workspace identifier for parallel processing
+    async fn save<T: Serialize + Send + Sync>(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &T,
+        metadata: Option<Metadata>,
+        ttl: Option<Duration>,
+        workspace_id: Option<&str>,
+    ) -> Result<(), SistenceStorageError>;
+    
+    /// Retrieve value as the specified type
+    ///
+    /// # Arguments
+    /// * `namespace` - Logical grouping for the key
+    /// * `key` - Unique identifier to retrieve
+    /// * `workspace_id` - Optional workspace identifier
+    ///
+    /// # Returns
+    /// The value with its metadata, deserialized to the requested type
+    async fn get<T: DeserializeOwned + Send + Sync>(
+        &self,
+        namespace: &str,
+        key: &str,
+        workspace_id: Option<&str>,
+    ) -> Result<SistenceValueWithMetadata<T>, SistenceStorageError>;
+    
+    /// === String and JSON convenience methods ===
+    
+    /// Save string value to key (convenience method)
     async fn save_string(
         &self,
         namespace: &str,
@@ -228,7 +267,7 @@ pub trait SistenceStorageService: Send + Sync {
         workspace_id: Option<&str>,
     ) -> Result<(), SistenceStorageError>;
     
-    /// Save JSON value to key
+    /// Save JSON value to key (convenience method)
     async fn save_json(
         &self,
         namespace: &str,
@@ -239,7 +278,7 @@ pub trait SistenceStorageService: Send + Sync {
         workspace_id: Option<&str>,
     ) -> Result<(), SistenceStorageError>;
     
-    /// Get string value from key
+    /// Get string value from key (convenience method)
     async fn get_string(
         &self,
         namespace: &str,
@@ -247,7 +286,7 @@ pub trait SistenceStorageService: Send + Sync {
         workspace_id: Option<&str>,
     ) -> Result<SistenceValueWithMetadata<String>, SistenceStorageError>;
     
-    /// Get JSON value from key
+    /// Get JSON value from key (convenience method)
     async fn get_json(
         &self,
         namespace: &str,
@@ -423,6 +462,51 @@ mod tests {
         
         async fn list_namespaces(&self) -> Result<Vec<String>, SistenceStorageError> {
             Ok(vec!["test".to_string()])
+        }
+        
+        async fn save<T: Serialize + Send + Sync>(
+            &self,
+            namespace: &str,
+            key: &str,
+            value: &T,
+            metadata: Option<Metadata>,
+            ttl: Option<Duration>,
+            workspace_id: Option<&str>,
+        ) -> Result<(), SistenceStorageError> {
+            // Convert to JSON value
+            let json_value = serde_json::to_value(value)
+                .map_err(|e| SistenceStorageError::SerializationError(e.to_string()))?;
+            
+            // Use save_json for implementation
+            self.save_json(namespace, key, &json_value, metadata, ttl, workspace_id).await
+        }
+        
+        async fn get<T: DeserializeOwned + Send + Sync>(
+            &self,
+            namespace: &str,
+            key: &str,
+            workspace_id: Option<&str>,
+        ) -> Result<SistenceValueWithMetadata<T>, SistenceStorageError> {
+            // Get as JSON
+            let json_result = self.get_json(namespace, key, workspace_id).await?;
+            
+            // Deserialize to requested type
+            let value = serde_json::from_value(json_result.value.clone())
+                .map_err(|e| SistenceStorageError::DeserializationError(format!(
+                    "Failed to deserialize to requested type: {}", e
+                )))?;
+            
+            // Return with all metadata intact, only converting the value
+            Ok(SistenceValueWithMetadata {
+                value,
+                metadata: json_result.metadata,
+                created_at: json_result.created_at,
+                updated_at: json_result.updated_at,
+                ttl: json_result.ttl,
+                workspace_id: json_result.workspace_id,
+                version: json_result.version,
+                tags: json_result.tags,
+            })
         }
         
         async fn save_string(
