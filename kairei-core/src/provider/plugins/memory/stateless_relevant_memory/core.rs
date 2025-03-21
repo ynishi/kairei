@@ -16,7 +16,6 @@ use crate::provider::capabilities::relevant_memory::{
 };
 use crate::provider::capabilities::sistence_memory::*;
 use crate::provider::capabilities::sistence_storage::SistenceStorageService;
-use crate::provider::capabilities::storage::StorageBackend;
 use crate::provider::llm::{LLMResponse, ProviderLLM};
 use crate::provider::plugin::PluginContext;
 use crate::provider::plugin::ProviderPlugin;
@@ -29,10 +28,7 @@ pub struct StatelessRelevantMemory {
     /// Plugin ID
     pub id: String,
 
-    /// Storage backend
-    pub storage: Arc<dyn StorageBackend>,
-
-    /// SistenceStorageService (optional enhanced storage)
+    /// SistenceStorageService for storage operations
     pub sistence_storage: Option<Arc<dyn SistenceStorageService>>,
 
     /// LLM client
@@ -54,18 +50,15 @@ pub struct StatelessRelevantMemory {
 impl StatelessRelevantMemory {
     /// Create a new StatelessRelevantMemory
     ///
-    /// Note: This constructor is kept for backward compatibility,
-    /// but the preferred way is to use new_with_sistence_storage
-    /// as SistenceStorageService is required for full functionality.
+    /// Note: This constructor initializes a StatelessRelevantMemory without storage service.
+    /// SistenceStorageService must be set later using set_sistence_storage before storage operations.
     pub fn new(
         id: String,
-        storage: Arc<dyn StorageBackend>,
         llm_client: Arc<dyn ProviderLLM>,
         config: ProviderConfig,
     ) -> Self {
         Self {
             id,
-            storage,
             sistence_storage: None, // Will need to be set later via set_sistence_storage
             llm_client,
             memory_index: Arc::new(DashMap::new()),
@@ -75,17 +68,17 @@ impl StatelessRelevantMemory {
         }
     }
 
-    /// Create a new StatelessRelevantMemory with enhanced storage
-    pub fn new_with_sistence_storage(
+    /// Create a new StatelessRelevantMemory with storage service
+    ///
+    /// This is the preferred constructor as it provides full functionality.
+    pub fn new_with_storage(
         id: String,
-        storage: Arc<dyn StorageBackend>,
         sistence_storage: Arc<dyn SistenceStorageService>,
         llm_client: Arc<dyn ProviderLLM>,
         config: ProviderConfig,
     ) -> Self {
         Self {
             id,
-            storage,
             sistence_storage: Some(sistence_storage),
             llm_client,
             memory_index: Arc::new(DashMap::new()),
@@ -98,7 +91,6 @@ impl StatelessRelevantMemory {
     /// Create a new StatelessRelevantMemory with importance weights
     pub fn new_with_weights(
         id: String,
-        storage: Arc<dyn StorageBackend>,
         llm_client: Arc<dyn ProviderLLM>,
         model: String,
         max_tokens: usize,
@@ -137,7 +129,7 @@ impl StatelessRelevantMemory {
             plugin_configs: HashMap::new(),
         };
 
-        Self::new(id, storage, llm_client, provider_config)
+        Self::new(id, llm_client, provider_config)
     }
 
     /// Set the SistenceStorageService
@@ -160,8 +152,10 @@ impl StatelessRelevantMemory {
     }
 
     /// Save a memory item using SistenceStorageService
+    /// 
+    /// This method saves a DetailedMemoryItem to storage and updates the in-memory indexes.
     #[tracing::instrument(level = "debug", skip(self, item), fields(item_id = %item.id), err)]
-    pub async fn store_to_sistence_storage(
+    pub async fn save_item(
         &self,
         item: &DetailedMemoryItem,
         workspace_id: Option<&str>,
@@ -222,8 +216,10 @@ impl StatelessRelevantMemory {
     }
 
     /// Get a memory item using SistenceStorageService
+    /// 
+    /// This method retrieves a DetailedMemoryItem from storage by its ID and updates the in-memory indexes.
     #[tracing::instrument(level = "debug", skip(self), err)]
-    pub async fn retrieve_from_sistence_storage(
+    pub async fn get_item(
         &self,
         id: &str,
         workspace_id: Option<&str>,
@@ -330,7 +326,7 @@ impl RelevantMemoryCapability for StatelessRelevantMemory {
         item: DetailedMemoryItem,
     ) -> Result<MemoryId, SistenceMemoryError> {
         // Store using SistenceStorageService directly
-        self.store_to_sistence_storage(&item, None).await?;
+        self.save_item(&item, None).await?;
 
         // Update indexes
         self.update_indexes(&item);
@@ -349,7 +345,7 @@ impl RelevantMemoryCapability for StatelessRelevantMemory {
         }
 
         // Retrieve using SistenceStorageService
-        let item = self.retrieve_from_sistence_storage(id, None).await?;
+        let item = self.get_item(id, None).await?;
 
         // Update indexes with retrieved item
         self.update_indexes(&item);
@@ -363,7 +359,7 @@ impl RelevantMemoryCapability for StatelessRelevantMemory {
         item: DetailedMemoryItem,
     ) -> Result<(), SistenceMemoryError> {
         // Update in storage using SistenceStorageService
-        self.store_to_sistence_storage(&item, None).await?;
+        self.save_item(&item, None).await?;
 
         // Update memory index
         self.update_indexes(&item);
@@ -373,15 +369,23 @@ impl RelevantMemoryCapability for StatelessRelevantMemory {
 
     #[tracing::instrument(level = "debug", skip(self), err)]
     async fn delete_memory_item(&self, id: &MemoryId) -> Result<(), SistenceMemoryError> {
-        // Remove from storage
-        /*
-        let item_key = format!("memory_items/{}", id);
-        self.storage.delete(&item_key).await
-            .map_err(|e| SistenceMemoryError::StorageError(e))?;
+        // Get storage service
+        let storage_service = self.get_storage_service()?;
+
+        debug!("Deleting memory item {} from storage", id);
+
+        // Delete from storage
+        storage_service
+            .delete("memory_items", id, None)
+            .await
+            .map_err(|e| 
+                SistenceMemoryError::StorageError(
+                    crate::provider::capabilities::storage::StorageError::StorageError(e.to_string())
+                )
+            )?;
 
         // Remove from indexes
         self.remove_from_indexes(id);
-        */
 
         Ok(())
     }
