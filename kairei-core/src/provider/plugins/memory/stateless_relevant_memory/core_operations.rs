@@ -14,27 +14,17 @@ use crate::provider::capabilities::storage::StorageError;
 use super::StatelessRelevantMemory;
 
 impl StatelessRelevantMemory {
-    /// Store a memory item in the storage backend
+    /// Internal implementation: Store a memory item using basic storage backend
     #[tracing::instrument(level = "debug", skip(self, item), fields(item_id = %item.id), err)]
-    pub async fn store_to_storage(
+    pub(crate) async fn store_to_basic_storage(
         &self,
         item: &DetailedMemoryItem,
     ) -> Result<(), SistenceMemoryError> {
-        // Try to use SistenceStorageService if available
-        if let Ok(storage_service) = self.get_storage_service() {
-            debug!(
-                "Using SistenceStorageService to store memory item {}",
-                item.id
-            );
-            // Use our dedicated storage_integration module
-            return self.store_to_sistence_storage(item, None).await;
-        }
-
         debug!(
             "Using basic storage backend to store memory item {}",
             item.id
         );
-        // Fallback to legacy storage backend (simplified implementation)
+        // Basic storage backend implementation
         let item_key = format!("memory_items/{}", item.id);
 
         // Serialize the item
@@ -67,24 +57,13 @@ impl StatelessRelevantMemory {
         Ok(())
     }
 
-    /// Retrieve a memory item from the storage backend
+    /// Internal implementation: Retrieve a memory item using basic storage backend
     #[tracing::instrument(level = "debug", skip(self), err)]
-    pub async fn retrieve_from_storage(
+    pub(crate) async fn retrieve_from_basic_storage(
         &self,
         id: &str,
     ) -> Result<DetailedMemoryItem, SistenceMemoryError> {
-        // Try to use SistenceStorageService if available
-        if let Ok(storage_service) = self.get_storage_service() {
-            debug!(
-                "Using SistenceStorageService to retrieve memory item {}",
-                id
-            );
-            // Use our dedicated storage_integration module
-            return self.retrieve_from_sistence_storage(id, None).await;
-        }
-
         debug!("Using basic storage backend to retrieve memory item {}", id);
-        // Fallback to legacy storage backend
 
         // Try to get from memory index first (local cache)
         if let Some(item) = self.memory_index.get(id) {

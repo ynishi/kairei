@@ -147,10 +147,171 @@ impl StatelessRelevantMemory {
     ) -> Result<Arc<dyn SistenceStorageService>, SistenceMemoryError> {
         match &self.sistence_storage {
             Some(storage) => Ok(storage.clone()),
-            None => Err(SistenceMemoryError::NotImplemented(
-                "SistenceStorageService not initialized".to_string(),
+            None => Err(SistenceMemoryError::StorageError(
+                crate::provider::capabilities::storage::StorageError::StorageError(
+                    "SistenceStorageService not initialized".to_string()
+                )
             )),
         }
+    }
+
+    /// Store a memory item using SistenceStorageService
+    #[tracing::instrument(level = "debug", skip(self, item), fields(item_id = %item.id), err)]
+    pub async fn store_to_sistence_storage(
+        &self,
+        item: &DetailedMemoryItem,
+        workspace_id: Option<&str>,
+    ) -> Result<(), SistenceMemoryError> {
+        // Get storage service
+        let storage_service = self.get_storage_service()?;
+
+        debug!("Storing memory item {} to storage", item.id);
+
+        // Calculate TTL if present
+        let ttl = item.ttl.map(|ttl| std::time::Duration::from_secs(ttl));
+
+        // Create metadata from item
+        let mut metadata_map = std::collections::HashMap::new();
+
+        // Add important metadata
+        if let Some(content_type) = &item.content_type {
+            metadata_map.insert("content_type".to_string(), content_type.clone());
+        }
+
+        if let Some(item_type) = &item.item_type {
+            metadata_map.insert("item_type".to_string(), item_type.clone());
+        }
+
+        // Add topics as tags
+        for (i, topic) in item.topics.iter().enumerate() {
+            metadata_map.insert(format!("tag_topic_{}", i), topic.clone());
+        }
+
+        // Add tags
+        for (key, value) in &item.tags {
+            metadata_map.insert(format!("tag_{}", key), value.clone());
+        }
+
+        // Create metadata with proper defaults for fields
+        let mut metadata = crate::provider::capabilities::shared_memory::Metadata::default();
+        metadata.tags = metadata_map;
+
+        // Save directly using the generic save<T> method
+        storage_service
+            .save(
+                "memory_items",
+                &item.id,
+                item,
+                Some(metadata),
+                ttl,
+                workspace_id,
+            )
+            .await
+            .map_err(|e| {
+                SistenceMemoryError::StorageError(crate::provider::capabilities::storage::StorageError::StorageError(e.to_string()))
+            })?;
+
+        // Update indexes
+        self.update_indexes(item);
+
+        Ok(())
+    }
+
+    /// Retrieve a memory item using SistenceStorageService
+    #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn retrieve_from_sistence_storage(
+        &self,
+        id: &str,
+        workspace_id: Option<&str>,
+    ) -> Result<DetailedMemoryItem, SistenceMemoryError> {
+        // Get storage service
+        let storage_service = self.get_storage_service()?;
+
+        debug!("Retrieving memory item {} from storage", id);
+
+        // Try to get from memory index first (in-memory cache)
+        if let Some(item) = self.memory_index.get(id) {
+            debug!("Found memory item {} in memory index", id);
+            return Ok(item.clone());
+        }
+
+        // Retrieve using the generic get<T> method
+        let result = storage_service
+            .get::<DetailedMemoryItem>("memory_items", id, workspace_id)
+            .await
+            .map_err(|e| match e {
+                crate::provider::capabilities::sistence_storage::SistenceStorageError::NotFound(_) => 
+                    SistenceMemoryError::NotFound(id.to_string()),
+                _ => SistenceMemoryError::StorageError(
+                    crate::provider::capabilities::storage::StorageError::StorageError(e.to_string())
+                ),
+            })?;
+
+        // Extract the item directly from the result
+        let item = result.value;
+
+        // Update indexes with retrieved item
+        self.update_indexes(&item);
+
+        Ok(item)
+    }
+
+    /// Create a memory workspace for parallel processing
+    #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn create_memory_workspace(
+        &self,
+        workspace_id: &str,
+        parent_workspace_id: Option<&str>,
+    ) -> Result<(), SistenceMemoryError> {
+        // Get storage service
+        let storage_service = self.get_storage_service()?;
+
+        tracing::info!("Creating memory workspace {}", workspace_id);
+
+        // Create workspace
+        storage_service
+            .create_workspace("memory_items", workspace_id, parent_workspace_id)
+            .await
+            .map_err(|e| {
+                SistenceMemoryError::StorageError(
+                    crate::provider::capabilities::storage::StorageError::StorageError(e.to_string())
+                )
+            })?;
+
+        Ok(())
+    }
+
+    /// Merge a memory workspace
+    #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn merge_memory_workspace(
+        &self,
+        source_workspace_id: &str,
+        target_workspace_id: &str,
+    ) -> Result<(), SistenceMemoryError> {
+        // Get storage service
+        let storage_service = self.get_storage_service()?;
+
+        tracing::info!(
+            "Merging memory workspace {} into {}",
+            source_workspace_id, target_workspace_id
+        );
+
+        // Merge workspaces with conflict resolution enabled
+        storage_service
+            .merge_workspace(
+                "memory_items",
+                source_workspace_id,
+                target_workspace_id,
+                true, // Enable conflict resolution
+            )
+            .await
+            .map_err(|e| {
+                SistenceMemoryError::StorageError(
+                    crate::provider::capabilities::storage::StorageError::StorageError(e.to_string())
+                )
+            })?;
+
+        Ok(())
     }
 }
 
@@ -164,8 +325,12 @@ impl RelevantMemoryCapability for StatelessRelevantMemory {
         &self,
         item: DetailedMemoryItem,
     ) -> Result<MemoryId, SistenceMemoryError> {
-        // Store in storage
-        self.store_to_storage(&item).await?;
+        // Store in SistenceStorageService if available, otherwise use basic storage
+        if let Ok(storage_service) = self.get_storage_service() {
+            self.store_to_sistence_storage(&item, None).await?;
+        } else {
+            self.store_to_basic_storage(&item).await?;
+        }
 
         // Update indexes
         self.update_indexes(&item);
@@ -183,8 +348,12 @@ impl RelevantMemoryCapability for StatelessRelevantMemory {
             return Ok(item.clone());
         }
 
-        // If not in memory, try to retrieve from storage
-        let item = self.retrieve_from_storage(id).await?;
+        // Try to use SistenceStorageService if available, otherwise use basic storage
+        let item = if let Ok(storage_service) = self.get_storage_service() {
+            self.retrieve_from_sistence_storage(id, None).await?
+        } else {
+            self.retrieve_from_basic_storage(id).await?
+        };
 
         // Update indexes with retrieved item
         self.update_indexes(&item);
