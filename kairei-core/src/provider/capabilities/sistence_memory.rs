@@ -8,6 +8,7 @@ use thiserror::Error;
 /// Memory item identifier type
 pub type MemoryId = String;
 
+use crate::provider::capabilities::relevant_memory::DetailedMemoryItem;
 use crate::provider::capabilities::shared_memory::SharedMemoryError;
 use crate::provider::capabilities::storage::StorageError;
 use crate::provider::plugin::ProviderPlugin;
@@ -719,4 +720,49 @@ pub trait ImportanceEvaluator: Send + Sync {
         item_id: &MemoryId,
         policy: Option<ImportancePolicy>,
     ) -> Result<ImportanceScore, SistenceMemoryError>;
+}
+
+/// Implement conversion from DetailedMemoryItem to MemoryItem
+impl From<DetailedMemoryItem> for MemoryItem {
+    fn from(detailed: DetailedMemoryItem) -> Self {
+        let importance = ImportanceScore {
+            score: detailed.importance.base_score,
+            base_score: detailed.importance.base_score,
+            context_score: Some(detailed.importance.context_score),
+            reason: None, // Would generate in a real implementation
+            evaluated_at: detailed.importance.evaluated_at,
+        };
+
+        // Convert references
+        let references = detailed
+            .references
+            .into_iter()
+            .map(|r| Reference {
+                ref_type: r.ref_type,
+                ref_id: r.ref_id,
+                context: r.context,
+                strength: r.strength,
+            })
+            .collect();
+
+        MemoryItem {
+            id: detailed.id,
+            created_at: detailed.created_at,
+            updated_at: detailed.updated_at,
+            content: detailed.content,
+            content_type: detailed.content_type,
+            structured_content: detailed.structured_content,
+            item_type: detailed.item_type,
+            topics: detailed.topics,
+            tags: detailed.tags,
+            source: detailed.source,
+            references,
+            related_items: detailed.related_items,
+            importance,
+            last_accessed: detailed.access_stats.last_accessed,
+            access_count: detailed.access_stats.access_count,
+            ttl: detailed.ttl,
+            retention_policy: detailed.retention_policy,
+        }
+    }
 }

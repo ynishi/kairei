@@ -290,10 +290,10 @@ impl StatelessRelevantMemory {
             _ => items,
         };
 
-        // Convert to MemoryItems
+        // Convert to MemoryItems using From trait
         let memory_items: Vec<MemoryItem> = focused_items
             .into_iter()
-            .map(|item| self.detailed_to_memory_item(item, None))
+            .map(|item| MemoryItem::from(item))
             .collect();
 
         // Create temporal context

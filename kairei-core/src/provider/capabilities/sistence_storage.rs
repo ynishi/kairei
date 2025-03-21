@@ -236,43 +236,54 @@ pub trait SistenceStorageService: Send + Sync {
     /// Check if service is available
     async fn is_available(&self) -> bool;
     
-    /// List available namespaces
-    async fn list_namespaces(&self) -> Result<Vec<String>, SistenceStorageError>;
+    /// Get the namespace for a type
+    /// 
+    /// # Type Parameters
+    /// * `T` - The type to get the namespace for
+    /// 
+    /// # Returns
+    /// A string representing the namespace for the type
+    fn namespace_for<T: 'static>(&self) -> String {
+        // Default implementation uses the fully qualified type name
+        std::any::type_name::<T>().replace("::", "_")
+    }
     
     /// === Generic operations (primary interface) ===
     
-    /// Store any serializable value
+    /// Store any serializable value with type-safety
+    ///
+    /// # Type Parameters
+    /// * `T` - The type of value to store
     ///
     /// # Arguments
-    /// * `namespace` - Logical grouping for the key
-    /// * `key` - Unique identifier within the namespace
+    /// * `memory_id` - Unique identifier for the memory item
     /// * `value` - Any serializable value to store
     /// * `metadata` - Optional metadata to store with the value
     /// * `ttl` - Optional time-to-live for the value
     /// * `workspace_id` - Optional workspace identifier for parallel processing
-    async fn save<T: Serialize + Send + Sync>(
+    async fn save<T: Serialize + Send + Sync + 'static>(
         &self,
-        namespace: &str,
-        key: &str,
+        memory_id: &str,
         value: &T,
         metadata: Option<Metadata>,
         ttl: Option<Duration>,
         workspace_id: Option<&str>,
     ) -> Result<(), SistenceStorageError>;
     
-    /// Retrieve value as the specified type
+    /// Retrieve value as the specified type with type-safety
+    ///
+    /// # Type Parameters
+    /// * `T` - The type to deserialize to
     ///
     /// # Arguments
-    /// * `namespace` - Logical grouping for the key
-    /// * `key` - Unique identifier to retrieve
+    /// * `memory_id` - Unique identifier to retrieve
     /// * `workspace_id` - Optional workspace identifier
     ///
     /// # Returns
     /// The value with its metadata, deserialized to the requested type
-    async fn get<T: DeserializeOwned + Send + Sync>(
+    async fn get<T: DeserializeOwned + Send + Sync + 'static>(
         &self,
-        namespace: &str,
-        key: &str,
+        memory_id: &str,
         workspace_id: Option<&str>,
     ) -> Result<SistenceValueWithMetadata<T>, SistenceStorageError>;
     
@@ -356,75 +367,46 @@ pub trait SistenceStorageService: Send + Sync {
     
     /// === Batch operations ===
     
-    /// Get multiple string values in one operation
-    async fn batch_get_strings(
+    /// Get multiple values in one operation with type safety
+    async fn batch_get<T: DeserializeOwned + Send + Sync + 'static>(
         &self,
-        namespace: &str,
         keys: &[String],
         workspace_id: Option<&str>,
-    ) -> Result<HashMap<String, Result<SistenceValueWithMetadata<String>, SistenceStorageError>>, SistenceStorageError>;
+    ) -> Result<HashMap<String, Result<SistenceValueWithMetadata<T>, SistenceStorageError>>, SistenceStorageError>;
     
-    /// Get multiple JSON values in one operation
-    async fn batch_get_json(
+    /// Save multiple values in one operation with type safety
+    async fn batch_save<T: Serialize + Send + Sync + 'static>(
         &self,
-        namespace: &str,
-        keys: &[String],
-        workspace_id: Option<&str>,
-    ) -> Result<HashMap<String, Result<SistenceValueWithMetadata<Value>, SistenceStorageError>>, SistenceStorageError>;
-    
-    /// Save multiple string values in one operation
-    async fn batch_save_strings(
-        &self,
-        namespace: &str,
-        items: &HashMap<String, (String, Option<Metadata>, Option<Duration>)>,
+        items: &HashMap<String, (T, Option<Metadata>, Option<Duration>)>,
         workspace_id: Option<&str>,
     ) -> Result<BatchResult, SistenceStorageError>;
     
-    /// Save multiple JSON values in one operation
-    async fn batch_save_json(
+    /// Delete multiple memory items in one operation
+    async fn batch_delete<T: 'static>(
         &self,
-        namespace: &str,
-        items: &HashMap<String, (Value, Option<Metadata>, Option<Duration>)>,
-        workspace_id: Option<&str>,
-    ) -> Result<BatchResult, SistenceStorageError>;
-    
-    /// Delete multiple keys in one operation
-    async fn batch_delete(
-        &self,
-        namespace: &str,
         keys: &[String],
         workspace_id: Option<&str>,
     ) -> Result<BatchResult, SistenceStorageError>;
     
     /// === Query operations ===
     
-    /// List keys
-    async fn list_keys(
+    /// List memory item keys for a specific type
+    async fn list_keys<T: 'static>(
         &self,
-        namespace: &str,
         options: Option<QueryOptions>,
     ) -> Result<(Vec<String>, PaginationInfo), SistenceStorageError>;
     
-    /// Query string items
-    async fn query_strings(
+    /// Query memory items with type safety
+    async fn query<T: DeserializeOwned + Send + Sync + 'static>(
         &self,
-        namespace: &str,
         options: QueryOptions,
-    ) -> Result<(Vec<(String, SistenceValueWithMetadata<String>)>, PaginationInfo), SistenceStorageError>;
-    
-    /// Query JSON items
-    async fn query_json(
-        &self,
-        namespace: &str,
-        options: QueryOptions,
-    ) -> Result<(Vec<(String, SistenceValueWithMetadata<Value>)>, PaginationInfo), SistenceStorageError>;
+    ) -> Result<(Vec<(String, SistenceValueWithMetadata<T>)>, PaginationInfo), SistenceStorageError>;
     
     /// === Workspace management ===
     
     /// Create a new workspace
     async fn create_workspace(
         &self,
-        namespace: &str,
         workspace_id: &str,
         parent_workspace_id: Option<&str>,
     ) -> Result<(), SistenceStorageError>;
@@ -432,7 +414,6 @@ pub trait SistenceStorageService: Send + Sync {
     /// Delete a workspace
     async fn delete_workspace(
         &self,
-        namespace: &str,
         workspace_id: &str,
     ) -> Result<(), SistenceStorageError>;
     
@@ -442,7 +423,6 @@ pub trait SistenceStorageService: Send + Sync {
     /// conflict resolution strategy.
     async fn merge_workspace(
         &self,
-        namespace: &str,
         source_workspace_id: &str,
         target_workspace_id: &str,
         strategy: ConflictResolutionStrategy,
@@ -456,14 +436,14 @@ pub trait SistenceStorageService: Send + Sync {
         event: StorageEvent,
     ) -> Result<(), SistenceStorageError>;
     
-    /// Get events
-    async fn get_events(
+    /// Get events for a specific memory item type
+    async fn get_events<T: 'static>(
         &self,
-        namespace: &str,
-        key: Option<&str>,
+        memory_id: Option<&str>,
         start_time: Option<SystemTime>,
         end_time: Option<SystemTime>,
         limit: Option<usize>,
+        workspace_id: Option<&str>,
     ) -> Result<Vec<StorageEvent>, SistenceStorageError>;
 }
 

@@ -171,11 +171,13 @@ impl StatelessRelevantMemory {
             )
             .await?;
 
-        // Convert detailed items to standard MemoryItems
+        // Convert detailed items to standard MemoryItems using From trait
         let memory_items: Vec<MemoryItem> = search_results
             .iter()
             .map(|(item, relevance, _)| {
-                self.detailed_to_memory_item(item.clone(), Some(*relevance))
+                // Use From trait implementation to convert DetailedMemoryItem to MemoryItem
+                MemoryItem::from(item.clone())
+                // Note: relevance score was previously passed but not used in detailed_to_memory_item
             })
             .collect();
 
@@ -293,11 +295,12 @@ impl StatelessRelevantMemory {
             relevance_scores.truncate(max_items);
         }
 
-        // Convert to MemoryItems
+        // Convert to MemoryItems using From trait
         let memory_items: Vec<MemoryItem> = relevance_scores
             .iter()
-            .map(|(item, relevance, _)| {
-                self.detailed_to_memory_item(item.clone(), Some(*relevance))
+            .map(|(item, _, _)| {
+                // Use From trait implementation to convert DetailedMemoryItem to MemoryItem
+                MemoryItem::from(item.clone())
             })
             .collect();
 

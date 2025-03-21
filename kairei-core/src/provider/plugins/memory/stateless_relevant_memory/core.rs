@@ -15,13 +15,16 @@ use crate::provider::capabilities::relevant_memory::{
     EnhancementOptions, RelevantMemoryCapability, TimeFocus, WorkingMemoryFormat,
 };
 use crate::provider::capabilities::sistence_memory::*;
-use crate::provider::capabilities::sistence_storage::SistenceStorageService;
+use crate::provider::capabilities::sistence_storage::{SistenceStorageService, ConflictResolutionStrategy};
 use crate::provider::llm::{LLMResponse, ProviderLLM};
 use crate::provider::plugin::PluginContext;
 use crate::provider::plugin::ProviderPlugin;
 use crate::provider::plugins::memory::sistence_memory_plugin::ImportanceWeights;
 use crate::provider::provider::Section;
 use crate::provider::types::ProviderResult;
+
+// Constants
+const MEMORY_NAMESPACE: &str = "memory_items";
 
 /// Stateless implementation of the RelevantMemoryCapability trait
 pub struct StatelessRelevantMemory {
@@ -194,10 +197,9 @@ impl StatelessRelevantMemory {
         let mut metadata = crate::provider::capabilities::shared_memory::Metadata::default();
         metadata.tags = metadata_map;
 
-        // Save directly using the generic save<T> method
+        // Save directly using the generic save<DetailedMemoryItem> method
         storage_service
-            .save(
-                "memory_items",
+            .save::<DetailedMemoryItem>(
                 &item.id,
                 item,
                 Some(metadata),
@@ -235,9 +237,9 @@ impl StatelessRelevantMemory {
             return Ok(item.clone());
         }
 
-        // Retrieve using the generic get<T> method
+        // Retrieve using the generic get<DetailedMemoryItem> method
         let result = storage_service
-            .get::<DetailedMemoryItem>("memory_items", id, workspace_id)
+            .get::<DetailedMemoryItem>(id, workspace_id)
             .await
             .map_err(|e| match e {
                 crate::provider::capabilities::sistence_storage::SistenceStorageError::NotFound(_) => 
@@ -270,7 +272,7 @@ impl StatelessRelevantMemory {
 
         // Create workspace
         storage_service
-            .create_workspace("memory_items", workspace_id, parent_workspace_id)
+            .create_workspace(workspace_id, parent_workspace_id)
             .await
             .map_err(|e| {
                 SistenceMemoryError::StorageError(
@@ -282,27 +284,32 @@ impl StatelessRelevantMemory {
     }
 
     /// Merge a memory workspace
+    /// 
+    /// Merges a source workspace into a target workspace using a specified conflict resolution strategy.
     #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn merge_memory_workspace(
         &self,
         source_workspace_id: &str,
         target_workspace_id: &str,
+        strategy: Option<ConflictResolutionStrategy>,
     ) -> Result<(), SistenceMemoryError> {
         // Get storage service
         let storage_service = self.get_storage_service()?;
 
         tracing::info!(
-            "Merging memory workspace {} into {}",
-            source_workspace_id, target_workspace_id
+            "Merging memory workspace {} into {} using strategy {:?}",
+            source_workspace_id, target_workspace_id, strategy
         );
 
-        // Merge workspaces with conflict resolution enabled
+        // Use MostRecent as the default conflict resolution strategy if none specified
+        let resolution_strategy = strategy.unwrap_or(ConflictResolutionStrategy::MostRecent);
+
+        // Merge workspaces with the specified conflict resolution strategy
         storage_service
             .merge_workspace(
-                "memory_items",
                 source_workspace_id,
                 target_workspace_id,
-                true, // Enable conflict resolution
+                resolution_strategy,
             )
             .await
             .map_err(|e| {

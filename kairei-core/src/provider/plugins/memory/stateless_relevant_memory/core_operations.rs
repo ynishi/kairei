@@ -60,53 +60,8 @@ impl StatelessRelevantMemory {
         }
     }
 
-    /// Convert a DetailedMemoryItem to a public MemoryItem
-    #[tracing::instrument(level = "debug", skip(self, detailed), fields(item_id = %detailed.id))]
-    pub fn detailed_to_memory_item(
-        &self,
-        detailed: DetailedMemoryItem,
-        relevance_score: Option<f32>,
-    ) -> MemoryItem {
-        let importance = ImportanceScore {
-            score: detailed.importance.base_score,
-            base_score: detailed.importance.base_score,
-            context_score: Some(detailed.importance.context_score),
-            reason: None, // Would generate in a real implementation
-            evaluated_at: detailed.importance.evaluated_at,
-        };
-
-        // Convert references
-        let references = detailed
-            .references
-            .into_iter()
-            .map(|r| Reference {
-                ref_type: r.ref_type,
-                ref_id: r.ref_id,
-                context: r.context,
-                strength: r.strength,
-            })
-            .collect();
-
-        MemoryItem {
-            id: detailed.id,
-            created_at: detailed.created_at,
-            updated_at: detailed.updated_at,
-            content: detailed.content,
-            content_type: detailed.content_type,
-            structured_content: detailed.structured_content,
-            item_type: detailed.item_type,
-            topics: detailed.topics,
-            tags: detailed.tags,
-            source: detailed.source,
-            references,
-            related_items: detailed.related_items,
-            importance,
-            last_accessed: detailed.access_stats.last_accessed,
-            access_count: detailed.access_stats.access_count,
-            ttl: detailed.ttl,
-            retention_policy: detailed.retention_policy,
-        }
-    }
+    // The DetailedMemoryItem to MemoryItem conversion has been moved to the From trait implementation
+    // in the sistence_memory.rs file, which is a more idiomatic Rust approach.
 
     /// Create a knowledge graph node for a query
     pub fn create_query_knowledge_node(&self, query: &str, context_id: &str) -> KnowledgeNode {
