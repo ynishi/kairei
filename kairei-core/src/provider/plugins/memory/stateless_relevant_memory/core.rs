@@ -53,6 +53,10 @@ pub struct StatelessRelevantMemory {
 
 impl StatelessRelevantMemory {
     /// Create a new StatelessRelevantMemory
+    ///
+    /// Note: This constructor is kept for backward compatibility,
+    /// but the preferred way is to use new_with_sistence_storage
+    /// as SistenceStorageService is required for full functionality.
     pub fn new(
         id: String,
         storage: Arc<dyn StorageBackend>,
@@ -62,7 +66,7 @@ impl StatelessRelevantMemory {
         Self {
             id,
             storage,
-            sistence_storage: None, // Not using enhanced storage by default
+            sistence_storage: None, // Will need to be set later via set_sistence_storage
             llm_client,
             memory_index: Arc::new(DashMap::new()),
             topic_index: Arc::new(DashMap::new()),
@@ -155,7 +159,7 @@ impl StatelessRelevantMemory {
         }
     }
 
-    /// Store a memory item using SistenceStorageService
+    /// Save a memory item using SistenceStorageService
     #[tracing::instrument(level = "debug", skip(self, item), fields(item_id = %item.id), err)]
     pub async fn store_to_sistence_storage(
         &self,
@@ -165,7 +169,7 @@ impl StatelessRelevantMemory {
         // Get storage service
         let storage_service = self.get_storage_service()?;
 
-        debug!("Storing memory item {} to storage", item.id);
+        debug!("Saving memory item {} to storage", item.id);
 
         // Calculate TTL if present
         let ttl = item.ttl.map(|ttl| std::time::Duration::from_secs(ttl));
@@ -217,7 +221,7 @@ impl StatelessRelevantMemory {
         Ok(())
     }
 
-    /// Retrieve a memory item using SistenceStorageService
+    /// Get a memory item using SistenceStorageService
     #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn retrieve_from_sistence_storage(
         &self,
@@ -227,7 +231,7 @@ impl StatelessRelevantMemory {
         // Get storage service
         let storage_service = self.get_storage_service()?;
 
-        debug!("Retrieving memory item {} from storage", id);
+        debug!("Getting memory item {} from storage", id);
 
         // Try to get from memory index first (in-memory cache)
         if let Some(item) = self.memory_index.get(id) {
@@ -325,12 +329,8 @@ impl RelevantMemoryCapability for StatelessRelevantMemory {
         &self,
         item: DetailedMemoryItem,
     ) -> Result<MemoryId, SistenceMemoryError> {
-        // Store in SistenceStorageService if available, otherwise use basic storage
-        if let Ok(storage_service) = self.get_storage_service() {
-            self.store_to_sistence_storage(&item, None).await?;
-        } else {
-            self.store_to_basic_storage(&item).await?;
-        }
+        // Store using SistenceStorageService directly
+        self.store_to_sistence_storage(&item, None).await?;
 
         // Update indexes
         self.update_indexes(&item);
@@ -348,12 +348,8 @@ impl RelevantMemoryCapability for StatelessRelevantMemory {
             return Ok(item.clone());
         }
 
-        // Try to use SistenceStorageService if available, otherwise use basic storage
-        let item = if let Ok(storage_service) = self.get_storage_service() {
-            self.retrieve_from_sistence_storage(id, None).await?
-        } else {
-            self.retrieve_from_basic_storage(id).await?
-        };
+        // Retrieve using SistenceStorageService
+        let item = self.retrieve_from_sistence_storage(id, None).await?;
 
         // Update indexes with retrieved item
         self.update_indexes(&item);
@@ -366,8 +362,8 @@ impl RelevantMemoryCapability for StatelessRelevantMemory {
         &self,
         item: DetailedMemoryItem,
     ) -> Result<(), SistenceMemoryError> {
-        // Update in storage
-        self.store_to_storage(&item).await?;
+        // Update in storage using SistenceStorageService
+        self.store_to_sistence_storage(&item, None).await?;
 
         // Update memory index
         self.update_indexes(&item);
