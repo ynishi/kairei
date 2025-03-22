@@ -19,8 +19,7 @@ use crate::provider::capabilities::shared_memory::Metadata;
 
 // Import from sistence_storage.rs
 use crate::provider::capabilities::sistence_storage::{
-    BatchResult, OrderBy, PaginationInfo, QueryOptions, SistenceStorageError,
-    SistenceStorageService, SistenceValueWithMetadata, StorageEvent, StorageEventType,
+    BatchResult, ConflictResolutionStrategy, OrderBy, PaginationInfo, QueryOptions, SistenceStorageError, SistenceStorageService, SistenceValueWithMetadata, StorageEvent, StorageEventType
 };
 use crate::provider::capabilities::storage::{StorageBackend, StorageError, ValueWithMetadata};
 // TODO: Add event bus integration when it's available
@@ -295,6 +294,96 @@ impl SistenceStorage {
             tags,
         })
     }
+    
+    /// Internal implementation of save
+    #[instrument(level = "debug", skip(self, value), err)]
+    async fn save_internal<T: Serialize + Send + Sync>(
+        &self,
+        namespace: &str,
+        memory_id: &str,
+        value: &T,
+        metadata: Option<Metadata>,
+        ttl: Option<Duration>,
+        workspace_id: Option<&str>,
+    ) -> Result<(), SistenceStorageError> {
+        let storage_key = self.make_storage_key(namespace, memory_id, workspace_id);
+        let version = self.generate_version();
+
+        // Convert to storage value
+        let storage_value = self.to_storage_value(
+            value,
+            metadata.as_ref(),
+            ttl.or(self.default_ttl),
+            workspace_id,
+            Some(version),
+        )?;
+
+        // Save to storage
+        self.storage
+            .save_key("data", &storage_key, &storage_value)
+            .await
+            .map_err(|e| match e {
+                StorageError::AccessDenied(s) => SistenceStorageError::PermissionError(s),
+                StorageError::InvalidPath(s) => SistenceStorageError::StorageError(s),
+                StorageError::SerializationError(s) => SistenceStorageError::SerializationError(s),
+                StorageError::StorageError(s) => SistenceStorageError::StorageError(s),
+                _ => SistenceStorageError::StorageError(e.to_string()),
+            })?;
+
+        // Update version cache
+        self.update_version_cache(namespace, memory_id, workspace_id, version);
+        
+        // Publish event
+        self.publish_storage_event(
+            StorageEventType::Create,
+            namespace,
+            memory_id,
+            workspace_id,
+            None,
+        );
+
+        Ok(())
+    }
+    
+    /// Internal implementation of get
+    #[instrument(level = "debug", skip(self), err)]
+    async fn get_internal<T: DeserializeOwned + Send + Sync>(
+        &self,
+        namespace: &str,
+        memory_id: &str,
+        workspace_id: Option<&str>,
+    ) -> Result<SistenceValueWithMetadata<T>, SistenceStorageError> {
+        // Create storage key
+        let storage_key = self.make_storage_key(namespace, memory_id, workspace_id);
+
+        // Load from storage
+        let data = self.storage.load("data").await.map_err(|e| match e {
+            StorageError::AccessDenied(s) => SistenceStorageError::PermissionError(s),
+            StorageError::InvalidPath(s) => SistenceStorageError::StorageError(s),
+            StorageError::SerializationError(s) => SistenceStorageError::SerializationError(s),
+            StorageError::StorageError(s) => SistenceStorageError::StorageError(s),
+            _ => SistenceStorageError::StorageError(e.to_string()),
+        })?;
+
+        // Check if key exists
+        let value_with_metadata = data.get(&storage_key).ok_or_else(|| {
+            SistenceStorageError::NotFound(format!("Key {} not found", storage_key))
+        })?;
+
+        // Convert to SistenceValueWithMetadata
+        let sistence_value = self.from_storage_value::<T>(&storage_key, value_with_metadata.clone())?;
+
+        // Publish access event
+        self.publish_storage_event(
+            StorageEventType::Update, // Using Update for access tracking
+            namespace,
+            memory_id,
+            workspace_id,
+            None,
+        );
+
+        Ok(sistence_value)
+    }
 
     /// Publish an event to the event bus
     async fn emit_event(&self, _event: StorageEvent) -> Result<(), SistenceStorageError> {
@@ -370,42 +459,39 @@ impl SistenceStorageService for SistenceStorage {
         self.storage.is_available().await
     }
 
-    #[instrument(level = "debug", skip(self), err)]
-    async fn list_namespaces(&self) -> Result<Vec<String>, SistenceStorageError> {
-        // This is a simplified implementation - in a real system,
-        // you'd need to implement a way to track namespaces
-
-        // For now, return a hardcoded list of common namespaces
-        Ok(vec![
-            "memory_items".to_string(),
-            "system".to_string(),
-            "user_data".to_string(),
-        ])
+    /// Get the namespace for a type
+    fn namespace_for<T: 'static>(&self) -> String {
+        // Default implementation uses the fully qualified type name
+        std::any::type_name::<T>().replace("::", "_")
     }
     
     #[instrument(level = "debug", skip(self, value), err)]
-    async fn save<T: Serialize + Send + Sync>(
+    async fn save<T: Serialize + Send + Sync + 'static>(
         &self,
-        namespace: &str,
-        key: &str,
+        memory_id: &str,
         value: &T,
         metadata: Option<Metadata>,
         ttl: Option<Duration>,
         workspace_id: Option<&str>,
     ) -> Result<(), SistenceStorageError> {
-        // Delegate to the existing save method implementation
-        self.save(namespace, key, value, metadata, ttl, workspace_id).await
+        // Get namespace from type
+        let namespace = self.namespace_for::<T>();
+        
+        // Delegate to the internal save implementation
+        self.save_internal(&namespace, memory_id, value, metadata, ttl, workspace_id).await
     }
 
     #[instrument(level = "debug", skip(self), err)]
-    async fn get<T: DeserializeOwned + Send + Sync>(
+    async fn get<T: DeserializeOwned + Send + Sync + 'static>(
         &self,
-        namespace: &str,
-        key: &str,
+        memory_id: &str,
         workspace_id: Option<&str>,
     ) -> Result<SistenceValueWithMetadata<T>, SistenceStorageError> {
-        // Delegate to the existing get method implementation
-        self.get(namespace, key, workspace_id).await
+        // Get namespace from type
+        let namespace = self.namespace_for::<T>();
+        
+        // Delegate to the internal get implementation
+        self.get_internal::<T>(&namespace, memory_id, workspace_id).await
     }
 
     // === Key-based operations (new non-generic methods) ===
@@ -1369,10 +1455,11 @@ impl SistenceStorageService for SistenceStorage {
     #[instrument(level = "debug", skip(self), err)]
     async fn create_workspace(
         &self,
-        namespace: &str,
         workspace_id: &str,
         parent_workspace_id: Option<&str>,
     ) -> Result<(), SistenceStorageError> {
+        // Default namespace for workspaces
+        let namespace = "memory_items";
         // Insert workspace metadata
         let mut metadata = HashMap::new();
         metadata.insert("created_at".to_string(), 
@@ -1460,11 +1547,14 @@ impl SistenceStorageService for SistenceStorage {
     #[instrument(level = "debug", skip(self), err)]
     async fn merge_workspace(
         &self,
-        namespace: &str,
         source_workspace_id: &str,
         target_workspace_id: &str,
-        resolve_conflicts: bool,
+        strategy: ConflictResolutionStrategy,
     ) -> Result<BatchResult, SistenceStorageError> {
+        // For now, handle all namespaces with this merge
+        // In a future implementation, this might need to be more selective
+        let namespace = "memory_items"; // Use a default namespace for now
+        
         // Load all data from storage
         let mut data = self
             .storage
@@ -1495,21 +1585,80 @@ impl SistenceStorageService for SistenceStorage {
             // Check if target already has this key
             let conflict = data.contains_key(&target_key);
             
-            if conflict && !resolve_conflicts {
-                // Record conflict error
-                failures.insert(
-                    key_part.to_string(),
-                    SistenceStorageError::ConflictError(format!(
-                        "Key conflict: {} exists in both workspaces",
-                        key_part
-                    )),
-                );
-                continue;
+            if conflict {
+                // Handle conflict based on strategy
+                match strategy {
+                    ConflictResolutionStrategy::SourceWins => {
+                        // Always use source value
+                        data.insert(target_key, source_value);
+                        success_count += 1;
+                    },
+                    ConflictResolutionStrategy::TargetWins => {
+                        // Keep target value, do nothing
+                        success_count += 1; // Count as success anyway
+                    },
+                    ConflictResolutionStrategy::MostRecent => {
+                        // Compare timestamps (if available) and use most recent
+                        let target_value = data.get(&target_key).unwrap();
+                        
+                        // Extract timestamps from metadata
+                        let source_time = source_value.metadata.tags.get("updated_at")
+                            .and_then(|t| t.parse::<u64>().ok())
+                            .unwrap_or(0);
+                        
+                        let target_time = target_value.metadata.tags.get("updated_at")
+                            .and_then(|t| t.parse::<u64>().ok())
+                            .unwrap_or(0);
+                        
+                        if source_time > target_time {
+                            data.insert(target_key, source_value);
+                        }
+                        success_count += 1;
+                    },
+                    ConflictResolutionStrategy::HighestVersion => {
+                        // Compare versions and use highest
+                        let target_value = data.get(&target_key).unwrap();
+                        
+                        // Extract versions from metadata
+                        let source_version = source_value.metadata.tags.get("version")
+                            .and_then(|v| v.parse::<u64>().ok())
+                            .unwrap_or(0);
+                        
+                        let target_version = target_value.metadata.tags.get("version")
+                            .and_then(|v| v.parse::<u64>().ok())
+                            .unwrap_or(0);
+                        
+                        if source_version > target_version {
+                            data.insert(target_key, source_value);
+                        }
+                        success_count += 1;
+                    },
+                    ConflictResolutionStrategy::FailOnConflict => {
+                        // Record error
+                        failures.insert(
+                            key_part.to_string(),
+                            SistenceStorageError::ConflictError(format!(
+                                "Key conflict: {} exists in both workspaces",
+                                key_part
+                            )),
+                        );
+                    },
+                    ConflictResolutionStrategy::MergeContent => {
+                        // Simple implementation: just keep target for now
+                        // In a real implementation, this would merge the content where possible
+                        failures.insert(
+                            key_part.to_string(),
+                            SistenceStorageError::StorageError(
+                                "Content merging not implemented yet".to_string()
+                            ),
+                        );
+                    }
+                }
+            } else {
+                // No conflict, just copy
+                data.insert(target_key, source_value);
+                success_count += 1;
             }
-            
-            // Copy to target
-            data.insert(target_key, source_value);
-            success_count += 1;
         }
         
         // Save changes
@@ -1531,6 +1680,7 @@ impl SistenceStorageService for SistenceStorage {
                 "action": "merge",
                 "source": source_workspace_id,
                 "target": target_workspace_id,
+                "strategy": format!("{:?}", strategy),
                 "success_count": success_count,
                 "failure_count": failures.len()
             })),

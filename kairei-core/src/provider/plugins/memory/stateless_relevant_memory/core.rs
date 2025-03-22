@@ -23,9 +23,6 @@ use crate::provider::plugins::memory::sistence_memory_plugin::ImportanceWeights;
 use crate::provider::provider::Section;
 use crate::provider::types::ProviderResult;
 
-// Constants
-const MEMORY_NAMESPACE: &str = "memory_items";
-
 /// Stateless implementation of the RelevantMemoryCapability trait
 pub struct StatelessRelevantMemory {
     /// Plugin ID
