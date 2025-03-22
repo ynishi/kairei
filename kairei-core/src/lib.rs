@@ -98,6 +98,7 @@ pub mod native_feature;
 pub mod preprocessor;
 pub mod provider;
 pub mod runtime;
+pub mod sistence;
 pub mod system;
 pub mod timestamp;
 pub mod tokenizer;
