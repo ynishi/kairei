@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -8,13 +8,11 @@ use super::{
     error::SistenceMemoryResult,
     model::{
         graph::RelationshipType,
-        recollection::{
-            Content, MergeStrategy, Recollection, RecollectionQuery, RecollectionSource,
-        },
+        recollection::{Content, MergeStrategy, RecollectionEntry, RecollectionSource},
     },
     service::{
         graph::RecollectionGraphService, metadata::MetadataEnrichmentService,
-        recollection::RecollectionService,
+        recollection::RecollectionRepository, search::SearchEngine,
     },
 };
 
@@ -26,13 +24,20 @@ pub trait SistenceMemory {
         source: RecollectionSource,
     ) -> SistenceMemoryResult<RecollectionId>;
 
-    async fn recall(&self, query: RecollectionQuery) -> SistenceMemoryResult<Vec<Recollection>>;
+    async fn recall(
+        &self,
+        query: &str,
+        workspace_id: &str,
+        context: Option<HashMap<String, String>>,
+        top_k: usize,
+        limit: usize,
+    ) -> SistenceMemoryResult<Vec<RecollectionEntry>>;
 
     async fn recall_related(
         &self,
         id: RecollectionId,
         relationship_type: Option<RelationshipType>,
-    ) -> SistenceMemoryResult<Vec<Recollection>>;
+    ) -> SistenceMemoryResult<Vec<RecollectionEntry>>;
 
     async fn merge_recollections(
         &self,
@@ -42,7 +47,8 @@ pub trait SistenceMemory {
 }
 
 pub struct SistenceMemoryFacade {
-    recollection_service: Arc<dyn RecollectionService>,
+    recollection_repository: Arc<dyn RecollectionRepository>,
     metadata_service: Arc<dyn MetadataEnrichmentService>,
     graph_service: Arc<dyn RecollectionGraphService>,
+    search_engine: Arc<dyn SearchEngine>,
 }

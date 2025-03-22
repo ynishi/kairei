@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-
 use crate::sistence::memory::context::{AgentProxy, WorkspaceContext};
-use crate::sistence::memory::service::recollection::RecollectionService;
+use crate::sistence::memory::service::recollection::RecollectionRepository;
 use crate::sistence::types::{ExecutionId, WorkspaceId};
 
 use super::error::SistenceActionResult;
@@ -89,7 +88,7 @@ pub struct DefaultSistenceActionService {
     /// Service for parallel execution
     parallel_service: Arc<DefaultParallelExecutionService>,
     /// Service for recollections
-    recollection_service: Arc<dyn RecollectionService + Send + Sync>,
+    recollection_service: Arc<dyn RecollectionRepository + Send + Sync>,
     /// Workspace factory
     workspace_factory: Arc<dyn Fn() -> WorkspaceContext + Send + Sync>,
 }

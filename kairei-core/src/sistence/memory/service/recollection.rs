@@ -1,17 +1,10 @@
 use crate::sistence::memory::error::SistenceMemoryResult;
-use crate::sistence::memory::model::recollection::{Content, RecollectionQuery};
 use crate::sistence::{memory::model::recollection::RecollectionEntry, types::RecollectionId};
 
-pub trait RecollectionService {
+pub trait RecollectionRepository {
     fn store(&self, entry: &RecollectionEntry) -> SistenceMemoryResult<RecollectionId>;
-    fn retrieve(&self, id: RecollectionId) -> SistenceMemoryResult<RecollectionEntry>;
-    fn update(&self, id: RecollectionId, content: Content) -> SistenceMemoryResult<RecollectionId>;
-    fn archive(&self, id: RecollectionId) -> SistenceMemoryResult<()>;
-
-    fn search(&self, query: RecollectionQuery) -> SistenceMemoryResult<Vec<RecollectionEntry>>;
-    fn find_similar(
-        &self,
-        content: &Content,
-        limit: usize,
-    ) -> SistenceMemoryResult<Vec<RecollectionEntry>>;
+    fn get(&self, id: RecollectionId) -> SistenceMemoryResult<RecollectionEntry>;
+    fn get_batch(&self, ids: &[RecollectionId]) -> SistenceMemoryResult<Vec<RecollectionEntry>>;
+    fn update(&self, entry: &RecollectionEntry) -> SistenceMemoryResult<()>;
+    fn delete(&self, id: RecollectionId) -> SistenceMemoryResult<()>;
 }

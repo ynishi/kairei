@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::sistence::types::RecollectionId;
 
 /// Metadata associated with a recollection entry
+#[derive(Clone, Debug)]
 pub struct RecollectionMetadata {
     /// ID of the associated recollection entry
     entry_id: RecollectionId,
@@ -22,11 +23,12 @@ pub struct RecollectionMetadata {
     /// Timestamp when this metadata was generated
     generated_at: DateTime<Utc>,
     /// Information about the generators that produced this metadata
-    generator_info: Vec<GeneratorInfo>,
+    generator_info: Vec<MetadataGeneratorInfo>,
 }
 
 /// Information about a generator that produced metadata
-pub struct GeneratorInfo {
+#[derive(Clone, Debug)]
+pub struct MetadataGeneratorInfo {
     /// Unique identifier for the generator
     generator_id: String,
     /// Type of generator (e.g., model name, algorithm)
@@ -36,6 +38,7 @@ pub struct GeneratorInfo {
 }
 
 /// Levels of importance for a recollection
+#[derive(Clone, Debug)]
 pub enum ImportanceLevel {
     /// Highest importance level, critical information
     Critical,
@@ -50,6 +53,7 @@ pub enum ImportanceLevel {
 }
 
 /// Information about the temporal relevance of a recollection
+#[derive(Clone, Debug)]
 pub struct TemporalRelevance {
     /// Starting time from which this recollection is valid, if applicable
     valid_from: Option<DateTime<Utc>>,
@@ -59,6 +63,7 @@ pub struct TemporalRelevance {
     decay_rate: Option<f32>,
 }
 
+#[derive(Clone, Debug)]
 pub enum MetadataType {
     Tags,
     Embeddings,

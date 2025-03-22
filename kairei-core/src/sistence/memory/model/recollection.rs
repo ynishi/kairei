@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 
 use crate::sistence::types::{RecollectionId, WorkspaceId};
 
-use super::metadata::{ImportanceLevel, RecollectionMetadata};
+use super::metadata::RecollectionMetadata;
 
 /// A aggregation root of recollection.
 pub struct Recollection {
@@ -11,20 +11,22 @@ pub struct Recollection {
 }
 
 /// A record of a memory recollection
+#[derive(Clone, Debug)]
 pub struct RecollectionEntry {
     /// Unique identifier for this recollection
-    id: RecollectionId,
+    pub id: RecollectionId,
     /// Content of the recollection
-    content: Content,
+    pub content: Content,
     /// Context information about the source of this recollection
-    source_context: SourceContext,
+    pub source_context: SourceContext,
     /// Information about how this recollection was created
-    creation_info: CreationInfo,
+    pub creation_info: CreationInfo,
     /// The workspace where this recollection was created, if any
-    workspace_id: Option<WorkspaceId>,
+    pub workspace_id: Option<WorkspaceId>,
 }
 
 /// Context information about the source of a recollection
+#[derive(Clone, Debug)]
 pub struct SourceContext {
     /// Source information about where this recollection came from
     source: RecollectionSource,
@@ -35,6 +37,7 @@ pub struct SourceContext {
 }
 
 /// Information about how a recollection was created
+#[derive(Clone, Debug)]
 pub struct CreationInfo {
     /// ID of the creator (system or agent)
     creator_id: String,
@@ -45,6 +48,7 @@ pub struct CreationInfo {
 }
 
 /// Source of a recollection
+#[derive(Clone, Debug)]
 pub enum RecollectionSource {
     /// Statement made by a user
     UserStatement {
@@ -72,6 +76,7 @@ pub enum RecollectionSource {
     },
 }
 
+#[derive(Clone, Debug)]
 enum StatementType {
     /// Fact
     Fact,
@@ -88,6 +93,7 @@ enum StatementType {
 }
 
 /// Content of a recollection
+#[derive(Clone, Debug)]
 pub enum Content {
     /// Text content
     Text(String),
@@ -99,6 +105,7 @@ pub enum Content {
     Reference(ExternalReference),
 }
 
+#[derive(Clone, Debug)]
 pub struct ExternalReference {
     /// URL or identifier of the external resource
     url: String,
@@ -106,6 +113,7 @@ pub struct ExternalReference {
     resource_type: ExternalResourceType,
 }
 
+#[derive(Clone, Debug)]
 pub enum ExternalResourceType {
     /// Web page
     WebPage,
@@ -122,6 +130,7 @@ pub enum ExternalResourceType {
 }
 
 /// Method used to create a recollection
+#[derive(Clone, Debug)]
 pub enum CreationMethod {
     /// Directly created
     Direct,
@@ -133,6 +142,7 @@ pub enum CreationMethod {
     Imported,
 }
 
+#[derive(Clone, Debug)]
 pub enum MergeStrategy {
     /// Simple merge of content
     Simple,
@@ -140,34 +150,4 @@ pub enum MergeStrategy {
     ConflictResolution,
     /// Merge with voting
     Voting,
-}
-
-pub struct RecollectionQuery {
-    text_query: Option<String>,
-    semantic_query: Option<Vec<f32>>, // 埋め込みベクトル
-    filters: Vec<QueryFilter>,
-    sort_by: SortCriteria,
-    limit: usize,
-}
-
-pub enum QueryFilter {
-    Tag(String),
-    Source(RecollectionSource),
-    ImportanceMinimum(ImportanceLevel),
-    CreatedAfter(DateTime<Utc>),
-    CreatedBefore(DateTime<Utc>),
-    ConfidenceMinimum(f32),
-    // 他のフィルター
-}
-
-pub enum SortCriteria {
-    Relevance,
-    CreationTime(SortOrder),
-    Importance(SortOrder),
-    Confidence(SortOrder),
-}
-
-pub enum SortOrder {
-    Ascending,
-    Descending,
 }

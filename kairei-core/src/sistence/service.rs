@@ -5,7 +5,7 @@ use super::{
     error::SistenceResult,
     memory::{
         facade::SistenceMemoryFacade,
-        model::recollection::{Content, Recollection, RecollectionQuery, RecollectionSource},
+        model::recollection::{Content, Recollection, RecollectionSource},
     },
     space::service::WorkspaceService,
     types::RecollectionId,
@@ -17,7 +17,12 @@ trait SistenceService {
         content: Content,
         source: RecollectionSource,
     ) -> SistenceResult<RecollectionId>;
-    fn recall(&self, query: RecollectionQuery) -> SistenceResult<Vec<Recollection>>;
+    fn recall(
+        &self,
+        query: &str,
+        workspace_id: Option<&str>,
+        limit: usize,
+    ) -> SistenceResult<Vec<Recollection>>;
     fn think_in_parallel<T>(&self, task: fn() -> T, count: usize) -> SistenceResult<Vec<T>>;
 }
 

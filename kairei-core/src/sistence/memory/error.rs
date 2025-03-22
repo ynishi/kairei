@@ -1,7 +1,7 @@
 #[derive(Debug, thiserror::Error)]
 pub enum SistenceMemoryError {
-    #[error("Recollection not found")]
-    RecollectionNotFound,
+    #[error("Recollection not found: ID: {0}")]
+    RecollectionNotFound(String),
     #[error("Recollection already exists")]
     RecollectionAlreadyExists,
     #[error("Recollection not in workspace")]
